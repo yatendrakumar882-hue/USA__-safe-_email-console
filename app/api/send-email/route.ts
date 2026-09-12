@@ -12,7 +12,6 @@ export async function POST(req: Request) {
       );
     }
 
-    // Connect via secure SSL Gmail port 465
     const transporter = nodemailer.createTransport({
       host: 'smtp.gmail.com',
       port: 465,
@@ -27,35 +26,46 @@ export async function POST(req: Request) {
     });
 
     const cleanBody = (body || '').trim();
-    const cleanSubject = (subject || '').trim() || 'Quick update';
+    const cleanSubject = (subject || '').trim() || 'Details';
     const cleanSenderName = senderName?.trim() || email.split('@')[0];
 
-    // Anti-Spam Check:
-    // Agar body me HTML tags nahi hain, to natural plain-text format bhejte hain.
-    // Plain text emails Google aur Outlook ke algorithms se 100% genuine treat kiye jate hain.
-    const isHtml = /<[a-z][\s\S]*>/i.test(cleanBody);
+    // Paragraph format: har block par strict inline 11pt/Arial style
+    // margin-bottom: 16px se har line/paragraph ke baad exact 1 line ka gap aayega
+    const formattedParagraphs = cleanBody
+      .split(/\n+/)
+      .map(
+        (line: string) => `
+        <p style="margin: 0 0 16px 0; padding: 0; font-family: Arial, Helvetica, sans-serif; font-size: 11pt; line-height: 1.5; color: #222222; mso-line-height-rule: exactly;">
+          ${line.trim()}
+        </p>
+      `
+      )
+      .join('');
 
-    const emailPayload: any = {
+    // pt-based strict styling jo Outlook Word engine aur Gmail reply threads dono me font size lock rakhegi
+    // Top padding: 18px sender header se 1-line distance create karta hai (Screenshot ke according)
+    const formattedHtml = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="utf-8">
+        </head>
+        <body style="margin: 0; padding: 0; background-color: #ffffff;">
+          <div style="margin: 0; padding: 18px 0 0 0; font-family: Arial, Helvetica, sans-serif; font-size: 11pt; color: #222222; line-height: 1.5; text-align: left; mso-line-height-rule: exactly;">
+            ${formattedParagraphs}
+          </div>
+        </body>
+      </html>
+    `;
+
+    const info = await transporter.sendMail({
       from: `"${cleanSenderName}" <${email.trim()}>`,
       to: recipient.trim(),
       subject: cleanSubject,
+      text: cleanBody,
+      html: formattedHtml,
       replyTo: email.trim(),
-    };
-
-    if (isHtml) {
-      emailPayload.html = cleanBody;
-      emailPayload.text = cleanBody.replace(/<[^>]*>?/gm, '');
-    } else {
-      // Natural paragraphs with normal line break spacing
-      emailPayload.text = cleanBody;
-      emailPayload.html = `
-        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; color: #111827; line-height: 1.5; white-space: pre-wrap; margin: 0; padding: 0;">
-          ${cleanBody}
-        </div>
-      `;
-    }
-
-    const info = await transporter.sendMail(emailPayload);
+    });
 
     return NextResponse.json({
       success: true,
