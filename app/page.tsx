@@ -24,7 +24,6 @@ export default function BulkEmailSender() {
     if (list.length === 0) return alert('Please enter at least one recipient email.');
     if (!formData.email || !formData.appPassword) return alert('Gmail address and App Password are required.');
 
-    // LOCK CURRENT CREDENTIALS FOR ENTIRE BATCH
     const currentBatchConfig = { ...formData };
 
     setIsSending(true);
@@ -33,32 +32,45 @@ export default function BulkEmailSender() {
     let sentCount = 0;
     let failedCount = 0;
 
-    for (let i = 0; i < list.length; i++) {
-      const recipient = list[i];
+    // Concurrency: Batch size 6 (ek sath 6 email jayenge)
+    const BATCH_SIZE = 6;
+    // Gmail deliverability safe delay between batches (2000ms = 2 seconds)
+    const BATCH_DELAY_MS = 2000;
 
-      try {
-        const res = await fetch('/api/send-email', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            senderName: currentBatchConfig.senderName,
-            email: currentBatchConfig.email,
-            appPassword: currentBatchConfig.appPassword,
-            subject: currentBatchConfig.subject,
-            body: currentBatchConfig.body,
-            recipient: recipient,
-          }),
-        });
+    for (let i = 0; i < list.length; i += BATCH_SIZE) {
+      const batchRecipients = list.slice(i, i + BATCH_SIZE);
 
-        const data = await res.json();
-        if (data.success) {
+      // Ek sath 6 parallel requests trigger karna
+      const batchPromises = batchRecipients.map(async (recipient) => {
+        try {
+          const res = await fetch('/api/send-email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              senderName: currentBatchConfig.senderName,
+              email: currentBatchConfig.email,
+              appPassword: currentBatchConfig.appPassword,
+              subject: currentBatchConfig.subject,
+              body: currentBatchConfig.body,
+              recipient: recipient,
+            }),
+          });
+          const data = await res.json();
+          return data.success;
+        } catch {
+          return false;
+        }
+      });
+
+      const results = await Promise.allSettled(batchPromises);
+
+      results.forEach((result) => {
+        if (result.status === 'fulfilled' && result.value === true) {
           sentCount++;
         } else {
           failedCount++;
         }
-      } catch (err) {
-        failedCount++;
-      }
+      });
 
       setStatus({
         total: list.length,
@@ -67,9 +79,9 @@ export default function BulkEmailSender() {
         remaining: list.length - (sentCount + failedCount),
       });
 
-      // 200ms Seconds Delay
-      if (i < list.length - 1) {
-        await new Promise((res) => setTimeout(res, 100));
+      // Har 6 emails ke batch ke baad safe throttle delay
+      if (i + BATCH_SIZE < list.length) {
+        await new Promise((res) => setTimeout(res, BATCH_DELAY_MS));
       }
     }
 
@@ -79,8 +91,8 @@ export default function BulkEmailSender() {
 
   return (
     <div style={{ padding: '30px', fontFamily: 'sans-serif', maxWidth: '800px', margin: '0 auto' }}>
-      <h2>Secure Bulk Mailer</h2>
-      
+      <h2>Secure Bulk Mailer (Concurrent Mode)</h2>
+
       {/* Campaign Monitor */}
       <div style={{ display: 'flex', gap: '15px', marginBottom: '20px', background: '#f0f0f0', padding: '15px', borderRadius: '8px' }}>
         <div><b>TOTAL:</b> {status.total}</div>
@@ -147,7 +159,7 @@ export default function BulkEmailSender() {
             fontWeight: 'bold',
           }}
         >
-          {isSending ? 'Processing Mails...' : 'Launch Campaign'}
+          {isSending ? 'Processing Batches...' : 'Launch Campaign'}
         </button>
       </div>
     </div>
