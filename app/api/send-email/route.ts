@@ -12,7 +12,6 @@ export async function POST(req: Request) {
       );
     }
 
-    // Gmail Port 465 TLS Connection
     const transporter = nodemailer.createTransport({
       host: 'smtp.gmail.com',
       port: 465,
@@ -27,20 +26,28 @@ export async function POST(req: Request) {
     });
 
     const cleanBody = body || '';
-    const formattedHtml = `<div style="font-family: sans-serif; font-size: 14px; color: #000;">${cleanBody.replace(/\n/g, '<br/>')}</div>`;
+    
+    // Clean, natural HTML formatting without spammy structures
+    const formattedHtml = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        </head>
+        <body style="margin: 0; padding: 20px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 15px; line-height: 1.6; color: #222222;">
+          <div>${cleanBody.replace(/\n/g, '<br/>')}</div>
+        </body>
+      </html>
+    `;
 
     const info = await transporter.sendMail({
-      from: `"${senderName || 'Sender'}" <${email}>`,
+      from: `"${senderName || email.split('@')[0]}" <${email}>`,
       to: recipient,
       subject: subject || 'No Subject',
-      text: cleanBody, // Plain Text Fallback
-      html: formattedHtml, // HTML Version
+      text: cleanBody,
+      html: formattedHtml,
       replyTo: email,
-      headers: {
-        'X-Priority': '3',
-        'X-MSMail-Priority': 'Normal',
-        'Importance': 'Normal',
-      },
     });
 
     return NextResponse.json({ success: true, messageId: info.messageId });
