@@ -67,9 +67,9 @@ export default function BulkEmailSender() {
         remaining: list.length - (sentCount + failedCount),
       });
 
-      // 2 Seconds Delay
+      // 1 Seconds Delay
       if (i < list.length - 1) {
-        await new Promise((res) => setTimeout(res, 600));
+        await new Promise((res) => setTimeout(res, 300));
       }
     }
 
