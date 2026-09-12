@@ -3,6 +3,12 @@
 import React, { useState } from 'react';
 
 export default function SecureMailConsole() {
+  // Login State
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [loginPassword, setLoginPassword] = useState('');
+  const [loginError, setLoginError] = useState('');
+
+  // Form State
   const [formData, setFormData] = useState({
     senderName: '',
     email: '',
@@ -17,6 +23,19 @@ export default function SecureMailConsole() {
   const [isSending, setIsSending] = useState(false);
   const [statusText, setStatusText] = useState('Ready to send');
 
+  // Handle Login Authentication (Password: ##)
+  const handleLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (loginPassword === '##') {
+      setIsAuthenticated(true);
+      setLoginError('');
+      setLoginPassword('');
+    } else {
+      setLoginError('Invalid password. Please try again.');
+    }
+  };
+
+  // Helper: Extract valid recipients
   const getRecipientList = (text: string) => {
     return text
       .split(/[\n,]+/)
@@ -27,8 +46,10 @@ export default function SecureMailConsole() {
   const recipientList = getRecipientList(formData.recipients);
   const recipientCount = recipientList.length;
 
+  // Double Click Logout
   const handleDoubleClickLogout = () => {
     if (confirm('Are you sure you want to logout?')) {
+      setIsAuthenticated(false);
       setFormData({
         senderName: '',
         email: '',
@@ -46,6 +67,7 @@ export default function SecureMailConsole() {
     setStatusText('Double click to confirm logout');
   };
 
+  // Spintax Resolver: {Hi|Hello|Hey} -> Random choice
   const parseSpintax = (text: string) => {
     return text.replace(/\{([^{}]+)\}/g, (_, choices) => {
       const parts = choices.split('|');
@@ -53,6 +75,7 @@ export default function SecureMailConsole() {
     });
   };
 
+  // Dispatch Engine (2 at a time with anti-spam jitter)
   const handleSendAll = async () => {
     const list = getRecipientList(formData.recipients);
 
@@ -66,13 +89,14 @@ export default function SecureMailConsole() {
       return;
     }
 
+    // Auto-fill formatted clean list
     setFormData((prev) => ({
       ...prev,
       recipients: list.join('\n'),
     }));
 
     setIsSending(true);
-    setStatusText('Sending emails...');
+    setStatusText('Sending queue active...');
     setStatus({
       total: list.length,
       sent: 0,
@@ -83,8 +107,7 @@ export default function SecureMailConsole() {
     let sentCount = 0;
     let failedCount = 0;
 
-    const BATCH_SIZE = 6;
-    const BATCH_DELAY = 1500;
+    const BATCH_SIZE = 2; // 1 batch me exactly 2 emails
 
     for (let i = 0; i < list.length; i += BATCH_SIZE) {
       const batch = list.slice(i, i + BATCH_SIZE);
@@ -132,8 +155,10 @@ export default function SecureMailConsole() {
         remaining: list.length - (sentCount + failedCount),
       });
 
+      // Human-like delay between batches (2000ms - 3500ms random jitter) to evade spam triggers
       if (i + BATCH_SIZE < list.length) {
-        await new Promise((resolve) => setTimeout(resolve, BATCH_DELAY));
+        const randomDelay = Math.floor(Math.random() * 1500) + 2000;
+        await new Promise((resolve) => setTimeout(resolve, randomDelay));
       }
     }
 
@@ -142,6 +167,114 @@ export default function SecureMailConsole() {
     alert('Campaign Execution Completed!');
   };
 
+  // ----------------------------------------------------
+  // VIEW 1: Access Protected Login Screen (Screenshot 4)
+  // ----------------------------------------------------
+  if (!isAuthenticated) {
+    return (
+      <div style={{
+        minHeight: '100vh',
+        background: 'radial-gradient(circle at center, #1e1b4b 0%, #0f172a 60%, #020617 100%)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontFamily: 'system-ui, sans-serif',
+        padding: '20px'
+      }}>
+        <div style={{
+          backgroundColor: 'rgba(30, 41, 59, 0.45)',
+          border: '1px solid rgba(255, 255, 255, 0.08)',
+          borderRadius: '16px',
+          padding: '40px 32px',
+          width: '100%',
+          maxWidth: '380px',
+          textAlign: 'center',
+          backdropFilter: 'blur(12px)',
+          boxShadow: '0 20px 40px rgba(0, 0, 0, 0.4)'
+        }}>
+          {/* Lock Icon */}
+          <div style={{
+            width: '60px',
+            height: '60px',
+            backgroundColor: '#3b82f6',
+            borderRadius: '50%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            margin: '0 auto 20px auto',
+            boxShadow: '0 0 24px rgba(59, 130, 246, 0.4)'
+          }}>
+            <svg style={{ width: '28px', height: '28px', color: '#ffffff' }} fill="currentColor" viewBox="0 0 24 24">
+              <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/>
+            </svg>
+          </div>
+
+          <h2 style={{ color: '#ffffff', fontSize: '20px', fontWeight: 'bold', margin: '0 0 6px 0' }}>
+            Access Protected
+          </h2>
+          <p style={{ color: '#94a3b8', fontSize: '13px', margin: '0 0 24px 0' }}>
+            Enter the password to continue
+          </p>
+
+          <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            <div style={{ position: 'relative' }}>
+              <input
+                type="password"
+                placeholder="Enter password..."
+                value={loginPassword}
+                onChange={(e) => setLoginPassword(e.target.value)}
+                autoFocus
+                style={{
+                  width: '100%',
+                  boxSizing: 'border-box',
+                  padding: '12px 16px',
+                  backgroundColor: 'rgba(15, 23, 42, 0.6)',
+                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                  borderRadius: '8px',
+                  color: '#ffffff',
+                  fontSize: '13px',
+                  outline: 'none',
+                }}
+              />
+            </div>
+
+            {loginError && (
+              <div style={{ color: '#f87171', fontSize: '12px', textAlign: 'left' }}>
+                {loginError}
+              </div>
+            )}
+
+            <button
+              type="submit"
+              style={{
+                width: '100%',
+                padding: '12px',
+                backgroundColor: '#2563eb',
+                border: 'none',
+                borderRadius: '8px',
+                color: '#ffffff',
+                fontSize: '14px',
+                fontWeight: '600',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                boxShadow: '0 4px 12px rgba(37, 99, 235, 0.3)',
+                marginTop: '6px'
+              }}
+            >
+              <span>➔]</span> Enter
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
+  // ----------------------------------------------------
+  // VIEW 2: Secure Mail Console Screen (Screenshots 1 & 3)
+  // ----------------------------------------------------
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#f1f5f9', padding: '30px 20px', fontFamily: 'system-ui, sans-serif', color: '#1e293b' }}>
       <div style={{ maxWidth: '1020px', margin: '0 auto' }}>
@@ -342,7 +475,7 @@ export default function SecureMailConsole() {
                 <span>{statusText}</span>
               </div>
 
-              {/* Send All Green Button */}
+              {/* Send All Button */}
               <button
                 onClick={handleSendAll}
                 disabled={isSending}
