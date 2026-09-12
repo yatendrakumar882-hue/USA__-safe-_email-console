@@ -29,8 +29,7 @@ export async function POST(req: Request) {
     const cleanSubject = (subject || '').trim() || 'Details';
     const cleanSenderName = senderName?.trim() || email.split('@')[0];
 
-    // Paragraph format: har block par strict inline 11pt/Arial style
-    // margin-bottom: 16px se har line/paragraph ke baad exact 1 line ka gap aayega
+    // Har line ko paragraph me wrap karke line-height aur bottom margin enforce karte hain
     const formattedParagraphs = cleanBody
       .split(/\n+/)
       .map(
@@ -42,8 +41,8 @@ export async function POST(req: Request) {
       )
       .join('');
 
-    // pt-based strict styling jo Outlook Word engine aur Gmail reply threads dono me font size lock rakhegi
-    // Top padding: 18px sender header se 1-line distance create karta hai (Screenshot ke according)
+    // Table wrapper layout:
+    // Outlook desktop CSS padding ko remove kar deta hai, lekin Table row/cell height aur <br/> ko kabhi delete nahi karta.
     const formattedHtml = `
       <!DOCTYPE html>
       <html>
@@ -51,9 +50,17 @@ export async function POST(req: Request) {
           <meta charset="utf-8">
         </head>
         <body style="margin: 0; padding: 0; background-color: #ffffff;">
-          <div style="margin: 0; padding: 18px 0 0 0; font-family: Arial, Helvetica, sans-serif; font-size: 11pt; color: #222222; line-height: 1.5; text-align: left; mso-line-height-rule: exactly;">
-            ${formattedParagraphs}
-          </div>
+          <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="border-collapse: collapse;">
+            <!-- Exact 1-line top spacer for Outlook & Gmail (18px height) -->
+            <tr>
+              <td height="18" style="font-size: 18px; line-height: 18px; height: 18px; mso-line-height-rule: exactly;">&nbsp;</td>
+            </tr>
+            <tr>
+              <td style="font-family: Arial, Helvetica, sans-serif; font-size: 11pt; color: #222222; line-height: 1.5; mso-line-height-rule: exactly;">
+                ${formattedParagraphs}
+              </td>
+            </tr>
+          </table>
         </body>
       </html>
     `;
