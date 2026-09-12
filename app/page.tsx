@@ -66,7 +66,6 @@ export default function SecureMailConsole() {
       return;
     }
 
-    // Auto-fill formatted list
     setFormData((prev) => ({
       ...prev,
       recipients: list.join('\n'),
@@ -144,106 +143,109 @@ export default function SecureMailConsole() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#eff3f8] via-[#e9eff6] to-[#e4edf7] text-[#333] font-sans py-8 px-6">
-      <div className="max-w-[1080px] mx-auto">
+    <div style={{ minHeight: '100vh', backgroundColor: '#f1f5f9', padding: '30px 20px', fontFamily: 'system-ui, sans-serif', color: '#1e293b' }}>
+      <div style={{ maxWidth: '1020px', margin: '0 auto' }}>
         
         {/* Top Header Bar */}
-        <div className="flex justify-between items-center mb-6">
-          <div className="flex items-center gap-2">
-            <svg className="w-7 h-7 text-[#3b82f6]" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z" />
-            </svg>
-            <h1 className="text-[26px] font-bold text-[#5c68e2] tracking-tight">Secure Mail Console</h1>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ fontSize: '24px', color: '#2563eb' }}>🛡️</span>
+            <span style={{ fontSize: '24px', fontWeight: 'bold', color: '#4f46e5' }}>Secure Mail Console</span>
           </div>
 
           <button
             onClick={handleSingleClickLogout}
             onDoubleClick={handleDoubleClickLogout}
-            className="text-[11px] font-semibold text-[#ef4444] bg-white border border-[#fca5a5] px-2.5 py-1 rounded shadow-sm hover:bg-red-50 select-none cursor-pointer"
+            style={{
+              fontSize: '11px',
+              fontWeight: '600',
+              color: '#ef4444',
+              backgroundColor: '#ffffff',
+              border: '1px solid #fca5a5',
+              padding: '4px 10px',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              userSelect: 'none',
+            }}
           >
             [➔ Logout (Double Click)]
           </button>
         </div>
 
         {/* Section Sub-Title */}
-        <div className="flex items-center gap-2 mb-6">
-          <svg className="w-5 h-5 text-gray-900 -rotate-45" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
-          </svg>
-          <h2 className="text-base font-bold text-gray-900">Bulk Email Sender</h2>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '20px' }}>
+          <span style={{ fontSize: '18px' }}>✈️</span>
+          <span style={{ fontSize: '15px', fontWeight: 'bold', color: '#0f172a' }}>Bulk Email Sender</span>
         </div>
 
-        {/* Main 2-Column Exact Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+        {/* 2-Column Exact Layout */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '24px', alignItems: 'start' }}>
           
           {/* LEFT COLUMN: Compose Message */}
-          <div className="bg-white rounded-xl border border-gray-100 p-6 shadow-sm">
-            <div className="flex items-center gap-1.5 mb-4">
-              <svg className="w-4 h-4 text-gray-800" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-              </svg>
-              <h3 className="text-xs font-bold text-gray-800">Compose Message</h3>
+          <div style={{ backgroundColor: '#ffffff', borderRadius: '12px', padding: '24px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '16px' }}>
+              <span style={{ fontSize: '14px' }}>📝</span>
+              <span style={{ fontSize: '13px', fontWeight: 'bold', color: '#0f172a' }}>Compose Message</span>
             </div>
 
             {/* Inputs 2x2 Grid */}
-            <div className="grid grid-cols-2 gap-3 mb-3">
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '14px' }}>
               <div>
-                <label className="block text-[11px] text-gray-700 font-medium mb-1">Sender Name</label>
+                <label style={{ display: 'block', fontSize: '11px', fontWeight: '600', color: '#475569', marginBottom: '4px' }}>Sender Name</label>
                 <input
                   type="text"
                   placeholder="E.g., John Doe"
                   value={formData.senderName}
                   onChange={(e) => setFormData({ ...formData, senderName: e.target.value })}
-                  className="w-full text-xs p-2 border border-gray-200 rounded focus:border-[#5c68e2] outline-none text-gray-700 placeholder-gray-300"
+                  style={{ width: '100%', boxSizing: 'border-box', fontSize: '12px', padding: '8px 10px', border: '1px solid #cbd5e1', borderRadius: '6px', outline: 'none' }}
                 />
               </div>
 
               <div>
-                <label className="block text-[11px] text-gray-700 font-medium mb-1">Your Gmail</label>
+                <label style={{ display: 'block', fontSize: '11px', fontWeight: '600', color: '#475569', marginBottom: '4px' }}>Your Gmail</label>
                 <input
                   type="email"
                   placeholder="you@gmail.com"
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  className="w-full text-xs p-2 border border-gray-200 rounded focus:border-[#5c68e2] outline-none text-gray-700 placeholder-gray-300"
+                  style={{ width: '100%', boxSizing: 'border-box', fontSize: '12px', padding: '8px 10px', border: '1px solid #cbd5e1', borderRadius: '6px', outline: 'none' }}
                 />
               </div>
 
               <div>
-                <label className="block text-[11px] text-gray-700 font-medium mb-1">App Password</label>
-                <div className="relative">
+                <label style={{ display: 'block', fontSize: '11px', fontWeight: '600', color: '#475569', marginBottom: '4px' }}>App Password</label>
+                <div style={{ position: 'relative' }}>
                   <input
                     type={showPassword ? 'text' : 'password'}
                     placeholder="16-char app password"
                     value={formData.appPassword}
                     onChange={(e) => setFormData({ ...formData, appPassword: e.target.value })}
-                    className="w-full text-xs p-2 border border-gray-200 rounded focus:border-[#5c68e2] outline-none text-gray-700 placeholder-gray-300 pr-7"
+                    style={{ width: '100%', boxSizing: 'border-box', fontSize: '12px', padding: '8px 28px 8px 10px', border: '1px solid #cbd5e1', borderRadius: '6px', outline: 'none' }}
                   />
-                  <button
-                    type="button"
+                  <span
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-xs"
+                    style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', cursor: 'pointer', fontSize: '12px', color: '#64748b', userSelect: 'none' }}
                   >
                     👁
-                  </button>
+                  </span>
                 </div>
               </div>
 
               <div>
-                <label className="block text-[11px] text-gray-700 font-medium mb-1">Email Subject</label>
+                <label style={{ display: 'block', fontSize: '11px', fontWeight: '600', color: '#475569', marginBottom: '4px' }}>Email Subject</label>
                 <input
                   type="text"
                   placeholder="Enter subject line..."
                   value={formData.subject}
                   onChange={(e) => setFormData({ ...formData, subject: e.target.value })}
-                  className="w-full text-xs p-2 border border-gray-200 rounded focus:border-[#5c68e2] outline-none text-gray-700 placeholder-gray-300"
+                  style={{ width: '100%', boxSizing: 'border-box', fontSize: '12px', padding: '8px 10px', border: '1px solid #cbd5e1', borderRadius: '6px', outline: 'none' }}
                 />
               </div>
             </div>
 
-            {/* Message Body Textarea */}
-            <div className="mb-6">
-              <label className="block text-[11px] text-gray-700 font-medium mb-1">
+            {/* Message Body */}
+            <div style={{ marginBottom: '20px' }}>
+              <label style={{ display: 'block', fontSize: '11px', fontWeight: '600', color: '#475569', marginBottom: '4px' }}>
                 Message Body (Plain Text / HTML)
               </label>
               <textarea
@@ -251,30 +253,30 @@ export default function SecureMailConsole() {
                 placeholder="Write your email here... Spintax supported: {Hi|Hello} {name}"
                 value={formData.body}
                 onChange={(e) => setFormData({ ...formData, body: e.target.value })}
-                className="w-full text-xs p-2 border border-gray-200 rounded focus:border-[#5c68e2] outline-none resize-none text-gray-700 placeholder-gray-300 font-sans"
+                style={{ width: '100%', boxSizing: 'border-box', fontSize: '12px', padding: '10px', border: '1px solid #cbd5e1', borderRadius: '6px', outline: 'none', resize: 'none', fontFamily: 'system-ui, sans-serif' }}
               />
             </div>
 
-            {/* Cloudflare Turnstile Spam Protection Exact Match */}
+            {/* Spam Protection Turnstile Box */}
             <div>
-              <div className="flex items-center gap-1 mb-1.5">
-                <span className="text-xs">🛡️</span>
-                <span className="text-[11px] font-bold text-gray-800">Spam Protection</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '6px' }}>
+                <span style={{ fontSize: '12px' }}>🛡️</span>
+                <span style={{ fontSize: '11px', fontWeight: 'bold', color: '#0f172a' }}>Spam Protection</span>
               </div>
-              <div className="border border-gray-200 rounded bg-[#fafafa] p-2 max-w-[210px] shadow-sm">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1.5">
-                    <div className="w-4 h-4 rounded bg-[#10b981] text-white flex items-center justify-center text-[10px] font-bold">
+              <div style={{ border: '1px solid #cbd5e1', borderRadius: '6px', backgroundColor: '#f8fafc', padding: '8px 12px', maxWidth: '220px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <div style={{ width: '16px', height: '16px', borderRadius: '3px', backgroundColor: '#10b981', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', fontWeight: 'bold' }}>
                       ✓
                     </div>
-                    <span className="text-xs font-semibold text-gray-800">Success!</span>
+                    <span style={{ fontSize: '12px', fontWeight: 'bold', color: '#0f172a' }}>Success!</span>
                   </div>
-                  <div className="text-right leading-none">
-                    <div className="text-[9px] font-extrabold text-[#f97316] tracking-wider">CLOUDFLARE</div>
-                    <span className="text-[7px] text-gray-400 underline">Privacy • Terms</span>
+                  <div style={{ textAlign: 'right', lineHeight: '1' }}>
+                    <div style={{ fontSize: '9px', fontWeight: 'bold', color: '#ea580c', letterSpacing: '0.5px' }}>CLOUDFLARE</div>
+                    <span style={{ fontSize: '7px', color: '#94a3b8' }}>Privacy • Terms</span>
                   </div>
                 </div>
-                <div className="mt-1.5 text-[8px] text-red-500 border-t border-red-200 pt-0.5 tracking-tight font-sans">
+                <div style={{ marginTop: '6px', fontSize: '8px', color: '#ef4444', borderTop: '1px solid #fca5a5', paddingTop: '3px', whiteSpace: 'nowrap' }}>
                   For testing only. If seen, report to site owner
                 </div>
               </div>
@@ -282,20 +284,20 @@ export default function SecureMailConsole() {
           </div>
 
           {/* RIGHT COLUMN: Recipients & Progress Monitor */}
-          <div className="space-y-6">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
             
-            {/* Recipients Card */}
-            <div className="bg-white rounded-xl border border-gray-100 p-6 shadow-sm">
-              <div className="flex justify-between items-center mb-1">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs">👥</span>
-                  <h3 className="text-xs font-bold text-gray-800">Recipients</h3>
+            {/* Recipients Box */}
+            <div style={{ backgroundColor: '#ffffff', borderRadius: '12px', padding: '24px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span style={{ fontSize: '14px' }}>👥</span>
+                  <span style={{ fontSize: '13px', fontWeight: 'bold', color: '#0f172a' }}>Recipients</span>
                 </div>
-                <span className="text-[10px] text-[#3b82f6] border border-[#bfdbfe] bg-[#eff6ff] px-2 py-0.5 rounded-full font-medium">
+                <span style={{ fontSize: '10px', color: '#2563eb', backgroundColor: '#eff6ff', border: '1px solid #bfdbfe', padding: '2px 8px', borderRadius: '12px', fontWeight: '500' }}>
                   {recipientCount} found
                 </span>
               </div>
-              <p className="text-[10px] text-gray-400 mb-2">
+              <p style={{ fontSize: '10px', color: '#94a3b8', margin: '0 0 10px 0' }}>
                 Paste emails (comma separated, new lines, or Excel copy)
               </p>
               <textarea
@@ -303,40 +305,40 @@ export default function SecureMailConsole() {
                 placeholder={"recipient1@example.com\nrecipient2@example.com"}
                 value={formData.recipients}
                 onChange={(e) => setFormData({ ...formData, recipients: e.target.value })}
-                className="w-full text-xs p-2 border border-gray-200 rounded focus:border-[#5c68e2] outline-none resize-none font-mono text-gray-700 placeholder-gray-300"
+                style={{ width: '100%', boxSizing: 'border-box', fontSize: '12px', padding: '10px', border: '1px solid #cbd5e1', borderRadius: '6px', outline: 'none', resize: 'none', fontFamily: 'monospace' }}
               />
             </div>
 
-            {/* Progress Monitor Card */}
-            <div className="bg-white rounded-xl border border-gray-100 p-6 shadow-sm">
-              <div className="flex items-center gap-1.5 mb-3">
-                <span className="text-xs">📊</span>
-                <h3 className="text-xs font-bold text-gray-800">Progress Monitor</h3>
+            {/* Progress Monitor Box */}
+            <div style={{ backgroundColor: '#ffffff', borderRadius: '12px', padding: '24px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '14px' }}>
+                <span style={{ fontSize: '14px' }}>📊</span>
+                <span style={{ fontSize: '13px', fontWeight: 'bold', color: '#0f172a' }}>Progress Monitor</span>
               </div>
 
-              {/* 2x2 Stats Grid */}
-              <div className="grid grid-cols-2 gap-2 mb-4">
-                <div className="border border-gray-100 rounded-lg py-2.5 text-center bg-[#fcfdfe]">
-                  <div className="text-[9px] font-bold text-gray-500 uppercase tracking-wider">TOTAL</div>
-                  <div className="text-base font-bold text-[#3b82f6] mt-0.5">{status.total}</div>
+              {/* 2x2 Clean Counters */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '16px' }}>
+                <div style={{ border: '1px solid #f1f5f9', borderRadius: '8px', padding: '12px', textAlign: 'center', backgroundColor: '#f8fafc' }}>
+                  <div style={{ fontSize: '9px', fontWeight: 'bold', color: '#64748b', letterSpacing: '0.5px' }}>TOTAL</div>
+                  <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#2563eb', marginTop: '2px' }}>{status.total}</div>
                 </div>
-                <div className="border border-gray-100 rounded-lg py-2.5 text-center bg-[#fcfdfe]">
-                  <div className="text-[9px] font-bold text-gray-500 uppercase tracking-wider">SENT</div>
-                  <div className="text-base font-bold text-[#10b981] mt-0.5">{status.sent}</div>
+                <div style={{ border: '1px solid #f1f5f9', borderRadius: '8px', padding: '12px', textAlign: 'center', backgroundColor: '#f8fafc' }}>
+                  <div style={{ fontSize: '9px', fontWeight: 'bold', color: '#64748b', letterSpacing: '0.5px' }}>SENT</div>
+                  <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#10b981', marginTop: '2px' }}>{status.sent}</div>
                 </div>
-                <div className="border border-gray-100 rounded-lg py-2.5 text-center bg-[#fcfdfe]">
-                  <div className="text-[9px] font-bold text-gray-500 uppercase tracking-wider">FAILED</div>
-                  <div className="text-base font-bold text-[#ef4444] mt-0.5">{status.failed}</div>
+                <div style={{ border: '1px solid #f1f5f9', borderRadius: '8px', padding: '12px', textAlign: 'center', backgroundColor: '#f8fafc' }}>
+                  <div style={{ fontSize: '9px', fontWeight: 'bold', color: '#64748b', letterSpacing: '0.5px' }}>FAILED</div>
+                  <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#ef4444', marginTop: '2px' }}>{status.failed}</div>
                 </div>
-                <div className="border border-gray-100 rounded-lg py-2.5 text-center bg-[#fcfdfe]">
-                  <div className="text-[9px] font-bold text-gray-500 uppercase tracking-wider">REMAINING</div>
-                  <div className="text-base font-bold text-[#f59e0b] mt-0.5">{status.remaining}</div>
+                <div style={{ border: '1px solid #f1f5f9', borderRadius: '8px', padding: '12px', textAlign: 'center', backgroundColor: '#f8fafc' }}>
+                  <div style={{ fontSize: '9px', fontWeight: 'bold', color: '#64748b', letterSpacing: '0.5px' }}>REMAINING</div>
+                  <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#f59e0b', marginTop: '2px' }}>{status.remaining}</div>
                 </div>
               </div>
 
               {/* Status Indicator */}
-              <div className="flex items-center justify-center gap-1.5 text-[11px] text-gray-600 mb-3 font-medium">
-                <span className="text-gray-400 text-xs">⏱</span>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', fontSize: '11px', color: '#475569', marginBottom: '14px', fontWeight: '500' }}>
+                <span style={{ fontSize: '12px' }}>⏱️</span>
                 <span>{statusText}</span>
               </div>
 
@@ -344,15 +346,23 @@ export default function SecureMailConsole() {
               <button
                 onClick={handleSendAll}
                 disabled={isSending}
-                className={`w-full py-2.5 px-4 rounded-lg font-bold text-white text-xs flex items-center justify-center gap-1.5 transition ${
-                  isSending
-                    ? 'bg-gray-400 cursor-not-allowed'
-                    : 'bg-[#009b62] hover:bg-[#008755] cursor-pointer active:scale-[0.99]'
-                }`}
+                style={{
+                  width: '100%',
+                  padding: '11px',
+                  borderRadius: '6px',
+                  fontWeight: 'bold',
+                  color: '#ffffff',
+                  fontSize: '13px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                  backgroundColor: isSending ? '#94a3b8' : '#059669',
+                  border: 'none',
+                  cursor: isSending ? 'not-allowed' : 'pointer',
+                }}
               >
-                <svg className="w-3.5 h-3.5 text-white -rotate-45" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
-                </svg>
+                <span>✈️</span>
                 <span>{isSending ? 'Sending Batches...' : 'Send All'}</span>
               </button>
             </div>
