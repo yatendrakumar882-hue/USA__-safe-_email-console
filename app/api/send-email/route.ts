@@ -5,7 +5,6 @@ export async function POST(req: Request) {
   try {
     const { senderName, email, appPassword, recipient, subject, body } = await req.json();
 
-    // 1. Basic validation
     if (!email || !appPassword || !recipient) {
       return NextResponse.json(
         { success: false, error: 'Sender email, app password, and recipient are required.' },
@@ -13,47 +12,47 @@ export async function POST(req: Request) {
       );
     }
 
-    // 2. Transporter configuration for Gmail Secure Port 465 (SSL/TLS)
     const transporter = nodemailer.createTransport({
       host: 'smtp.gmail.com',
       port: 465,
       secure: true,
       auth: {
         user: email.trim(),
-        pass: appPassword.replace(/\s+/g, ''), // Spaces remove karta hai
+        pass: appPassword.replace(/\s+/g, ''),
       },
       tls: {
         rejectUnauthorized: false,
       },
     });
 
-    const cleanBody = body || '';
+    const cleanBody = (body || '').trim();
     const cleanSubject = subject || 'No Subject';
     const cleanSenderName = senderName?.trim() || email.split('@')[0];
 
-    // 3. Clean and standard HTML layout (inbox deliverability improve karne ke liye)
+    // Split text into paragraphs to create clean 1-line spacing like screenshot 2
+    const paragraphs = cleanBody
+      .split(/\n+/)
+      .map((p: string) => `<p style="margin: 0 0 16px 0; padding: 0; line-height: 1.5;">${p.trim()}</p>`)
+      .join('');
+
+    // Native standard left-aligned layout without unwanted wrapping/padding
     const formattedHtml = `
       <!DOCTYPE html>
-      <html lang="en">
+      <html>
         <head>
-          <meta charset="UTF-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <title>${cleanSubject}</title>
+          <meta charset="utf-8">
         </head>
-        <body style="margin: 0; padding: 24px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 15px; line-height: 1.6; color: #1f2937; background-color: #ffffff;">
-          <div style="max-width: 600px; margin: 0 auto;">
-            ${cleanBody.replace(/\n/g, '<br/>')}
-          </div>
+        <body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; font-size: 14px; color: #222222; text-align: left;">
+          ${paragraphs}
         </body>
       </html>
     `;
 
-    // 4. Send email configuration
     const info = await transporter.sendMail({
       from: `"${cleanSenderName}" <${email.trim()}>`,
       to: recipient.trim(),
       subject: cleanSubject,
-      text: cleanBody, // Plain text fallback
+      text: cleanBody,
       html: formattedHtml,
       replyTo: email.trim(),
     });
