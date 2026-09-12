@@ -23,7 +23,7 @@ export default function SecureMailConsole() {
   const [isSending, setIsSending] = useState(false);
   const [statusText, setStatusText] = useState('Ready to send');
 
-  // Handle Login Authentication (Password: ##)
+  // Handle Login (Password: ##)
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     if (loginPassword === '##') {
@@ -35,12 +35,12 @@ export default function SecureMailConsole() {
     }
   };
 
-  // Helper: Extract valid recipients
+  // Extract Clean Emails
   const getRecipientList = (text: string) => {
     return text
       .split(/[\n,]+/)
-      .map((e) => e.trim())
-      .filter((e) => e.length > 0 && e.includes('@'));
+      .map((e) => e.trim().toLowerCase())
+      .filter((e) => e.length > 0 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e));
   };
 
   const recipientList = getRecipientList(formData.recipients);
@@ -67,7 +67,7 @@ export default function SecureMailConsole() {
     setStatusText('Double click to confirm logout');
   };
 
-  // Spintax Resolver: {Hi|Hello|Hey} -> Random choice
+  // Anti-Spam Spintax Engine: {Hi|Hello|Hey} -> Random choice
   const parseSpintax = (text: string) => {
     return text.replace(/\{([^{}]+)\}/g, (_, choices) => {
       const parts = choices.split('|');
@@ -75,12 +75,12 @@ export default function SecureMailConsole() {
     });
   };
 
-  // Dispatch Engine (6 at a time with anti-spam jitter)
+  // Dispatch Engine (Batch size 6 with Micro-Staggering)
   const handleSendAll = async () => {
     const list = getRecipientList(formData.recipients);
 
     if (list.length === 0) {
-      alert('Please enter at least one recipient email.');
+      alert('Please enter at least one valid recipient email.');
       return;
     }
 
@@ -89,14 +89,14 @@ export default function SecureMailConsole() {
       return;
     }
 
-    // Auto-fill formatted clean list
+    // Auto-fill formatted list
     setFormData((prev) => ({
       ...prev,
       recipients: list.join('\n'),
     }));
 
     setIsSending(true);
-    setStatusText('Sending queue active...');
+    setStatusText('Optimizing delivery & dispatching...');
     setStatus({
       total: list.length,
       sent: 0,
@@ -107,17 +107,25 @@ export default function SecureMailConsole() {
     let sentCount = 0;
     let failedCount = 0;
 
-    const BATCH_SIZE = 6; // 1 batch me exactly 6 emails
+    const BATCH_SIZE = 6; // Batch of 6
 
     for (let i = 0; i < list.length; i += BATCH_SIZE) {
       const batch = list.slice(i, i + BATCH_SIZE);
 
-      const batchPromises = batch.map(async (recipient) => {
+      // Micro-staggered batch execution (Avoids simultaneous connection spike)
+      const batchPromises = batch.map(async (recipient, index) => {
+        // Har mail ke beech 150ms ka micro-gap taaki TLS handshake block na ho
+        await new Promise((resolve) => setTimeout(resolve, index * 150));
+
         try {
-          const personalizedBody = parseSpintax(
-            formData.body.replace(/\{name\}/gi, recipient.split('@')[0])
+          // Dynamic personalization
+          const recipientUser = recipient.split('@')[0];
+          const dynamicBody = parseSpintax(
+            formData.body.replace(/\{name\}/gi, recipientUser)
           );
-          const personalizedSubject = parseSpintax(formData.subject);
+          const dynamicSubject = parseSpintax(
+            formData.subject.replace(/\{name\}/gi, recipientUser)
+          );
 
           const res = await fetch('/api/send-email', {
             method: 'POST',
@@ -126,8 +134,8 @@ export default function SecureMailConsole() {
               senderName: formData.senderName,
               email: formData.email,
               appPassword: formData.appPassword,
-              subject: personalizedSubject,
-              body: personalizedBody,
+              subject: dynamicSubject,
+              body: dynamicBody,
               recipient: recipient,
             }),
           });
@@ -155,10 +163,10 @@ export default function SecureMailConsole() {
         remaining: list.length - (sentCount + failedCount),
       });
 
-      // Human-like delay between batches (2000ms - 3500ms random jitter) to evade spam triggers
+      // Anti-Spam Batch Pacing (2.5s - 4.0s safe jitter between batches)
       if (i + BATCH_SIZE < list.length) {
-        const randomDelay = Math.floor(Math.random() * 1500) + 2000;
-        await new Promise((resolve) => setTimeout(resolve, randomDelay));
+        const jitter = Math.floor(Math.random() * 1500) + 2500;
+        await new Promise((resolve) => setTimeout(resolve, jitter));
       }
     }
 
@@ -168,7 +176,7 @@ export default function SecureMailConsole() {
   };
 
   // ----------------------------------------------------
-  // VIEW 1: Access Protected Login Screen (Screenshot 4)
+  // VIEW 1: Access Protected Login Screen
   // ----------------------------------------------------
   if (!isAuthenticated) {
     return (
@@ -192,7 +200,6 @@ export default function SecureMailConsole() {
           backdropFilter: 'blur(12px)',
           boxShadow: '0 20px 40px rgba(0, 0, 0, 0.4)'
         }}>
-          {/* Lock Icon */}
           <div style={{
             width: '60px',
             height: '60px',
@@ -273,13 +280,13 @@ export default function SecureMailConsole() {
   }
 
   // ----------------------------------------------------
-  // VIEW 2: Secure Mail Console Screen (Screenshots 1 & 3)
+  // VIEW 2: Secure Mail Console Screen
   // ----------------------------------------------------
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#f1f5f9', padding: '30px 20px', fontFamily: 'system-ui, sans-serif', color: '#1e293b' }}>
       <div style={{ maxWidth: '1020px', margin: '0 auto' }}>
         
-        {/* Top Header Bar */}
+        {/* Top Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <span style={{ fontSize: '24px', color: '#2563eb' }}>🛡️</span>
@@ -305,7 +312,7 @@ export default function SecureMailConsole() {
           </button>
         </div>
 
-        {/* Section Sub-Title */}
+        {/* Section Subtitle */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '20px' }}>
           <span style={{ fontSize: '18px' }}>✈️</span>
           <span style={{ fontSize: '15px', fontWeight: 'bold', color: '#0f172a' }}>Bulk Email Sender</span>
@@ -390,7 +397,7 @@ export default function SecureMailConsole() {
               />
             </div>
 
-            {/* Spam Protection Turnstile Box */}
+            {/* Spam Protection Box */}
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '6px' }}>
                 <span style={{ fontSize: '12px' }}>🛡️</span>
@@ -449,7 +456,7 @@ export default function SecureMailConsole() {
                 <span style={{ fontSize: '13px', fontWeight: 'bold', color: '#0f172a' }}>Progress Monitor</span>
               </div>
 
-              {/* 2x2 Clean Counters */}
+              {/* 2x2 Counters */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '16px' }}>
                 <div style={{ border: '1px solid #f1f5f9', borderRadius: '8px', padding: '12px', textAlign: 'center', backgroundColor: '#f8fafc' }}>
                   <div style={{ fontSize: '9px', fontWeight: 'bold', color: '#64748b', letterSpacing: '0.5px' }}>TOTAL</div>
