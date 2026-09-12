@@ -83,7 +83,7 @@ export default function SecureMailConsole() {
     let sentCount = 0;
     let failedCount = 0;
 
-    const BATCH_SIZE = 2;
+    const BATCH_SIZE = 6;
     const BATCH_DELAY = 1500;
 
     for (let i = 0; i < list.length; i += BATCH_SIZE) {
