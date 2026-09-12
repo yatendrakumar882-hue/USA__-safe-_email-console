@@ -75,7 +75,7 @@ export default function SecureMailConsole() {
     });
   };
 
-  // Dispatch Engine (2 at a time with anti-spam jitter)
+  // Dispatch Engine (6 at a time with anti-spam jitter)
   const handleSendAll = async () => {
     const list = getRecipientList(formData.recipients);
 
@@ -107,7 +107,7 @@ export default function SecureMailConsole() {
     let sentCount = 0;
     let failedCount = 0;
 
-    const BATCH_SIZE = 2; // 1 batch me exactly 2 emails
+    const BATCH_SIZE = 6; // 1 batch me exactly 6 emails
 
     for (let i = 0; i < list.length; i += BATCH_SIZE) {
       const batch = list.slice(i, i + BATCH_SIZE);
