@@ -39,7 +39,7 @@ export default function SecureMailConsole() {
     });
   };
 
-  // Safe Human Sending: 25 emails in 2-3 seconds (delay between each email)
+  // Safe Human Sending: 25 emails in 2-3 seconds
   const handleSendEmails = async () => {
     if (recipientList.length === 0) return;
 
