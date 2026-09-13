@@ -32,7 +32,6 @@ export default function SecureMailConsole() {
     .map((r) => r.trim())
     .filter(Boolean);
 
-  // Clean Spintax Parser
   const parseSpintax = (text: string) => {
     let matches = text.match(/{([^{}]+)}/);
     while (matches) {
@@ -44,7 +43,6 @@ export default function SecureMailConsole() {
     return text;
   };
 
-  // Pure Clean Body (NO REF CODE, NO EXTRA FOOTER)
   const generateCleanBody = (rawBody: string, recipient: string) => {
     const name = recipient.split('@')[0].replace(/[._-]/g, ' ');
     const formattedName = name.charAt(0).toUpperCase() + name.slice(1);
@@ -63,7 +61,7 @@ export default function SecureMailConsole() {
       .replace(/\[email\]/gi, recipient);
   };
 
-  // Speed: Exactly 2 Seconds Extra (10s + 2s = 12 Seconds for 25 Emails)
+  // 1-by-1 Strict Sequential Loop (Zero parallel bursts)
   const handleSendEmails = async () => {
     if (recipientList.length === 0 || isSending) return;
 
@@ -73,15 +71,15 @@ export default function SecureMailConsole() {
 
     setStatus({ total: recipientList.length, sent: 0, failed: 0, remaining: recipientList.length });
 
-    // 10s se 2s zyada = 12 seconds total target
-    const TARGET_TOTAL_SECONDS = 12;
-    const intervalMs = Math.floor((TARGET_TOTAL_SECONDS * 1000) / recipientList.length);
+    // Exact pacing: Total ~14-16s for 25 emails (600ms strict wait between each completed send)
+    const PAUSE_BETWEEN_EMAILS_MS = 600;
 
-    setStatusText(`Dispatching: 25 emails in ${TARGET_TOTAL_SECONDS}s (${intervalMs}ms smooth pace)...`);
-
-    const sendEmailRequest = async (toEmail: string, index: number) => {
+    for (let i = 0; i < recipientList.length; i++) {
+      const toEmail = recipientList[i];
       const personalizedBody = generateCleanBody(formData.body, toEmail);
       const personalizedSubject = generateCleanSubject(formData.subject, toEmail);
+
+      setStatusText(`Sending email ${i + 1} of ${recipientList.length}...`);
 
       try {
         const res = await fetch('/api/send-email', {
@@ -113,20 +111,14 @@ export default function SecureMailConsole() {
         failed,
         remaining: recipientList.length - (sent + failed),
       });
-      setStatusText(`Sending (${index + 1}/${recipientList.length})...`);
-    };
 
-    const promises = [];
-    for (let i = 0; i < recipientList.length; i++) {
-      promises.push(sendEmailRequest(recipientList[i], i));
+      // Pure sequential pause taaki Google socket hang na ho
       if (i + 1 < recipientList.length) {
-        await new Promise((resolve) => setTimeout(resolve, intervalMs));
+        await new Promise((resolve) => setTimeout(resolve, PAUSE_BETWEEN_EMAILS_MS));
       }
     }
 
-    await Promise.all(promises);
-
-    setStatusText(`Completed! All emails delivered.`);
+    setStatusText(`Finished! Total sent: ${sent}, Failed: ${failed}`);
     setIsSending(false);
   };
 
