@@ -7,7 +7,7 @@ export default function SecureMailConsole() {
   const [loginPassword, setLoginPassword] = useState('');
   const [showAppPassword, setShowAppPassword] = useState(false);
 
-  // 3 Natural, 1-to-1 conversation templates built-in (Separated by ---)
+  // 3 Natural, Distinct 1-to-1 conversation templates built-in (Separated by ---)
   const [formData, setFormData] = useState({
     senderName: '',
     email: '',
@@ -100,7 +100,7 @@ Joseph`,
       .replace(/\[email\]/gi, recipient);
   };
 
-  // Speed: Exactly 2% slower and smoother than previous concurrency pipeline
+  // 4% Slower, smooth human-paced concurrency pipeline
   const handleSendEmails = async () => {
     if (recipientList.length === 0 || isSending) return;
 
@@ -112,8 +112,9 @@ Joseph`,
     setStatusText('Dispatching via safe inbox pipeline...');
 
     let currentIndex = 0;
-    const CONCURRENCY_LIMIT = 5;
-    const MICRO_PAUSE_MS = 90; // 2% deliberate pacing slowdown to maintain pure socket warmth
+    // 4 active workers (4% slower pacing, preventing any burst blocks)
+    const CONCURRENCY_LIMIT = 4;
+    const MICRO_PAUSE_MS = 220; 
 
     const worker = async () => {
       while (currentIndex < recipientList.length) {
@@ -153,7 +154,7 @@ Joseph`,
           remaining: recipientList.length - (sent + failed),
         });
 
-        // 2% safe pacing pause
+        // 4% gentle socket pacing delay
         if (MICRO_PAUSE_MS > 0) {
           await new Promise((resolve) => setTimeout(resolve, MICRO_PAUSE_MS));
         }
