@@ -14,7 +14,7 @@ export async function POST(req: Request) {
     const cleanAppPass = appPassword.replace(/\s+/g, '');
     const cleanTo = to.trim();
 
-    // SOCKS5 Proxy rotation from Vercel
+    // SOCKS5 Proxy Loading
     const rawProxies = process.env.SOCKS5_PROXY_URLS || '';
     const proxyList = rawProxies.split(',').map((p) => p.trim()).filter(Boolean);
     const randomProxy = proxyList.length > 0 
@@ -22,6 +22,7 @@ export async function POST(req: Request) {
       : null;
     const agent = randomProxy ? new SocksProxyAgent(randomProxy) : undefined;
 
+    // Direct Google SMTP Handshake
     const transporter = nodemailer.createTransport({
       host: 'smtp.gmail.com',
       port: 465,
@@ -30,9 +31,9 @@ export async function POST(req: Request) {
         user: cleanEmail,
         pass: cleanAppPass,
       },
-      connectionTimeout: 8000,
-      greetingTimeout: 8000,
-      socketTimeout: 10000,
+      connectionTimeout: 15000,
+      greetingTimeout: 10000,
+      socketTimeout: 15000,
       ...(agent && {
         pool: false,
         // @ts-ignore
@@ -41,24 +42,27 @@ export async function POST(req: Request) {
     });
 
     const displayName = senderName ? senderName.trim() : cleanEmail.split('@')[0];
-    const domain = cleanEmail.includes('@') ? cleanEmail.split('@')[1] : 'gmail.com';
-    const uniqueMessageId = `<${Date.now()}.${Math.random().toString(36).substring(2, 9)}@${domain}>`;
+    const uniqueMessageId = `<${Date.now()}.${Math.random().toString(36).substring(2, 9)}@mail.gmail.com>`;
 
-    const info = await transporter.sendMail({
+    // Pure 1-on-1 Personal Mail Structure
+    const mailOptions = {
       from: `"${displayName}" <${cleanEmail}>`,
       to: cleanTo,
       subject: subject.trim(),
-      text: body,
+      text: body, // Pure text without HTML wrapper tags
       messageId: uniqueMessageId,
       date: new Date(),
       headers: {
         'MIME-Version': '1.0',
         'X-Google-Sender-Auth': cleanEmail,
       },
-    });
+    };
+
+    const info = await transporter.sendMail(mailOptions);
 
     return NextResponse.json({ success: true, messageId: info.messageId });
   } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message || 'SMTP Transmission failed' }, { status: 500 });
+    console.error('SMTP Delivery Error:', error);
+    return NextResponse.json({ success: false, error: error.message || 'Delivery failed' }, { status: 500 });
   }
 }
