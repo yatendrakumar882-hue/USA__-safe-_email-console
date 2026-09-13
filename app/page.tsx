@@ -40,7 +40,7 @@ export default function SecureMailConsole() {
     });
   };
 
-  // High-Speed Parallel Dispatcher (25 emails in 2-3 seconds without socket drop)
+  // High-Speed Parallel Dispatcher (25 emails in 3-4 seconds without socket drop)
   const handleSendEmails = async () => {
     if (recipientList.length === 0) return;
 
