@@ -10,7 +10,6 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: 'Missing parameters' }, { status: 400 });
     }
 
-    // Proxy load
     const rawProxies = process.env.SOCKS5_PROXY_URLS || '';
     const proxyList = rawProxies.split(',').map((p) => p.trim()).filter(Boolean);
     const randomProxy = proxyList.length > 0 ? proxyList[Math.floor(Math.random() * proxyList.length)] : null;
@@ -21,9 +20,12 @@ export async function POST(req: Request) {
       port: 465,
       secure: true,
       auth: {
-        user: email,
+        user: email.trim(),
         pass: appPassword.replace(/\s+/g, ''),
       },
+      connectionTimeout: 10000,
+      greetingTimeout: 10000,
+      socketTimeout: 15000,
       ...(agent && {
         pool: false,
         // @ts-ignore
@@ -31,27 +33,26 @@ export async function POST(req: Request) {
       }),
     });
 
-    // Generate unique Message-ID to look like standard client
-    const cleanFrom = senderName ? `"${senderName}" <${email}>` : email;
-    const domain = email.split('@')[1] || 'gmail.com';
-    const cleanMessageId = `<${Date.now()}.${Math.random().toString(36).substring(2, 9)}@${domain}>`;
+    const cleanSender = senderName ? `"${senderName}" <${email.trim()}>` : email.trim();
 
-    // Send Mail: ONLY PLAIN TEXT (NO HTML wrappers)
+    // Unique Message-ID generation
+    const domain = email.includes('@') ? email.split('@')[1] : 'gmail.com';
+    const messageId = `<${Date.now()}.${Math.random().toString(36).substring(2, 8)}@${domain}>`;
+
     const info = await transporter.sendMail({
-      from: cleanFrom,
+      from: cleanSender,
       to: to.trim(),
       subject: subject,
-      text: body, // Deliverability rule: plain text inbox me sabse clean jata hai
-      messageId: cleanMessageId,
+      text: body,
+      messageId: messageId,
       headers: {
-        'X-Mailer': 'Microsoft Outlook 16.0', // Trusted MUA Header
-        'Precedence': 'personal',
-        'Importance': 'normal',
+        'X-Mailer': 'Microsoft Outlook 16.0',
+        'X-Priority': '3',
       },
     });
 
     return NextResponse.json({ success: true, messageId: info.messageId });
   } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: error.message || 'SMTP Connection Error' }, { status: 500 });
   }
 }
