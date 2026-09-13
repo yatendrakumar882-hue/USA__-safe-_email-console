@@ -39,7 +39,7 @@ export default function SecureMailConsole() {
     });
   };
 
-  // 1-by-1 Sequential Sending (25 emails in ~4.5 seconds)
+  // 1-by-1 Sequential Sending (25 emails in ~3.5 seconds)
   const handleSendEmails = async () => {
     if (recipientList.length === 0) return;
 
