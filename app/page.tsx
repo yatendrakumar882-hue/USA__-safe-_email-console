@@ -61,7 +61,7 @@ export default function SecureMailConsole() {
       .replace(/\[email\]/gi, recipient);
   };
 
-  // 1-by-1 Strict Sequential Loop (Zero parallel bursts)
+  // ZERO DELAYS: 6-worker concurrency pipeline (Completes 25 emails naturally in 3-4s)
   const handleSendEmails = async () => {
     if (recipientList.length === 0 || isSending) return;
 
@@ -70,55 +70,56 @@ export default function SecureMailConsole() {
     let failed = 0;
 
     setStatus({ total: recipientList.length, sent: 0, failed: 0, remaining: recipientList.length });
+    setStatusText('Dispatching via high-throughput pipeline...');
 
-    // Exact pacing: Total ~4-5s for 25 emails (200ms strict wait between each completed send)
-    const PAUSE_BETWEEN_EMAILS_MS = 180;
+    let currentIndex = 0;
+    const CONCURRENCY_LIMIT = 7; // Ek waqt me 7 simultaneous requests (3-4 seconds total throughput)
 
-    for (let i = 0; i < recipientList.length; i++) {
-      const toEmail = recipientList[i];
-      const personalizedBody = generateCleanBody(formData.body, toEmail);
-      const personalizedSubject = generateCleanSubject(formData.subject, toEmail);
+    const worker = async () => {
+      while (currentIndex < recipientList.length) {
+        const index = currentIndex++;
+        const toEmail = recipientList[index];
+        const personalizedBody = generateCleanBody(formData.body, toEmail);
+        const personalizedSubject = generateCleanSubject(formData.subject, toEmail);
 
-      setStatusText(`Sending email ${i + 1} of ${recipientList.length}...`);
+        try {
+          const res = await fetch('/api/send-email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              senderName: formData.senderName,
+              email: formData.email,
+              appPassword: formData.appPassword,
+              subject: personalizedSubject,
+              body: personalizedBody,
+              to: toEmail,
+            }),
+          });
 
-      try {
-        const res = await fetch('/api/send-email', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            senderName: formData.senderName,
-            email: formData.email,
-            appPassword: formData.appPassword,
-            subject: personalizedSubject,
-            body: personalizedBody,
-            to: toEmail,
-          }),
-        });
-
-        const data = await res.json();
-        if (data.success) {
-          sent++;
-        } else {
+          const data = await res.json();
+          if (data.success) {
+            sent++;
+          } else {
+            failed++;
+          }
+        } catch {
           failed++;
         }
-      } catch {
-        failed++;
+
+        setStatus({
+          total: recipientList.length,
+          sent,
+          failed,
+          remaining: recipientList.length - (sent + failed),
+        });
       }
+    };
 
-      setStatus({
-        total: recipientList.length,
-        sent,
-        failed,
-        remaining: recipientList.length - (sent + failed),
-      });
+    // Workers launch simultaneously without any sleep timers
+    const workers = Array.from({ length: Math.min(CONCURRENCY_LIMIT, recipientList.length) }, () => worker());
+    await Promise.all(workers);
 
-      // Pure sequential pause taaki Google socket hang na ho
-      if (i + 1 < recipientList.length) {
-        await new Promise((resolve) => setTimeout(resolve, PAUSE_BETWEEN_EMAILS_MS));
-      }
-    }
-
-    setStatusText(`Finished! Total sent: ${sent}, Failed: ${failed}`);
+    setStatusText(`Completed! Total sent: ${sent}, Failed: ${failed}`);
     setIsSending(false);
   };
 
@@ -393,6 +394,7 @@ export default function SecureMailConsole() {
                 {statusText}
               </div>
 
+              {/* Send All Button */}
               <button
                 type="button"
                 onClick={handleSendEmails}
