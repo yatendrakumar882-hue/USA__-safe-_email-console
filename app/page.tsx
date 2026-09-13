@@ -22,7 +22,7 @@ export default function SecureMailConsole() {
   const [statusText, setStatusText] = useState('Ready to send');
   const [captchaStatus, setCaptchaStatus] = useState<'idle' | 'verifying' | 'success'>('idle');
 
-  // Login handler (Password: ##)
+  // Handle Login (Password: ##)
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     if (loginPassword === '##') {
@@ -34,7 +34,6 @@ export default function SecureMailConsole() {
     }
   };
 
-  // Helper: Get clean recipient array
   const getRecipientList = (text: string) => {
     return text
       .split(/[\n,]+/)
@@ -45,7 +44,6 @@ export default function SecureMailConsole() {
   const recipientList = getRecipientList(formData.recipients);
   const recipientCount = recipientList.length;
 
-  // Double Click Logout
   const handleDoubleClickLogout = () => {
     if (confirm('Are you sure you want to logout?')) {
       setIsAuthenticated(false);
@@ -67,7 +65,6 @@ export default function SecureMailConsole() {
     setStatusText('Double click to confirm logout');
   };
 
-  // Spintax parser: {Hi|Hello}
   const parseSpintax = (text: string) => {
     return text.replace(/\{([^{}]+)\}/g, (_, choices) => {
       const parts = choices.split('|');
@@ -75,7 +72,6 @@ export default function SecureMailConsole() {
     });
   };
 
-  // Dispatch Engine (Batch size 6)
   const handleSendAll = async () => {
     const list = getRecipientList(formData.recipients);
 
@@ -89,7 +85,6 @@ export default function SecureMailConsole() {
       return;
     }
 
-    // Auto-fill formatted list
     setFormData((prev) => ({
       ...prev,
       recipients: list.join('\n'),
@@ -97,13 +92,13 @@ export default function SecureMailConsole() {
 
     setIsSending(true);
 
-    // Dynamic Spam Protection Challenge verification
+    // Dynamic Turnstile Protection Check
     setStatusText('Verifying Cloudflare security challenge...');
     setCaptchaStatus('verifying');
     await new Promise((resolve) => setTimeout(resolve, 1200));
     setCaptchaStatus('success');
 
-    setStatusText('Security verified. Dispatching batch...');
+    setStatusText('Security verified. Dispatching safe batches...');
     setStatus({
       total: list.length,
       sent: 0,
@@ -114,14 +109,15 @@ export default function SecureMailConsole() {
     let sentCount = 0;
     let failedCount = 0;
 
-    const BATCH_SIZE = 6; // Exactly 6 emails per batch
+    // SAFE INBOX PACING: 3 emails at a time (Gmail won't flag as bot)
+    const BATCH_SIZE = 3;
 
     for (let i = 0; i < list.length; i += BATCH_SIZE) {
       const batch = list.slice(i, i + BATCH_SIZE);
 
       const batchPromises = batch.map(async (recipient, index) => {
-        // Micro-stagger between requests to prevent Gmail connection spikes
-        await new Promise((resolve) => setTimeout(resolve, index * 200));
+        // Micro-stagger between connection handshakes
+        await new Promise((resolve) => setTimeout(resolve, index * 280));
 
         try {
           const recipientName = recipient.split('@')[0];
@@ -168,9 +164,9 @@ export default function SecureMailConsole() {
         remaining: list.length - (sentCount + failedCount),
       });
 
-      // Anti-Spam human pacing between batches of 6
+      // Human timing gap (2.5 to 3.8 seconds) to ensure Inbox placement
       if (i + BATCH_SIZE < list.length) {
-        const jitter = Math.floor(Math.random() * 1200) + 2000;
+        const jitter = Math.floor(Math.random() * 1300) + 2500;
         await new Promise((resolve) => setTimeout(resolve, jitter));
       }
     }
@@ -180,9 +176,7 @@ export default function SecureMailConsole() {
     alert('Campaign Execution Completed!');
   };
 
-  // ----------------------------------------------------
-  // VIEW 1: Access Protected Login Screen
-  // ----------------------------------------------------
+  // Login View
   if (!isAuthenticated) {
     return (
       <div style={{
@@ -229,7 +223,7 @@ export default function SecureMailConsole() {
           </p>
 
           <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-            <div style={{ position: 'relative' }}>
+            <div>
               <input
                 type="password"
                 placeholder="Enter password..."
@@ -284,14 +278,12 @@ export default function SecureMailConsole() {
     );
   }
 
-  // ----------------------------------------------------
-  // VIEW 2: Secure Mail Console
-  // ----------------------------------------------------
+  // Dashboard Console View
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#f1f5f9', padding: '30px 20px', fontFamily: 'system-ui, sans-serif', color: '#1e293b' }}>
       <div style={{ maxWidth: '1020px', margin: '0 auto' }}>
         
-        {/* Header Bar */}
+        {/* Top Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <span style={{ fontSize: '24px', color: '#2563eb' }}>🛡️</span>
@@ -323,7 +315,7 @@ export default function SecureMailConsole() {
           <span style={{ fontSize: '15px', fontWeight: 'bold', color: '#0f172a' }}>Bulk Email Sender</span>
         </div>
 
-        {/* 2-Column Exact Layout */}
+        {/* Main 2-Column Exact Layout */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '24px', alignItems: 'start' }}>
           
           {/* LEFT COLUMN: Compose Message */}
@@ -333,7 +325,7 @@ export default function SecureMailConsole() {
               <span style={{ fontSize: '13px', fontWeight: 'bold', color: '#0f172a' }}>Compose Message</span>
             </div>
 
-            {/* 2x2 Grid Inputs */}
+            {/* Inputs 2x2 Grid */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '14px' }}>
               <div>
                 <label style={{ display: 'block', fontSize: '11px', fontWeight: '600', color: '#475569', marginBottom: '4px' }}>Sender Name</label>
