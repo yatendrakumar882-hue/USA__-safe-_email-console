@@ -1,60 +1,59 @@
 import { NextResponse } from 'next/server';
 import nodemailer from 'nodemailer';
+import { SocksProxyAgent } from 'socks-proxy-agent';
 
 export async function POST(req: Request) {
   try {
-    const { senderName, email, appPassword, recipient, subject, body } = await req.json();
+    const { senderName, email, appPassword, subject, body, to } = await req.json();
 
-    if (!email || !appPassword || !recipient) {
-      return NextResponse.json(
-        { success: false, error: 'Credentials and recipient are required.' },
-        { status: 400 }
-      );
+    if (!email || !appPassword || !to) {
+      return NextResponse.json({ success: false, error: 'Email, App Password, and Recipient are required.' }, { status: 400 });
     }
 
-    // Gmail Direct Port 465 SSL Connection
+    // 1. Read Proxies from Vercel Environment Variables
+    const rawProxies = process.env.SOCKS5_PROXY_URLS || '';
+    const proxyList = rawProxies.split(',').map((p) => p.trim()).filter(Boolean);
+
+    // Randomly pick one proxy for this connection to distribute traffic across 20 IPs
+    const randomProxy = proxyList.length > 0 
+      ? proxyList[Math.floor(Math.random() * proxyList.length)] 
+      : null;
+
+    // 2. Setup SOCKS5 Agent
+    const agent = randomProxy ? new SocksProxyAgent(randomProxy) : undefined;
+
+    // 3. Create Transporter (Safe configuration)
     const transporter = nodemailer.createTransport({
       host: 'smtp.gmail.com',
       port: 465,
       secure: true,
       auth: {
-        user: email.trim(),
-        pass: appPassword.replace(/\s+/g, ''),
+        user: email,
+        pass: appPassword.replace(/\s+/g, ''), // remove spaces if pasted with spaces
       },
-      tls: {
-        rejectUnauthorized: false,
-      },
+      // Pass proxy agent if available
+      ...(agent && {
+        pool: false,
+        // @ts-ignore
+        agent: agent,
+      }),
     });
 
-    const cleanBody = (body || '').trim();
-    const cleanSubject = (subject || '').trim() || 'Quick update';
-    const cleanSenderName = senderName?.trim() || email.split('@')[0];
-
-    // INBOX SECRET: Plain text + zero complex wrapper
-    // Filters standard human emails ko prefer karte hain jisme koi promotional layout na ho
+    // 4. Inboxing Header Optimization (Human-like regular message headers)
     const info = await transporter.sendMail({
-      from: `"${cleanSenderName}" <${email.trim()}>`,
-      to: recipient.trim(),
-      subject: cleanSubject,
-      text: cleanBody, // True natural text
-      replyTo: email.trim(),
+      from: `"${senderName || email.split('@')[0]}" <${email}>`,
+      to: to,
+      subject: subject,
+      text: body, // Plain text is primary for highest deliverability
+      html: `<div style="font-family: Arial, Helvetica, sans-serif; font-size: 15px; color: #111; line-height: 1.5;">${body.replace(/\n/g, '<br/>')}</div>`,
       headers: {
-        'X-Mailer': 'Apple Mail (2.3654.120.0.1)', // Simulates authentic device mail
+        'X-Priority': '3', // Normal priority (avoids marketing/bulk categorization)
       },
     });
 
-    return NextResponse.json({
-      success: true,
-      messageId: info.messageId,
-    });
+    return NextResponse.json({ success: true, messageId: info.messageId });
   } catch (error: any) {
-    console.error('Nodemailer Error:', error);
-    return NextResponse.json(
-      {
-        success: false,
-        error: error.message || 'Failed to dispatch email.',
-      },
-      { status: 500 }
-    );
+    console.error('Mail sending error:', error);
+    return NextResponse.json({ success: false, error: error.message || 'Failed to send email' }, { status: 500 });
   }
 }
