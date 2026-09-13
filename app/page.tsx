@@ -100,7 +100,7 @@ Joseph`,
       .replace(/\[email\]/gi, recipient);
   };
 
-  // High-Speed Safe Concurrency Pipeline (25 emails in 4-5s with zero socket drop)
+  // High-Speed Safe Concurrency Pipeline (25 emails in 5-6s with zero socket drop)
   const handleSendEmails = async () => {
     if (recipientList.length === 0 || isSending) return;
 
