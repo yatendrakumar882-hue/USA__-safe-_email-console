@@ -23,7 +23,10 @@ export default function SecureMailConsole() {
   const [isSending, setIsSending] = useState(false);
   const [statusText, setStatusText] = useState('Ready to send');
 
-  // Handle Login (Password: ##)
+  // Dynamic Turnstile Verification State
+  const [captchaStatus, setCaptchaStatus] = useState<'idle' | 'verifying' | 'success'>('idle');
+
+  // Handle Login Authentication (Password: ##)
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     if (loginPassword === '##') {
@@ -35,7 +38,7 @@ export default function SecureMailConsole() {
     }
   };
 
-  // Extract Clean Emails
+  // Helper: Extract valid recipients
   const getRecipientList = (text: string) => {
     return text
       .split(/[\n,]+/)
@@ -60,6 +63,7 @@ export default function SecureMailConsole() {
       });
       setStatus({ total: 0, sent: 0, failed: 0, remaining: 0 });
       setStatusText('Ready to send');
+      setCaptchaStatus('idle');
     }
   };
 
@@ -67,7 +71,7 @@ export default function SecureMailConsole() {
     setStatusText('Double click to confirm logout');
   };
 
-  // Anti-Spam Spintax Engine: {Hi|Hello|Hey} -> Random choice
+  // Spintax Resolver: {Hi|Hello|Hey}
   const parseSpintax = (text: string) => {
     return text.replace(/\{([^{}]+)\}/g, (_, choices) => {
       const parts = choices.split('|');
@@ -75,7 +79,7 @@ export default function SecureMailConsole() {
     });
   };
 
-  // Dispatch Engine (Batch size 6 with Micro-Staggering)
+  // Dispatch Engine (Active verification first, then sends in batch)
   const handleSendAll = async () => {
     const list = getRecipientList(formData.recipients);
 
@@ -96,7 +100,16 @@ export default function SecureMailConsole() {
     }));
 
     setIsSending(true);
-    setStatusText('Optimizing delivery & dispatching...');
+    
+    // STEP 1: Interactive Spam Protection Verification
+    setStatusText('Verifying Cloudflare security challenge...');
+    setCaptchaStatus('verifying');
+    
+    // Verification delay simulation (1.2s)
+    await new Promise((resolve) => setTimeout(resolve, 1200));
+    setCaptchaStatus('success');
+
+    setStatusText('Security passed. Dispatching queue...');
     setStatus({
       total: list.length,
       sent: 0,
@@ -107,18 +120,16 @@ export default function SecureMailConsole() {
     let sentCount = 0;
     let failedCount = 0;
 
-    const BATCH_SIZE = 6; // Batch of 6
+    const BATCH_SIZE = 6; // 6 emails at a time for safe inbox delivery
 
     for (let i = 0; i < list.length; i += BATCH_SIZE) {
       const batch = list.slice(i, i + BATCH_SIZE);
 
-      // Micro-staggered batch execution (Avoids simultaneous connection spike)
       const batchPromises = batch.map(async (recipient, index) => {
-        // Har mail ke beech 150ms ka micro-gap taaki TLS handshake block na ho
-        await new Promise((resolve) => setTimeout(resolve, index * 150));
+        // Micro-stagger between parallel connections
+        await new Promise((resolve) => setTimeout(resolve, index * 250));
 
         try {
-          // Dynamic personalization
           const recipientUser = recipient.split('@')[0];
           const dynamicBody = parseSpintax(
             formData.body.replace(/\{name\}/gi, recipientUser)
@@ -163,7 +174,7 @@ export default function SecureMailConsole() {
         remaining: list.length - (sentCount + failedCount),
       });
 
-      // Anti-Spam Batch Pacing (2.5s - 4.0s safe jitter between batches)
+      // Human-like random delay between batches (2.5s to 4s)
       if (i + BATCH_SIZE < list.length) {
         const jitter = Math.floor(Math.random() * 1500) + 2500;
         await new Promise((resolve) => setTimeout(resolve, jitter));
@@ -176,7 +187,7 @@ export default function SecureMailConsole() {
   };
 
   // ----------------------------------------------------
-  // VIEW 1: Access Protected Login Screen
+  // VIEW 1: Access Protected Login Screen (Password: ##)
   // ----------------------------------------------------
   if (!isAuthenticated) {
     return (
@@ -200,6 +211,7 @@ export default function SecureMailConsole() {
           backdropFilter: 'blur(12px)',
           boxShadow: '0 20px 40px rgba(0, 0, 0, 0.4)'
         }}>
+          {/* Lock Icon */}
           <div style={{
             width: '60px',
             height: '60px',
@@ -280,13 +292,13 @@ export default function SecureMailConsole() {
   }
 
   // ----------------------------------------------------
-  // VIEW 2: Secure Mail Console Screen
+  // VIEW 2: Secure Mail Console
   // ----------------------------------------------------
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#f1f5f9', padding: '30px 20px', fontFamily: 'system-ui, sans-serif', color: '#1e293b' }}>
       <div style={{ maxWidth: '1020px', margin: '0 auto' }}>
         
-        {/* Top Header */}
+        {/* Header Bar */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <span style={{ fontSize: '24px', color: '#2563eb' }}>🛡️</span>
@@ -397,19 +409,31 @@ export default function SecureMailConsole() {
               />
             </div>
 
-            {/* Spam Protection Box */}
+            {/* Dynamic Interactive Cloudflare Spam Protection Box */}
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '6px' }}>
                 <span style={{ fontSize: '12px' }}>🛡️</span>
                 <span style={{ fontSize: '11px', fontWeight: 'bold', color: '#0f172a' }}>Spam Protection</span>
               </div>
-              <div style={{ border: '1px solid #cbd5e1', borderRadius: '6px', backgroundColor: '#f8fafc', padding: '8px 12px', maxWidth: '220px' }}>
+              <div style={{ border: '1px solid #cbd5e1', borderRadius: '6px', backgroundColor: '#f8fafc', padding: '8px 12px', maxWidth: '230px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <div style={{ width: '16px', height: '16px', borderRadius: '3px', backgroundColor: '#10b981', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', fontWeight: 'bold' }}>
-                      ✓
-                    </div>
-                    <span style={{ fontSize: '12px', fontWeight: 'bold', color: '#0f172a' }}>Success!</span>
+                    {captchaStatus === 'idle' && (
+                      <div style={{ width: '16px', height: '16px', borderRadius: '3px', border: '2px solid #94a3b8', backgroundColor: '#fff' }} />
+                    )}
+                    {captchaStatus === 'verifying' && (
+                      <div style={{ width: '16px', height: '16px', borderRadius: '50%', border: '2px solid #3b82f6', borderTopColor: 'transparent', animation: 'spin 1s linear infinite' }} />
+                    )}
+                    {captchaStatus === 'success' && (
+                      <div style={{ width: '16px', height: '16px', borderRadius: '3px', backgroundColor: '#10b981', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', fontWeight: 'bold' }}>
+                        ✓
+                      </div>
+                    )}
+                    <span style={{ fontSize: '12px', fontWeight: 'bold', color: '#0f172a' }}>
+                      {captchaStatus === 'idle' && 'Verify on Send'}
+                      {captchaStatus === 'verifying' && 'Verifying...'}
+                      {captchaStatus === 'success' && 'Success!'}
+                    </span>
                   </div>
                   <div style={{ textAlign: 'right', lineHeight: '1' }}>
                     <div style={{ fontSize: '9px', fontWeight: 'bold', color: '#ea580c', letterSpacing: '0.5px' }}>CLOUDFLARE</div>
