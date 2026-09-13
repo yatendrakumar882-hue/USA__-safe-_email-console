@@ -39,7 +39,7 @@ export default function SecureMailConsole() {
     });
   };
 
-  // Smooth Direct Dispatch (25 emails across ~4 seconds naturally without artificial delay)
+  // 1-by-1 Smooth Dispatch
   const handleSendEmails = async () => {
     if (recipientList.length === 0) return;
 
@@ -312,7 +312,7 @@ export default function SecureMailConsole() {
           {/* Right Column: Recipients & Progress Monitor */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
             
-            {/* Recipients Box */}
+            {/* Recipients Card */}
             <div style={{ background: '#fff', borderRadius: '12px', padding: '24px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -331,7 +331,7 @@ export default function SecureMailConsole() {
               />
             </div>
 
-            {/* Progress Monitor Box */}
+            {/* Progress Monitor Card */}
             <div style={{ background: '#fff', borderRadius: '12px', padding: '24px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
                 <span style={{ fontSize: '14px' }}>📊</span>
@@ -383,7 +383,7 @@ export default function SecureMailConsole() {
                   gap: '6px'
                 }}
               >
-                ▲ {isSending ? 'Sending 40s Batch...' : 'Send All'}
+                ▲ {isSending ? 'Sending 1-by-1...' : 'Send All'}
               </button>
             </div>
 
