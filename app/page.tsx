@@ -32,57 +32,65 @@ export default function SecureMailConsole() {
     .map((r) => r.trim())
     .filter(Boolean);
 
+  // Spintax helper: {Hi|Hello|Hey} -> Random pick
+  const parseSpintax = (text: string) => {
+    return text.replace(/{([^{}]+)}/g, (_, match) => {
+      const choices = match.split('|');
+      return choices[Math.floor(Math.random() * choices.length)];
+    });
+  };
+
+  // High-Speed Parallel Sending (25 emails in 2-3 seconds)
   const handleSendEmails = async () => {
     if (recipientList.length === 0) return;
 
     setIsSending(true);
+    setStatusText('Dispatching fast batch (Parallel)...');
+
     let sent = 0;
     let failed = 0;
-    const BATCH_SIZE = 8;
 
     setStatus({ total: recipientList.length, sent: 0, failed: 0, remaining: recipientList.length });
 
-    for (let i = 0; i < recipientList.length; i += BATCH_SIZE) {
-      const batch = recipientList.slice(i, i + BATCH_SIZE);
+    const sendSingleMail = async (toEmail: string) => {
+      const personalizedBody = parseSpintax(formData.body).replace(/\[name\]/gi, toEmail.split('@')[0]);
+      const personalizedSubject = parseSpintax(formData.subject);
 
-      await Promise.all(
-        batch.map(async (toEmail) => {
-          try {
-            const res = await fetch('/api/send-email', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                senderName: formData.senderName,
-                email: formData.email,
-                appPassword: formData.appPassword,
-                subject: formData.subject,
-                body: formData.body,
-                to: toEmail,
-              }),
-            });
-            const data = await res.json();
-            if (data.success) sent++;
-            else failed++;
-          } catch {
-            failed++;
-          }
-        })
-      );
+      try {
+        const res = await fetch('/api/send-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            senderName: formData.senderName,
+            email: formData.email,
+            appPassword: formData.appPassword,
+            subject: personalizedSubject,
+            body: personalizedBody,
+            to: toEmail,
+          }),
+        });
+        const data = await res.json();
+        if (data.success) {
+          sent++;
+        } else {
+          failed++;
+        }
+      } catch {
+        failed++;
+      }
 
-      setStatus({
-        total: recipientList.length,
+      setStatus((prev) => ({
+        ...prev,
         sent,
         failed,
-        remaining: recipientList.length - (sent + failed),
-      });
+        remaining: prev.total - (sent + failed),
+      }));
+    };
 
-      if (i + BATCH_SIZE < recipientList.length) {
-        setStatusText(`Batch sent (${sent}/${recipientList.length}). Waiting 3.5s...`);
-        await new Promise((resolve) => setTimeout(resolve, 3500));
-      }
-    }
+    // Parallel promise dispatch for instant sending
+    await Promise.all(recipientList.map((target) => sendSingleMail(target)));
 
-    setStatusText('Completed');
+    setStatusText('Completed all emails!');
     setIsSending(false);
   };
 
@@ -177,7 +185,7 @@ export default function SecureMailConsole() {
     );
   }
 
-  // SCREENSHOT 2: CONSOLE MAIN SCREEN
+  // SCREENSHOT 2: SECURE MAIL CONSOLE INTERFACE
   return (
     <div style={{
       minHeight: '100vh',
@@ -188,7 +196,7 @@ export default function SecureMailConsole() {
     }}>
       <div style={{ maxWidth: '1100px', margin: '0 auto' }}>
         
-        {/* Header */}
+        {/* Top Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <div style={{ color: '#2563eb', display: 'flex' }}>
@@ -287,7 +295,7 @@ export default function SecureMailConsole() {
               />
             </div>
 
-            {/* Spam Protection Box */}
+            {/* Cloudflare Mock Badge */}
             <div>
               <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '4px' }}>
                 <span>🛡</span> Spam Protection
@@ -305,10 +313,10 @@ export default function SecureMailConsole() {
             </div>
           </div>
 
-          {/* Right Column: Recipients & Progress */}
+          {/* Right Column: Recipients & Progress Monitor */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
             
-            {/* Recipients Box */}
+            {/* Recipients Card */}
             <div style={{ background: '#fff', borderRadius: '12px', padding: '24px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -327,7 +335,7 @@ export default function SecureMailConsole() {
               />
             </div>
 
-            {/* Progress Monitor Box */}
+            {/* Progress Monitor Card */}
             <div style={{ background: '#fff', borderRadius: '12px', padding: '24px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
                 <span style={{ fontSize: '14px' }}>📊</span>
@@ -379,7 +387,7 @@ export default function SecureMailConsole() {
                   gap: '6px'
                 }}
               >
-                ▲ {isSending ? 'Sending Safe Batches...' : 'Send All'}
+                ▲ {isSending ? 'Sending Fast Parallel...' : 'Send All'}
               </button>
             </div>
 
