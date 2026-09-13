@@ -38,7 +38,7 @@ export default function SecureMailConsole() {
     setIsSending(true);
     let sent = 0;
     let failed = 0;
-    const BATCH_SIZE = 2;
+    const BATCH_SIZE = 8;
 
     setStatus({ total: recipientList.length, sent: 0, failed: 0, remaining: recipientList.length });
 
