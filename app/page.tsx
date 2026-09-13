@@ -39,7 +39,7 @@ export default function SecureMailConsole() {
     });
   };
 
-  // 1-by-1 Sequential Sending (25 emails in ~4.5 seconds with zero socket crash)
+  // 1-by-1 Sequential Sending (25 emails in ~4.5 seconds)
   const handleSendEmails = async () => {
     if (recipientList.length === 0) return;
 
@@ -86,7 +86,6 @@ export default function SecureMailConsole() {
         remaining: recipientList.length - (sent + failed),
       });
 
-      // 180ms delay between each single email (25 emails complete in ~4.5 sec)
       if (i + 1 < recipientList.length) {
         await new Promise((resolve) => setTimeout(resolve, 180));
       }
@@ -296,7 +295,7 @@ export default function SecureMailConsole() {
               />
             </div>
 
-            {/* Spam Protection Box */}
+            {/* Spam Protection Box (Fixed Syntax) */}
             <div>
               <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '4px' }}>
                 <span>🛡</span> Spam Protection
@@ -304,7 +303,7 @@ export default function SecureMailConsole() {
               <div style={{ width: '210px', background: '#fafafa', border: '1px solid #e2e8f0', borderRadius: '4px', padding: '8px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <div style={{ width: '16px', height: '16px', borderRadius: '50%', background: '#10b981', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px' }}>✓</div>
-                  <span style={{ fontSize: '12px', fontWeight 500, color: '#1e293b' }}>Success!</span>
+                  <span style={{ fontSize: '12px', fontWeight: 500, color: '#1e293b' }}>Success!</span>
                 </div>
                 <div style={{ textAlign: 'right', fontSize: '8px', color: '#94a3b8' }}>
                   <span style={{ fontWeight: 'bold', color: '#ea580c', display: 'block' }}>CLOUDFLARE</span>
@@ -314,10 +313,10 @@ export default function SecureMailConsole() {
             </div>
           </div>
 
-          {/* Right Column: Recipients & Progress Monitor */}
+          {/* Right Column: Recipients & Progress */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
             
-            {/* Recipients Card */}
+            {/* Recipients Box */}
             <div style={{ background: '#fff', borderRadius: '12px', padding: '24px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -336,7 +335,7 @@ export default function SecureMailConsole() {
               />
             </div>
 
-            {/* Progress Monitor Card */}
+            {/* Progress Monitor Box */}
             <div style={{ background: '#fff', borderRadius: '12px', padding: '24px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
                 <span style={{ fontSize: '14px' }}>📊</span>
