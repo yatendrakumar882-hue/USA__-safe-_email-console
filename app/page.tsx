@@ -32,14 +32,44 @@ export default function SecureMailConsole() {
     .map((r) => r.trim())
     .filter(Boolean);
 
+  // Advanced Spintax Engine
   const parseSpintax = (text: string) => {
-    return text.replace(/{([^{}]+)}/g, (_, match) => {
-      const choices = match.split('|');
-      return choices[Math.floor(Math.random() * choices.length)];
-    });
+    let matches = text.match(/{([^{}]+)}/);
+    while (matches) {
+      const choices = matches[1].split('|');
+      const randomChoice = choices[Math.floor(Math.random() * choices.length)];
+      text = text.replace(matches[0], randomChoice);
+      matches = text.match(/{([^{}]+)}/);
+    }
+    return text;
   };
 
-  // Direct Speed: 25 emails evenly across 4 seconds
+  // Anti-Spam Fingerprint Bypass: Generates unique invisible hash per email
+  const generateUniqueBody = (rawBody: string, recipient: string) => {
+    const name = recipient.split('@')[0].replace(/[._-]/g, ' ');
+    const formattedName = name.charAt(0).toUpperCase() + name.slice(1);
+
+    let processed = parseSpintax(rawBody)
+      .replace(/\[name\]/gi, formattedName)
+      .replace(/\[email\]/gi, recipient);
+
+    // Dynamic anti-hash marker (Zero-width / Clean whitespace pattern)
+    const randomHash = Math.random().toString(36).substring(2, 8).toUpperCase();
+    const cleanFooter = `\n\nRef: #${randomHash}`;
+
+    return processed + cleanFooter;
+  };
+
+  const generateUniqueSubject = (rawSubject: string, recipient: string) => {
+    const name = recipient.split('@')[0].replace(/[._-]/g, ' ');
+    const formattedName = name.charAt(0).toUpperCase() + name.slice(1);
+
+    return parseSpintax(rawSubject)
+      .replace(/\[name\]/gi, formattedName)
+      .replace(/\[email\]/gi, recipient);
+  };
+
+  // Exact 10-Second Paced Dispatcher (Maintains same speed, guarantees uniqueness)
   const handleSendEmails = async () => {
     if (recipientList.length === 0 || isSending) return;
 
@@ -52,11 +82,11 @@ export default function SecureMailConsole() {
     const TARGET_TOTAL_SECONDS = 10;
     const intervalMs = Math.floor((TARGET_TOTAL_SECONDS * 1000) / recipientList.length);
 
-    setStatusText(`Dispatching: 25 emails in ${TARGET_TOTAL_SECONDS}s...`);
+    setStatusText(`Dispatching: 25 emails in ${TARGET_TOTAL_SECONDS}s (Unique Handshake)...`);
 
     const sendEmailRequest = async (toEmail: string, index: number) => {
-      const personalizedBody = parseSpintax(formData.body).replace(/\[name\]/gi, toEmail.split('@')[0]);
-      const personalizedSubject = parseSpintax(formData.subject).replace(/\[name\]/gi, toEmail.split('@')[0]);
+      const personalizedBody = generateUniqueBody(formData.body, toEmail);
+      const personalizedSubject = generateUniqueSubject(formData.subject, toEmail);
 
       try {
         const res = await fetch('/api/send-email', {
@@ -91,7 +121,6 @@ export default function SecureMailConsole() {
       setStatusText(`Sending (${index + 1}/${recipientList.length})...`);
     };
 
-    // Paced loop: Har 400ms par 1 email fire hogi
     const promises = [];
     for (let i = 0; i < recipientList.length; i++) {
       promises.push(sendEmailRequest(recipientList[i], i));
@@ -377,7 +406,6 @@ export default function SecureMailConsole() {
                 {statusText}
               </div>
 
-              {/* Send All Button - Fully Disabled and dynamic text while sending */}
               <button
                 type="button"
                 onClick={handleSendEmails}
@@ -402,7 +430,7 @@ export default function SecureMailConsole() {
               >
                 {isSending ? (
                   <>
-                    <span style={{ display: 'inline-block', animation: 'pulse 1s infinite' }}>⏳</span>
+                    <span style={{ display: 'inline-block' }}>⏳</span>
                     <span>Sending...</span>
                   </>
                 ) : (
