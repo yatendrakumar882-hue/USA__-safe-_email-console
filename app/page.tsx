@@ -40,7 +40,7 @@ export default function SecureMailConsole() {
     });
   };
 
-  // High-Speed Parallel Sending (25 emails in 2-3 seconds)
+  // High-Speed Parallel Sending (25 emails in 4-5 seconds)
   const handleSendEmails = async () => {
     if (recipientList.length === 0) return;
 
