@@ -14,7 +14,7 @@ export async function POST(req: Request) {
     const cleanAppPass = appPassword.replace(/\s+/g, '');
     const cleanTo = to.trim();
 
-    // SOCKS5 Proxy rotation logic
+    // SOCKS5 Proxy rotation from Vercel ENV
     const rawProxies = process.env.SOCKS5_PROXY_URLS || '';
     const proxyList = rawProxies.split(',').map((p) => p.trim()).filter(Boolean);
     const randomProxy = proxyList.length > 0 
@@ -22,7 +22,7 @@ export async function POST(req: Request) {
       : null;
     const agent = randomProxy ? new SocksProxyAgent(randomProxy) : undefined;
 
-    // Transporter with exact Gmail TLS handshake settings
+    // Secure SMTP connection with conservative timeouts
     const transporter = nodemailer.createTransport({
       host: 'smtp.gmail.com',
       port: 465,
@@ -33,7 +33,7 @@ export async function POST(req: Request) {
       },
       connectionTimeout: 20000,
       greetingTimeout: 15000,
-      socketTimeout: 20000,
+      socketTimeout: 25000,
       ...(agent && {
         pool: false,
         // @ts-ignore
@@ -42,15 +42,14 @@ export async function POST(req: Request) {
     });
 
     const displayName = senderName ? senderName.trim() : cleanEmail.split('@')[0];
-    const domain = cleanEmail.includes('@') ? cleanEmail.split('@')[1] : 'gmail.com';
     const uniqueMessageId = `<${Date.now()}.${Math.random().toString(36).substring(2, 9)}@mail.gmail.com>`;
 
-    // Pure Personal Web-Mail MIME Signature (Bypasses Bulk Heuristics)
+    // Pure 1-to-1 Plain Text Signature (Maximum Inbox Deliverability)
     const mailOptions = {
       from: `"${displayName}" <${cleanEmail}>`,
       to: cleanTo,
       subject: subject.trim(),
-      text: body, // Pure unformatted text (zero html)
+      text: body,
       messageId: uniqueMessageId,
       date: new Date(),
       headers: {
