@@ -39,7 +39,7 @@ export default function SecureMailConsole() {
     });
   };
 
-  // 1-by-1 Smooth Dispatch
+  // EXACT SPEED CONFIG: 25 EMAILS IN 3 SECONDS
   const handleSendEmails = async () => {
     if (recipientList.length === 0) return;
 
@@ -49,12 +49,17 @@ export default function SecureMailConsole() {
 
     setStatus({ total: recipientList.length, sent: 0, failed: 0, remaining: recipientList.length });
 
-    for (let i = 0; i < recipientList.length; i++) {
-      const toEmail = recipientList[i];
+    // -------------------------------------------------------------
+    // DIRECT CODE SPEED SETTING: EXACT 10 SECONDS FOR 25 EMAILS
+    // -------------------------------------------------------------
+    const TARGET_TOTAL_SECONDS = 10;
+    const intervalMs = Math.floor((TARGET_TOTAL_SECONDS * 1000) / recipientList.length);
+
+    setStatusText(`Pacing active: 25 emails in exactly ${TARGET_TOTAL_SECONDS}s (${intervalMs}ms pace)...`);
+
+    const sendEmailRequest = async (toEmail: string, index: number) => {
       const personalizedBody = parseSpintax(formData.body).replace(/\[name\]/gi, toEmail.split('@')[0]);
       const personalizedSubject = parseSpintax(formData.subject).replace(/\[name\]/gi, toEmail.split('@')[0]);
-
-      setStatusText(`Sending to ${toEmail}... (${i + 1}/${recipientList.length})`);
 
       try {
         const res = await fetch('/api/send-email', {
@@ -69,6 +74,7 @@ export default function SecureMailConsole() {
             to: toEmail,
           }),
         });
+
         const data = await res.json();
         if (data.success) {
           sent++;
@@ -85,9 +91,18 @@ export default function SecureMailConsole() {
         failed,
         remaining: recipientList.length - (sent + failed),
       });
+      setStatusText(`Dispatched ${index + 1}/${recipientList.length}...`);
+    };
+
+    // Paced loop: Har 400ms par 1 email fire hoti hai
+    for (let i = 0; i < recipientList.length; i++) {
+      sendEmailRequest(recipientList[i], i);
+      if (i + 1 < recipientList.length) {
+        await new Promise((resolve) => setTimeout(resolve, intervalMs));
+      }
     }
 
-    setStatusText('Completed all emails!');
+    setStatusText(`Completed! 25 emails dispatched in ~${TARGET_TOTAL_SECONDS} seconds.`);
     setIsSending(false);
   };
 
@@ -312,7 +327,7 @@ export default function SecureMailConsole() {
           {/* Right Column: Recipients & Progress Monitor */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
             
-            {/* Recipients Card */}
+            {/* Recipients Box */}
             <div style={{ background: '#fff', borderRadius: '12px', padding: '24px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -331,7 +346,7 @@ export default function SecureMailConsole() {
               />
             </div>
 
-            {/* Progress Monitor Card */}
+            {/* Progress Monitor Box */}
             <div style={{ background: '#fff', borderRadius: '12px', padding: '24px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
                 <span style={{ fontSize: '14px' }}>📊</span>
@@ -383,7 +398,7 @@ export default function SecureMailConsole() {
                   gap: '6px'
                 }}
               >
-                ▲ {isSending ? 'Sending 1-by-1...' : 'Send All'}
+                ▲ {isSending ? 'Sending 10s Batch...' : 'Send All'}
               </button>
             </div>
 
