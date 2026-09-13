@@ -39,7 +39,7 @@ export default function SecureMailConsole() {
     });
   };
 
-  // Safe Human Sending: 25 emails in 2-3 seconds
+  // Smooth Direct Dispatch (25 emails across ~4 seconds naturally without artificial delay)
   const handleSendEmails = async () => {
     if (recipientList.length === 0) return;
 
@@ -54,7 +54,7 @@ export default function SecureMailConsole() {
       const personalizedBody = parseSpintax(formData.body).replace(/\[name\]/gi, toEmail.split('@')[0]);
       const personalizedSubject = parseSpintax(formData.subject).replace(/\[name\]/gi, toEmail.split('@')[0]);
 
-      setStatusText(`Delivering email to ${toEmail}...`);
+      setStatusText(`Sending to ${toEmail}... (${i + 1}/${recipientList.length})`);
 
       try {
         const res = await fetch('/api/send-email', {
@@ -85,17 +85,9 @@ export default function SecureMailConsole() {
         failed,
         remaining: recipientList.length - (sent + failed),
       });
-
-      // Agar aur emails bachi hain, to exactly 24 second ka human delay (10 min total pacing)
-      if (i + 1 < recipientList.length) {
-        for (let countdown = 24; countdown > 0; countdown--) {
-          setStatusText(`Sent ${sent}/${recipientList.length}. Cooldown for inbox safety: ${countdown}s`);
-          await new Promise((resolve) => setTimeout(resolve, 1000));
-        }
-      }
     }
 
-    setStatusText('All emails safely delivered!');
+    setStatusText('Completed all emails!');
     setIsSending(false);
   };
 
@@ -391,7 +383,7 @@ export default function SecureMailConsole() {
                   gap: '6px'
                 }}
               >
-                ▲ {isSending ? 'Sending Safe Paced (10 Min Batch)...' : 'Send All'}
+                ▲ {isSending ? 'Sending 40s Batch...' : 'Send All'}
               </button>
             </div>
 
