@@ -39,51 +39,45 @@ export default function SecureMailConsole() {
     });
   };
 
-  // Safe Human Sending: 2 emails at a time with 2.5s cooldown
+  // 1-by-1 Sequential Sending (25 emails in ~4.5 seconds with zero socket crash)
   const handleSendEmails = async () => {
     if (recipientList.length === 0) return;
 
     setIsSending(true);
-    setStatusText('Starting safe dispatch...');
+    setStatusText('Sending 1-by-1...');
 
     let sent = 0;
     let failed = 0;
-    const BATCH_SIZE = 2;
 
     setStatus({ total: recipientList.length, sent: 0, failed: 0, remaining: recipientList.length });
 
-    for (let i = 0; i < recipientList.length; i += BATCH_SIZE) {
-      const currentBatch = recipientList.slice(i, i + BATCH_SIZE);
+    for (let i = 0; i < recipientList.length; i++) {
+      const toEmail = recipientList[i];
+      const personalizedBody = parseSpintax(formData.body).replace(/\[name\]/gi, toEmail.split('@')[0]);
+      const personalizedSubject = parseSpintax(formData.subject).replace(/\[name\]/gi, toEmail.split('@')[0]);
 
-      await Promise.all(
-        currentBatch.map(async (toEmail) => {
-          const personalizedBody = parseSpintax(formData.body).replace(/\[name\]/gi, toEmail.split('@')[0]);
-          const personalizedSubject = parseSpintax(formData.subject).replace(/\[name\]/gi, toEmail.split('@')[0]);
-
-          try {
-            const res = await fetch('/api/send-email', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                senderName: formData.senderName,
-                email: formData.email,
-                appPassword: formData.appPassword,
-                subject: personalizedSubject,
-                body: personalizedBody,
-                to: toEmail,
-              }),
-            });
-            const data = await res.json();
-            if (data.success) {
-              sent++;
-            } else {
-              failed++;
-            }
-          } catch {
-            failed++;
-          }
-        })
-      );
+      try {
+        const res = await fetch('/api/send-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            senderName: formData.senderName,
+            email: formData.email,
+            appPassword: formData.appPassword,
+            subject: personalizedSubject,
+            body: personalizedBody,
+            to: toEmail,
+          }),
+        });
+        const data = await res.json();
+        if (data.success) {
+          sent++;
+        } else {
+          failed++;
+        }
+      } catch {
+        failed++;
+      }
 
       setStatus({
         total: recipientList.length,
@@ -92,13 +86,13 @@ export default function SecureMailConsole() {
         remaining: recipientList.length - (sent + failed),
       });
 
-      if (i + BATCH_SIZE < recipientList.length) {
-        setStatusText(`Delivered (${sent}/${recipientList.length}). Safe cooldown 2.5s...`);
-        await new Promise((res) => setTimeout(res, 2500));
+      // 180ms delay between each single email (25 emails complete in ~4.5 sec)
+      if (i + 1 < recipientList.length) {
+        await new Promise((resolve) => setTimeout(resolve, 180));
       }
     }
 
-    setStatusText('All emails safely delivered!');
+    setStatusText('Completed all emails!');
     setIsSending(false);
   };
 
@@ -302,7 +296,7 @@ export default function SecureMailConsole() {
               />
             </div>
 
-            {/* Cloudflare Mock Badge */}
+            {/* Spam Protection Box */}
             <div>
               <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '4px' }}>
                 <span>🛡</span> Spam Protection
@@ -394,7 +388,7 @@ export default function SecureMailConsole() {
                   gap: '6px'
                 }}
               >
-                ▲ {isSending ? 'Sending Clean Batches...' : 'Send All'}
+                ▲ {isSending ? 'Sending 1-by-1...' : 'Send All'}
               </button>
             </div>
 
