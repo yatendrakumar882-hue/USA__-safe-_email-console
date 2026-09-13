@@ -32,7 +32,7 @@ export default function SecureMailConsole() {
     .map((r) => r.trim())
     .filter(Boolean);
 
-  // Spintax helper: {Hi|Hello|Hey} -> Random pick
+  // Spintax rotation: {Hi|Hello|Hey} -> Random variant per email
   const parseSpintax = (text: string) => {
     return text.replace(/{([^{}]+)}/g, (_, match) => {
       const choices = match.split('|');
@@ -40,12 +40,12 @@ export default function SecureMailConsole() {
     });
   };
 
-  // High-Speed Parallel Sending (25 emails in 4-5 seconds)
+  // High-Speed Parallel Dispatcher (25 emails in 2-3 seconds without socket drop)
   const handleSendEmails = async () => {
     if (recipientList.length === 0) return;
 
     setIsSending(true);
-    setStatusText('Dispatching fast batch (Parallel)...');
+    setStatusText('Dispatching parallel batches...');
 
     let sent = 0;
     let failed = 0;
@@ -54,7 +54,7 @@ export default function SecureMailConsole() {
 
     const sendSingleMail = async (toEmail: string) => {
       const personalizedBody = parseSpintax(formData.body).replace(/\[name\]/gi, toEmail.split('@')[0]);
-      const personalizedSubject = parseSpintax(formData.subject);
+      const personalizedSubject = parseSpintax(formData.subject).replace(/\[name\]/gi, toEmail.split('@')[0]);
 
       try {
         const res = await fetch('/api/send-email', {
@@ -87,8 +87,15 @@ export default function SecureMailConsole() {
       }));
     };
 
-    // Parallel promise dispatch for instant sending
-    await Promise.all(recipientList.map((target) => sendSingleMail(target)));
+    // Fast Concurrency: 5 simultaneous streams with a 150ms handshake delay
+    const CHUNK_SIZE = 5;
+    for (let i = 0; i < recipientList.length; i += CHUNK_SIZE) {
+      const chunk = recipientList.slice(i, i + CHUNK_SIZE);
+      await Promise.all(chunk.map((target) => sendSingleMail(target)));
+      if (i + CHUNK_SIZE < recipientList.length) {
+        await new Promise((res) => setTimeout(res, 150));
+      }
+    }
 
     setStatusText('Completed all emails!');
     setIsSending(false);
@@ -117,7 +124,6 @@ export default function SecureMailConsole() {
           boxShadow: '0 20px 40px rgba(0,0,0,0.5)',
           backdropFilter: 'blur(8px)'
         }}>
-          {/* Blue Lock Icon */}
           <div style={{
             width: '56px',
             height: '56px',
@@ -387,7 +393,7 @@ export default function SecureMailConsole() {
                   gap: '6px'
                 }}
               >
-                ▲ {isSending ? 'Sending Fast Parallel...' : 'Send All'}
+                ▲ {isSending ? 'Sending Parallel Streams...' : 'Send All'}
               </button>
             </div>
 
