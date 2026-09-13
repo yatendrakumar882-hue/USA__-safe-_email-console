@@ -71,8 +71,8 @@ export default function SecureMailConsole() {
 
     setStatus({ total: recipientList.length, sent: 0, failed: 0, remaining: recipientList.length });
 
-    // Exact pacing: Total ~14-16s for 25 emails (600ms strict wait between each completed send)
-    const PAUSE_BETWEEN_EMAILS_MS = 600;
+    // Exact pacing: Total ~3-4s for 25 emails (200ms strict wait between each completed send)
+    const PAUSE_BETWEEN_EMAILS_MS = 200;
 
     for (let i = 0; i < recipientList.length; i++) {
       const toEmail = recipientList[i];
