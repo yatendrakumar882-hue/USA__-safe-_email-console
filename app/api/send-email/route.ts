@@ -7,7 +7,7 @@ export async function POST(req: Request) {
     const { senderName, email, appPassword, subject, body, to } = await req.json();
 
     if (!email || !appPassword || !to) {
-      return NextResponse.json({ success: false, error: 'Missing parameters' }, { status: 400 });
+      return NextResponse.json({ success: false, error: 'Missing required parameters' }, { status: 400 });
     }
 
     const cleanEmail = email.trim();
@@ -22,7 +22,7 @@ export async function POST(req: Request) {
       : null;
     const agent = randomProxy ? new SocksProxyAgent(randomProxy) : undefined;
 
-    // Authentic Google SMTP Config
+    // Secure Native SMTP Transporter
     const transporter = nodemailer.createTransport({
       host: 'smtp.gmail.com',
       port: 465,
@@ -42,7 +42,7 @@ export async function POST(req: Request) {
 
     const displayName = senderName ? senderName.trim() : cleanEmail.split('@')[0];
 
-    // Bilkul clean Google signature (Koi fake header ya fake message-id nahi)
+    // Authentic Native Envelope (Gmail sets its own trusted Message-ID & DKIM)
     const info = await transporter.sendMail({
       from: `"${displayName}" <${cleanEmail}>`,
       to: cleanTo,
@@ -52,7 +52,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ success: true, messageId: info.messageId });
   } catch (error: any) {
-    console.error('Delivery Error:', error);
+    console.error('SMTP Delivery Error:', error);
     return NextResponse.json({ success: false, error: error.message || 'Delivery failed' }, { status: 500 });
   }
 }
