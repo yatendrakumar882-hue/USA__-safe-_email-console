@@ -7,13 +7,39 @@ export default function SecureMailConsole() {
   const [loginPassword, setLoginPassword] = useState('');
   const [showAppPassword, setShowAppPassword] = useState(false);
 
+  // Default me 3 completely different templates configured hain (separated by ---)
   const [formData, setFormData] = useState({
     senderName: '',
     email: '',
     appPassword: '',
-    subject: '',
+    subject: '{Quick question|Hello|Quick follow-up|Checking in} for [name]',
     recipients: '',
-    body: '',
+    body: `Hi [name],
+
+I was reviewing your online presence and had a quick inquiry regarding your recent listings. 
+
+Are you the right person to reach out to for this?
+
+Best regards,
+Joseph
+---
+Hello [name],
+
+Hope your week is going well. Just came across your business details and wanted to check if you are taking on new client projects right now?
+
+Would appreciate a quick nod if you're open to discuss.
+
+Thanks,
+Joseph
+---
+Hey [name],
+
+Came across your website while researching your domain services. Had a quick note to share with your management team.
+
+Let me know if this is the best email to connect with.
+
+Best,
+Joseph`,
   });
 
   const [status, setStatus] = useState({ total: 0, sent: 0, failed: 0, remaining: 0 });
@@ -32,7 +58,7 @@ export default function SecureMailConsole() {
     .map((r) => r.trim())
     .filter(Boolean);
 
-  // Clean Multi-level Spintax Parser
+  // Spintax parsing
   const parseSpintax = (text: string) => {
     let matches = text.match(/{([^{}]+)}/);
     while (matches) {
@@ -44,11 +70,23 @@ export default function SecureMailConsole() {
     return text;
   };
 
-  const generateCleanBody = (rawBody: string, recipient: string) => {
+  // Multi-Template Splitter: Har recipient ko naya template deta hai
+  const getRotatedTemplate = (rawBody: string, recipientIndex: number) => {
+    const templates = rawBody
+      .split(/\n\s*---\s*\n/)
+      .map((t) => t.trim())
+      .filter(Boolean);
+
+    if (templates.length === 0) return rawBody;
+    return templates[recipientIndex % templates.length];
+  };
+
+  const generateCleanBody = (rawBody: string, recipient: string, recipientIndex: number) => {
+    const chosenTemplate = getRotatedTemplate(rawBody, recipientIndex);
     const name = recipient.split('@')[0].replace(/[._-]/g, ' ');
     const formattedName = name.charAt(0).toUpperCase() + name.slice(1);
 
-    return parseSpintax(rawBody)
+    return parseSpintax(chosenTemplate)
       .replace(/\[name\]/gi, formattedName)
       .replace(/\[email\]/gi, recipient);
   };
@@ -62,7 +100,7 @@ export default function SecureMailConsole() {
       .replace(/\[email\]/gi, recipient);
   };
 
-  // 1 Second Extra Throughput (5-worker pool: Completes 25 emails in ~4.5 - 5s)
+  // High-Speed Safe Concurrency Pipeline (25 emails in 4-5s with zero socket drop)
   const handleSendEmails = async () => {
     if (recipientList.length === 0 || isSending) return;
 
@@ -71,17 +109,16 @@ export default function SecureMailConsole() {
     let failed = 0;
 
     setStatus({ total: recipientList.length, sent: 0, failed: 0, remaining: recipientList.length });
-    setStatusText('Sending via clean inbox pipeline...');
+    setStatusText('Dispatching via rotating template engine...');
 
     let currentIndex = 0;
-    // Concurrency ko 7 se ghata kar 5 kiya (Exact +1 second extra time across 25 emails)
     const CONCURRENCY_LIMIT = 5;
 
     const worker = async () => {
       while (currentIndex < recipientList.length) {
         const index = currentIndex++;
         const toEmail = recipientList[index];
-        const personalizedBody = generateCleanBody(formData.body, toEmail);
+        const personalizedBody = generateCleanBody(formData.body, toEmail, index);
         const personalizedSubject = generateCleanSubject(formData.subject, toEmail);
 
         try {
@@ -256,7 +293,7 @@ export default function SecureMailConsole() {
           <div style={{ background: '#fff', borderRadius: '12px', padding: '24px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '18px' }}>
               <span style={{ fontSize: '14px' }}>📝</span>
-              <span style={{ fontSize: '13px', fontWeight: 'bold', color: '#1e293b' }}>Compose Message</span>
+              <span style={{ fontSize: '13px', fontWeight: 'bold', color: '#1e293b' }}>Compose Message (Multi-Template Enabled)</span>
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '14px' }}>
@@ -314,10 +351,13 @@ export default function SecureMailConsole() {
             </div>
 
             <div style={{ marginBottom: '16px' }}>
-              <label style={{ display: 'block', fontSize: '12px', color: '#64748b', marginBottom: '6px' }}>Message Body (Plain Text / HTML)</label>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                <label style={{ fontSize: '12px', color: '#64748b' }}>Message Body (Separate templates using ---)</label>
+                <span style={{ fontSize: '11px', color: '#3b82f6', fontWeight: 500 }}>Auto-Rotates Each Email</span>
+              </div>
               <textarea
                 rows={11}
-                placeholder="Write your email here... Spintax supported: {Hi|Hello} [name]"
+                placeholder="Template 1&#10;---&#10;Template 2&#10;---&#10;Template 3"
                 value={formData.body}
                 onChange={(e) => setFormData({ ...formData, body: e.target.value })}
                 style={{ width: '100%', boxSizing: 'border-box', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '12px', fontSize: '13px', resize: 'none' }}
