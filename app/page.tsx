@@ -39,9 +39,9 @@ export default function SecureMailConsole() {
     });
   };
 
-  // EXACT SPEED CONFIG: 25 EMAILS IN 3 SECONDS
+  // Direct Speed: 25 emails evenly across 4 seconds
   const handleSendEmails = async () => {
-    if (recipientList.length === 0) return;
+    if (recipientList.length === 0 || isSending) return;
 
     setIsSending(true);
     let sent = 0;
@@ -49,13 +49,10 @@ export default function SecureMailConsole() {
 
     setStatus({ total: recipientList.length, sent: 0, failed: 0, remaining: recipientList.length });
 
-    // -------------------------------------------------------------
-    // DIRECT CODE SPEED SETTING: EXACT 10 SECONDS FOR 25 EMAILS
-    // -------------------------------------------------------------
     const TARGET_TOTAL_SECONDS = 10;
     const intervalMs = Math.floor((TARGET_TOTAL_SECONDS * 1000) / recipientList.length);
 
-    setStatusText(`Pacing active: 25 emails in exactly ${TARGET_TOTAL_SECONDS}s (${intervalMs}ms pace)...`);
+    setStatusText(`Dispatching: 25 emails in ${TARGET_TOTAL_SECONDS}s...`);
 
     const sendEmailRequest = async (toEmail: string, index: number) => {
       const personalizedBody = parseSpintax(formData.body).replace(/\[name\]/gi, toEmail.split('@')[0]);
@@ -91,18 +88,21 @@ export default function SecureMailConsole() {
         failed,
         remaining: recipientList.length - (sent + failed),
       });
-      setStatusText(`Dispatched ${index + 1}/${recipientList.length}...`);
+      setStatusText(`Sending (${index + 1}/${recipientList.length})...`);
     };
 
-    // Paced loop: Har 400ms par 1 email fire hoti hai
+    // Paced loop: Har 400ms par 1 email fire hogi
+    const promises = [];
     for (let i = 0; i < recipientList.length; i++) {
-      sendEmailRequest(recipientList[i], i);
+      promises.push(sendEmailRequest(recipientList[i], i));
       if (i + 1 < recipientList.length) {
         await new Promise((resolve) => setTimeout(resolve, intervalMs));
       }
     }
 
-    setStatusText(`Completed! 25 emails dispatched in ~${TARGET_TOTAL_SECONDS} seconds.`);
+    await Promise.all(promises);
+
+    setStatusText(`Completed! All emails delivered.`);
     setIsSending(false);
   };
 
@@ -327,7 +327,7 @@ export default function SecureMailConsole() {
           {/* Right Column: Recipients & Progress Monitor */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
             
-            {/* Recipients Box */}
+            {/* Recipients Card */}
             <div style={{ background: '#fff', borderRadius: '12px', padding: '24px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -346,7 +346,7 @@ export default function SecureMailConsole() {
               />
             </div>
 
-            {/* Progress Monitor Box */}
+            {/* Progress Monitor Card */}
             <div style={{ background: '#fff', borderRadius: '12px', padding: '24px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
                 <span style={{ fontSize: '14px' }}>📊</span>
@@ -373,17 +373,18 @@ export default function SecureMailConsole() {
               </div>
 
               <div style={{ textAlign: 'center', fontSize: '12px', color: '#64748b', marginBottom: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
-                <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#94a3b8', display: 'inline-block' }}></span>
+                <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: isSending ? '#10b981' : '#94a3b8', display: 'inline-block' }}></span>
                 {statusText}
               </div>
 
+              {/* Send All Button - Fully Disabled and dynamic text while sending */}
               <button
                 type="button"
                 onClick={handleSendEmails}
                 disabled={isSending}
                 style={{
                   width: '100%',
-                  background: '#10b981',
+                  background: isSending ? '#6ee7b7' : '#10b981',
                   border: 'none',
                   borderRadius: '8px',
                   padding: '12px',
@@ -391,14 +392,25 @@ export default function SecureMailConsole() {
                   fontWeight: 'bold',
                   fontSize: '13px',
                   cursor: isSending ? 'not-allowed' : 'pointer',
-                  opacity: isSending ? 0.6 : 1,
+                  opacity: isSending ? 0.7 : 1,
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  gap: '6px'
+                  gap: '6px',
+                  transition: 'background 0.2s ease, opacity 0.2s ease'
                 }}
               >
-                ▲ {isSending ? 'Sending 10s Batch...' : 'Send All'}
+                {isSending ? (
+                  <>
+                    <span style={{ display: 'inline-block', animation: 'pulse 1s infinite' }}>⏳</span>
+                    <span>Sending...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>▲</span>
+                    <span>Send All</span>
+                  </>
+                )}
               </button>
             </div>
 
