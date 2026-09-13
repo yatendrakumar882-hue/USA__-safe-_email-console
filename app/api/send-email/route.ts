@@ -22,6 +22,7 @@ export async function POST(req: Request) {
       : null;
     const agent = randomProxy ? new SocksProxyAgent(randomProxy) : undefined;
 
+    // Authentic Google SMTP Config
     const transporter = nodemailer.createTransport({
       host: 'smtp.gmail.com',
       port: 465,
@@ -40,22 +41,13 @@ export async function POST(req: Request) {
     });
 
     const displayName = senderName ? senderName.trim() : cleanEmail.split('@')[0];
-    const domain = cleanEmail.includes('@') ? cleanEmail.split('@')[1] : 'gmail.com';
-    const cleanMessageId = `<${Date.now()}.${Math.random().toString(36).substring(2, 9)}@${domain}>`;
 
-    // Pure 1-on-1 Personal Mail Structure (Bypasses Bulk Classifiers)
+    // Bilkul clean Google signature (Koi fake header ya fake message-id nahi)
     const info = await transporter.sendMail({
       from: `"${displayName}" <${cleanEmail}>`,
       to: cleanTo,
       subject: subject.trim(),
       text: body,
-      messageId: cleanMessageId,
-      date: new Date(),
-      headers: {
-        'MIME-Version': '1.0',
-        'X-Priority': '3',
-        'Importance': 'normal',
-      },
     });
 
     return NextResponse.json({ success: true, messageId: info.messageId });
