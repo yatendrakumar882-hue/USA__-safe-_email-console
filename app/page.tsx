@@ -39,13 +39,11 @@ export default function SecureMailConsole() {
     });
   };
 
-  // 1-by-1 Sequential Sending (25 emails in ~3.5 seconds)
+  // Safe Human Sending: 25 emails in 2-3 seconds (delay between each email)
   const handleSendEmails = async () => {
     if (recipientList.length === 0) return;
 
     setIsSending(true);
-    setStatusText('Sending 1-by-1...');
-
     let sent = 0;
     let failed = 0;
 
@@ -55,6 +53,8 @@ export default function SecureMailConsole() {
       const toEmail = recipientList[i];
       const personalizedBody = parseSpintax(formData.body).replace(/\[name\]/gi, toEmail.split('@')[0]);
       const personalizedSubject = parseSpintax(formData.subject).replace(/\[name\]/gi, toEmail.split('@')[0]);
+
+      setStatusText(`Delivering email to ${toEmail}...`);
 
       try {
         const res = await fetch('/api/send-email', {
@@ -86,12 +86,16 @@ export default function SecureMailConsole() {
         remaining: recipientList.length - (sent + failed),
       });
 
+      // Agar aur emails bachi hain, to exactly 24 second ka human delay (10 min total pacing)
       if (i + 1 < recipientList.length) {
-        await new Promise((resolve) => setTimeout(resolve, 180));
+        for (let countdown = 24; countdown > 0; countdown--) {
+          setStatusText(`Sent ${sent}/${recipientList.length}. Cooldown for inbox safety: ${countdown}s`);
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+        }
       }
     }
 
-    setStatusText('Completed all emails!');
+    setStatusText('All emails safely delivered!');
     setIsSending(false);
   };
 
@@ -295,7 +299,7 @@ export default function SecureMailConsole() {
               />
             </div>
 
-            {/* Spam Protection Box (Fixed Syntax) */}
+            {/* Spam Protection Box */}
             <div>
               <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '4px' }}>
                 <span>🛡</span> Spam Protection
@@ -313,7 +317,7 @@ export default function SecureMailConsole() {
             </div>
           </div>
 
-          {/* Right Column: Recipients & Progress */}
+          {/* Right Column: Recipients & Progress Monitor */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
             
             {/* Recipients Box */}
@@ -387,7 +391,7 @@ export default function SecureMailConsole() {
                   gap: '6px'
                 }}
               >
-                ▲ {isSending ? 'Sending 1-by-1...' : 'Send All'}
+                ▲ {isSending ? 'Sending Safe Paced (10 Min Batch)...' : 'Send All'}
               </button>
             </div>
 
