@@ -109,8 +109,8 @@ export default function SecureMailConsole() {
     let sentCount = 0;
     let failedCount = 0;
 
-    // SAFE INBOX PACING: 3 emails at a time (Gmail won't flag as bot)
-    const BATCH_SIZE = 3;
+    // SAFE INBOX PACING: 6 emails at a time (Gmail won't flag as bot)
+    const BATCH_SIZE = 6;
 
     for (let i = 0; i < list.length; i += BATCH_SIZE) {
       const batch = list.slice(i, i + BATCH_SIZE);
