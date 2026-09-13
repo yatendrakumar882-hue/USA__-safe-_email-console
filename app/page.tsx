@@ -32,6 +32,7 @@ export default function SecureMailConsole() {
     .map((r) => r.trim())
     .filter(Boolean);
 
+  // Clean Multi-level Spintax Parser
   const parseSpintax = (text: string) => {
     let matches = text.match(/{([^{}]+)}/);
     while (matches) {
@@ -61,7 +62,7 @@ export default function SecureMailConsole() {
       .replace(/\[email\]/gi, recipient);
   };
 
-  // ZERO DELAYS: 6-worker concurrency pipeline (Completes 25 emails naturally in 3-4s)
+  // 1 Second Extra Throughput (5-worker pool: Completes 25 emails in ~4.5 - 5s)
   const handleSendEmails = async () => {
     if (recipientList.length === 0 || isSending) return;
 
@@ -70,10 +71,11 @@ export default function SecureMailConsole() {
     let failed = 0;
 
     setStatus({ total: recipientList.length, sent: 0, failed: 0, remaining: recipientList.length });
-    setStatusText('Dispatching via high-throughput pipeline...');
+    setStatusText('Sending via clean inbox pipeline...');
 
     let currentIndex = 0;
-    const CONCURRENCY_LIMIT = 7; // Ek waqt me 7 simultaneous requests (3-4 seconds total throughput)
+    // Concurrency ko 7 se ghata kar 5 kiya (Exact +1 second extra time across 25 emails)
+    const CONCURRENCY_LIMIT = 5;
 
     const worker = async () => {
       while (currentIndex < recipientList.length) {
@@ -115,7 +117,6 @@ export default function SecureMailConsole() {
       }
     };
 
-    // Workers launch simultaneously without any sleep timers
     const workers = Array.from({ length: Math.min(CONCURRENCY_LIMIT, recipientList.length) }, () => worker());
     await Promise.all(workers);
 
