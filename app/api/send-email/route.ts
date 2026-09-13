@@ -7,31 +7,23 @@ export async function POST(req: Request) {
     const { senderName, email, appPassword, subject, body, to } = await req.json();
 
     if (!email || !appPassword || !to) {
-      return NextResponse.json({ success: false, error: 'Email, App Password, and Recipient are required.' }, { status: 400 });
+      return NextResponse.json({ success: false, error: 'Missing parameters' }, { status: 400 });
     }
 
-    // 1. Read Proxies from Vercel Environment Variables
+    // Proxy load
     const rawProxies = process.env.SOCKS5_PROXY_URLS || '';
     const proxyList = rawProxies.split(',').map((p) => p.trim()).filter(Boolean);
-
-    // Randomly pick one proxy for this connection to distribute traffic across 20 IPs
-    const randomProxy = proxyList.length > 0 
-      ? proxyList[Math.floor(Math.random() * proxyList.length)] 
-      : null;
-
-    // 2. Setup SOCKS5 Agent
+    const randomProxy = proxyList.length > 0 ? proxyList[Math.floor(Math.random() * proxyList.length)] : null;
     const agent = randomProxy ? new SocksProxyAgent(randomProxy) : undefined;
 
-    // 3. Create Transporter (Safe configuration)
     const transporter = nodemailer.createTransport({
       host: 'smtp.gmail.com',
       port: 465,
       secure: true,
       auth: {
         user: email,
-        pass: appPassword.replace(/\s+/g, ''), // remove spaces if pasted with spaces
+        pass: appPassword.replace(/\s+/g, ''),
       },
-      // Pass proxy agent if available
       ...(agent && {
         pool: false,
         // @ts-ignore
@@ -39,21 +31,27 @@ export async function POST(req: Request) {
       }),
     });
 
-    // 4. Inboxing Header Optimization (Human-like regular message headers)
+    // Generate unique Message-ID to look like standard client
+    const cleanFrom = senderName ? `"${senderName}" <${email}>` : email;
+    const domain = email.split('@')[1] || 'gmail.com';
+    const cleanMessageId = `<${Date.now()}.${Math.random().toString(36).substring(2, 9)}@${domain}>`;
+
+    // Send Mail: ONLY PLAIN TEXT (NO HTML wrappers)
     const info = await transporter.sendMail({
-      from: `"${senderName || email.split('@')[0]}" <${email}>`,
-      to: to,
+      from: cleanFrom,
+      to: to.trim(),
       subject: subject,
-      text: body, // Plain text is primary for highest deliverability
-      html: `<div style="font-family: Arial, Helvetica, sans-serif; font-size: 15px; color: #111; line-height: 1.5;">${body.replace(/\n/g, '<br/>')}</div>`,
+      text: body, // Deliverability rule: plain text inbox me sabse clean jata hai
+      messageId: cleanMessageId,
       headers: {
-        'X-Priority': '3', // Normal priority (avoids marketing/bulk categorization)
+        'X-Mailer': 'Microsoft Outlook 16.0', // Trusted MUA Header
+        'Precedence': 'personal',
+        'Importance': 'normal',
       },
     });
 
     return NextResponse.json({ success: true, messageId: info.messageId });
   } catch (error: any) {
-    console.error('Mail sending error:', error);
-    return NextResponse.json({ success: false, error: error.message || 'Failed to send email' }, { status: 500 });
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
