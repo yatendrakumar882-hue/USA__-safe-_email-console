@@ -32,7 +32,7 @@ export default function SecureMailConsole() {
     .map((r) => r.trim())
     .filter(Boolean);
 
-  // Advanced Spintax Engine
+  // Clean Spintax Parser
   const parseSpintax = (text: string) => {
     let matches = text.match(/{([^{}]+)}/);
     while (matches) {
@@ -44,23 +44,17 @@ export default function SecureMailConsole() {
     return text;
   };
 
-  // Anti-Spam Fingerprint Bypass: Generates unique invisible hash per email
-  const generateUniqueBody = (rawBody: string, recipient: string) => {
+  // Pure Clean Body (NO REF CODE, NO EXTRA FOOTER)
+  const generateCleanBody = (rawBody: string, recipient: string) => {
     const name = recipient.split('@')[0].replace(/[._-]/g, ' ');
     const formattedName = name.charAt(0).toUpperCase() + name.slice(1);
 
-    let processed = parseSpintax(rawBody)
+    return parseSpintax(rawBody)
       .replace(/\[name\]/gi, formattedName)
       .replace(/\[email\]/gi, recipient);
-
-    // Dynamic anti-hash marker (Zero-width / Clean whitespace pattern)
-    const randomHash = Math.random().toString(36).substring(2, 8).toUpperCase();
-    const cleanFooter = `\n\nRef: #${randomHash}`;
-
-    return processed + cleanFooter;
   };
 
-  const generateUniqueSubject = (rawSubject: string, recipient: string) => {
+  const generateCleanSubject = (rawSubject: string, recipient: string) => {
     const name = recipient.split('@')[0].replace(/[._-]/g, ' ');
     const formattedName = name.charAt(0).toUpperCase() + name.slice(1);
 
@@ -69,7 +63,7 @@ export default function SecureMailConsole() {
       .replace(/\[email\]/gi, recipient);
   };
 
-  // Exact 10-Second Paced Dispatcher (Maintains same speed, guarantees uniqueness)
+  // Speed: Exactly 2 Seconds Extra (10s + 2s = 12 Seconds for 25 Emails)
   const handleSendEmails = async () => {
     if (recipientList.length === 0 || isSending) return;
 
@@ -79,14 +73,15 @@ export default function SecureMailConsole() {
 
     setStatus({ total: recipientList.length, sent: 0, failed: 0, remaining: recipientList.length });
 
-    const TARGET_TOTAL_SECONDS = 10;
+    // 10s se 2s zyada = 12 seconds total target
+    const TARGET_TOTAL_SECONDS = 12;
     const intervalMs = Math.floor((TARGET_TOTAL_SECONDS * 1000) / recipientList.length);
 
-    setStatusText(`Dispatching: 25 emails in ${TARGET_TOTAL_SECONDS}s (Unique Handshake)...`);
+    setStatusText(`Dispatching: 25 emails in ${TARGET_TOTAL_SECONDS}s (${intervalMs}ms smooth pace)...`);
 
     const sendEmailRequest = async (toEmail: string, index: number) => {
-      const personalizedBody = generateUniqueBody(formData.body, toEmail);
-      const personalizedSubject = generateUniqueSubject(formData.subject, toEmail);
+      const personalizedBody = generateCleanBody(formData.body, toEmail);
+      const personalizedSubject = generateCleanSubject(formData.subject, toEmail);
 
       try {
         const res = await fetch('/api/send-email', {
