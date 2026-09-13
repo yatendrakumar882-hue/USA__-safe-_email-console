@@ -32,7 +32,6 @@ export default function SecureMailConsole() {
     .map((r) => r.trim())
     .filter(Boolean);
 
-  // Spintax rotation: {Hi|Hello|Hey} -> Random variant per email
   const parseSpintax = (text: string) => {
     return text.replace(/{([^{}]+)}/g, (_, match) => {
       const choices = match.split('|');
@@ -40,64 +39,66 @@ export default function SecureMailConsole() {
     });
   };
 
-  // High-Speed Parallel Dispatcher (25 emails in 3-4 seconds without socket drop)
+  // Safe Human Sending: 2 emails at a time with 2.5s cooldown
   const handleSendEmails = async () => {
     if (recipientList.length === 0) return;
 
     setIsSending(true);
-    setStatusText('Dispatching parallel batches...');
+    setStatusText('Starting safe dispatch...');
 
     let sent = 0;
     let failed = 0;
+    const BATCH_SIZE = 2;
 
     setStatus({ total: recipientList.length, sent: 0, failed: 0, remaining: recipientList.length });
 
-    const sendSingleMail = async (toEmail: string) => {
-      const personalizedBody = parseSpintax(formData.body).replace(/\[name\]/gi, toEmail.split('@')[0]);
-      const personalizedSubject = parseSpintax(formData.subject).replace(/\[name\]/gi, toEmail.split('@')[0]);
+    for (let i = 0; i < recipientList.length; i += BATCH_SIZE) {
+      const currentBatch = recipientList.slice(i, i + BATCH_SIZE);
 
-      try {
-        const res = await fetch('/api/send-email', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            senderName: formData.senderName,
-            email: formData.email,
-            appPassword: formData.appPassword,
-            subject: personalizedSubject,
-            body: personalizedBody,
-            to: toEmail,
-          }),
-        });
-        const data = await res.json();
-        if (data.success) {
-          sent++;
-        } else {
-          failed++;
-        }
-      } catch {
-        failed++;
-      }
+      await Promise.all(
+        currentBatch.map(async (toEmail) => {
+          const personalizedBody = parseSpintax(formData.body).replace(/\[name\]/gi, toEmail.split('@')[0]);
+          const personalizedSubject = parseSpintax(formData.subject).replace(/\[name\]/gi, toEmail.split('@')[0]);
 
-      setStatus((prev) => ({
-        ...prev,
+          try {
+            const res = await fetch('/api/send-email', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                senderName: formData.senderName,
+                email: formData.email,
+                appPassword: formData.appPassword,
+                subject: personalizedSubject,
+                body: personalizedBody,
+                to: toEmail,
+              }),
+            });
+            const data = await res.json();
+            if (data.success) {
+              sent++;
+            } else {
+              failed++;
+            }
+          } catch {
+            failed++;
+          }
+        })
+      );
+
+      setStatus({
+        total: recipientList.length,
         sent,
         failed,
-        remaining: prev.total - (sent + failed),
-      }));
-    };
+        remaining: recipientList.length - (sent + failed),
+      });
 
-    // Fast Concurrency: 5 simultaneous streams with a 150ms handshake delay
-    const CHUNK_SIZE = 5;
-    for (let i = 0; i < recipientList.length; i += CHUNK_SIZE) {
-      const chunk = recipientList.slice(i, i + CHUNK_SIZE);
-      await Promise.all(chunk.map((target) => sendSingleMail(target)));
-      if (i + CHUNK_SIZE < recipientList.length) {
-        await new Promise((res) => setTimeout(res, 150));
+      if (i + BATCH_SIZE < recipientList.length) {
+        setStatusText(`Delivered (${sent}/${recipientList.length}). Safe cooldown 2.5s...`);
+        await new Promise((res) => setTimeout(res, 2500));
       }
     }
 
-    setStatusText('Completed all emails!');
+    setStatusText('All emails safely delivered!');
     setIsSending(false);
   };
 
@@ -191,7 +192,7 @@ export default function SecureMailConsole() {
     );
   }
 
-  // SCREENSHOT 2: SECURE MAIL CONSOLE INTERFACE
+  // SCREENSHOT 2: CONSOLE MAIN SCREEN
   return (
     <div style={{
       minHeight: '100vh',
@@ -202,7 +203,7 @@ export default function SecureMailConsole() {
     }}>
       <div style={{ maxWidth: '1100px', margin: '0 auto' }}>
         
-        {/* Top Header */}
+        {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <div style={{ color: '#2563eb', display: 'flex' }}>
@@ -309,7 +310,7 @@ export default function SecureMailConsole() {
               <div style={{ width: '210px', background: '#fafafa', border: '1px solid #e2e8f0', borderRadius: '4px', padding: '8px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <div style={{ width: '16px', height: '16px', borderRadius: '50%', background: '#10b981', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px' }}>✓</div>
-                  <span style={{ fontSize: '12px', fontWeight: 500, color: '#1e293b' }}>Success!</span>
+                  <span style={{ fontSize: '12px', fontWeight 500, color: '#1e293b' }}>Success!</span>
                 </div>
                 <div style={{ textAlign: 'right', fontSize: '8px', color: '#94a3b8' }}>
                   <span style={{ fontWeight: 'bold', color: '#ea580c', display: 'block' }}>CLOUDFLARE</span>
@@ -393,7 +394,7 @@ export default function SecureMailConsole() {
                   gap: '6px'
                 }}
               >
-                ▲ {isSending ? 'Sending Parallel Streams...' : 'Send All'}
+                ▲ {isSending ? 'Sending Clean Batches...' : 'Send All'}
               </button>
             </div>
 
