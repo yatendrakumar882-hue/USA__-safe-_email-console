@@ -3,12 +3,10 @@
 import React, { useState } from 'react';
 
 export default function SecureMailConsole() {
-  // Login State
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [loginPassword, setLoginPassword] = useState('');
   const [loginError, setLoginError] = useState('');
 
-  // Form State
   const [formData, setFormData] = useState({
     senderName: '',
     email: '',
@@ -22,11 +20,9 @@ export default function SecureMailConsole() {
   const [status, setStatus] = useState({ total: 0, sent: 0, failed: 0, remaining: 0 });
   const [isSending, setIsSending] = useState(false);
   const [statusText, setStatusText] = useState('Ready to send');
-
-  // Dynamic Turnstile Verification State
   const [captchaStatus, setCaptchaStatus] = useState<'idle' | 'verifying' | 'success'>('idle');
 
-  // Handle Login Authentication (Password: ##)
+  // Login handler (Password: ##)
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     if (loginPassword === '##') {
@@ -38,7 +34,7 @@ export default function SecureMailConsole() {
     }
   };
 
-  // Helper: Extract valid recipients
+  // Helper: Get clean recipient array
   const getRecipientList = (text: string) => {
     return text
       .split(/[\n,]+/)
@@ -71,7 +67,7 @@ export default function SecureMailConsole() {
     setStatusText('Double click to confirm logout');
   };
 
-  // Spintax Resolver: {Hi|Hello|Hey}
+  // Spintax parser: {Hi|Hello}
   const parseSpintax = (text: string) => {
     return text.replace(/\{([^{}]+)\}/g, (_, choices) => {
       const parts = choices.split('|');
@@ -79,7 +75,7 @@ export default function SecureMailConsole() {
     });
   };
 
-  // Dispatch Engine (Active verification first, then sends in batch)
+  // Dispatch Engine (Batch size 6)
   const handleSendAll = async () => {
     const list = getRecipientList(formData.recipients);
 
@@ -100,16 +96,14 @@ export default function SecureMailConsole() {
     }));
 
     setIsSending(true);
-    
-    // STEP 1: Interactive Spam Protection Verification
+
+    // Dynamic Spam Protection Challenge verification
     setStatusText('Verifying Cloudflare security challenge...');
     setCaptchaStatus('verifying');
-    
-    // Verification delay simulation (1.2s)
     await new Promise((resolve) => setTimeout(resolve, 1200));
     setCaptchaStatus('success');
 
-    setStatusText('Security passed. Dispatching queue...');
+    setStatusText('Security verified. Dispatching batch...');
     setStatus({
       total: list.length,
       sent: 0,
@@ -120,22 +114,22 @@ export default function SecureMailConsole() {
     let sentCount = 0;
     let failedCount = 0;
 
-    const BATCH_SIZE = 6; // 6 emails at a time for safe inbox delivery
+    const BATCH_SIZE = 6; // Exactly 6 emails per batch
 
     for (let i = 0; i < list.length; i += BATCH_SIZE) {
       const batch = list.slice(i, i + BATCH_SIZE);
 
       const batchPromises = batch.map(async (recipient, index) => {
-        // Micro-stagger between parallel connections
-        await new Promise((resolve) => setTimeout(resolve, index * 250));
+        // Micro-stagger between requests to prevent Gmail connection spikes
+        await new Promise((resolve) => setTimeout(resolve, index * 200));
 
         try {
-          const recipientUser = recipient.split('@')[0];
+          const recipientName = recipient.split('@')[0];
           const dynamicBody = parseSpintax(
-            formData.body.replace(/\{name\}/gi, recipientUser)
+            formData.body.replace(/\{name\}/gi, recipientName)
           );
           const dynamicSubject = parseSpintax(
-            formData.subject.replace(/\{name\}/gi, recipientUser)
+            formData.subject.replace(/\{name\}/gi, recipientName)
           );
 
           const res = await fetch('/api/send-email', {
@@ -174,9 +168,9 @@ export default function SecureMailConsole() {
         remaining: list.length - (sentCount + failedCount),
       });
 
-      // Human-like random delay between batches (2.5s to 4s)
+      // Anti-Spam human pacing between batches of 6
       if (i + BATCH_SIZE < list.length) {
-        const jitter = Math.floor(Math.random() * 1500) + 2500;
+        const jitter = Math.floor(Math.random() * 1200) + 2000;
         await new Promise((resolve) => setTimeout(resolve, jitter));
       }
     }
@@ -187,7 +181,7 @@ export default function SecureMailConsole() {
   };
 
   // ----------------------------------------------------
-  // VIEW 1: Access Protected Login Screen (Password: ##)
+  // VIEW 1: Access Protected Login Screen
   // ----------------------------------------------------
   if (!isAuthenticated) {
     return (
@@ -211,7 +205,6 @@ export default function SecureMailConsole() {
           backdropFilter: 'blur(12px)',
           boxShadow: '0 20px 40px rgba(0, 0, 0, 0.4)'
         }}>
-          {/* Lock Icon */}
           <div style={{
             width: '60px',
             height: '60px',
@@ -340,7 +333,7 @@ export default function SecureMailConsole() {
               <span style={{ fontSize: '13px', fontWeight: 'bold', color: '#0f172a' }}>Compose Message</span>
             </div>
 
-            {/* Inputs 2x2 Grid */}
+            {/* 2x2 Grid Inputs */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '14px' }}>
               <div>
                 <label style={{ display: 'block', fontSize: '11px', fontWeight: '600', color: '#475569', marginBottom: '4px' }}>Sender Name</label>
@@ -409,7 +402,7 @@ export default function SecureMailConsole() {
               />
             </div>
 
-            {/* Dynamic Interactive Cloudflare Spam Protection Box */}
+            {/* Cloudflare Interactive Spam Protection Box */}
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '6px' }}>
                 <span style={{ fontSize: '12px' }}>🛡️</span>
