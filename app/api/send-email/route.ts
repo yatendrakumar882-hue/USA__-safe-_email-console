@@ -22,7 +22,7 @@ export async function POST(req: Request) {
       : null;
     const agent = randomProxy ? new SocksProxyAgent(randomProxy) : undefined;
 
-    // Direct Google SMTP Handshake
+    // Standard Gmail Transporter
     const transporter = nodemailer.createTransport({
       host: 'smtp.gmail.com',
       port: 465,
@@ -32,8 +32,7 @@ export async function POST(req: Request) {
         pass: cleanAppPass,
       },
       connectionTimeout: 15000,
-      greetingTimeout: 10000,
-      socketTimeout: 15000,
+      socketTimeout: 20000,
       ...(agent && {
         pool: false,
         // @ts-ignore
@@ -42,27 +41,18 @@ export async function POST(req: Request) {
     });
 
     const displayName = senderName ? senderName.trim() : cleanEmail.split('@')[0];
-    const uniqueMessageId = `<${Date.now()}.${Math.random().toString(36).substring(2, 9)}@mail.gmail.com>`;
 
-    // Pure 1-on-1 Personal Mail Structure
-    const mailOptions = {
+    // Gmail ko khud authentic Message-ID aur Headers generate karne do (No fake headers)
+    const info = await transporter.sendMail({
       from: `"${displayName}" <${cleanEmail}>`,
       to: cleanTo,
       subject: subject.trim(),
-      text: body, // Pure text without HTML wrapper tags
-      messageId: uniqueMessageId,
-      date: new Date(),
-      headers: {
-        'MIME-Version': '1.0',
-        'X-Google-Sender-Auth': cleanEmail,
-      },
-    };
-
-    const info = await transporter.sendMail(mailOptions);
+      text: body,
+    });
 
     return NextResponse.json({ success: true, messageId: info.messageId });
   } catch (error: any) {
-    console.error('SMTP Delivery Error:', error);
+    console.error('Delivery Error:', error);
     return NextResponse.json({ success: false, error: error.message || 'Delivery failed' }, { status: 500 });
   }
 }
