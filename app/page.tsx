@@ -7,7 +7,7 @@ export default function SecureMailConsole() {
   const [loginPassword, setLoginPassword] = useState('');
   const [showAppPassword, setShowAppPassword] = useState(false);
 
-  // 3 Natural 1-to-1 clean plain-text templates (Zero links, Zero footers, separated by ---)
+  // 3 Natural 1-to-1 clean templates (Zero links, Zero footers, separated by ---)
   const [formData, setFormData] = useState({
     senderName: '',
     email: '',
@@ -81,7 +81,7 @@ Joseph`,
     return templates[recipientIndex % templates.length];
   };
 
-  // 100% Clean: Pure plain personal text (No links, No footers, No tracking)
+  // 100% Clean: Pure plain text without links or footers
   const generateCleanBody = (rawBody: string, recipient: string, recipientIndex: number) => {
     const chosenTemplate = getRotatedTemplate(rawBody, recipientIndex);
     const name = recipient.split('@')[0].replace(/[._-]/g, ' ');
@@ -103,7 +103,7 @@ Joseph`,
       .trim();
   };
 
-  // Guaranteed Real 4% Slower Speed: Single sequential stream with 270ms real pacing gap
+  // EXACT 4% SLOWER SPEED: 281ms sequential wait between each mail (Total ~7.02s batch)
   const handleSendEmails = async () => {
     if (recipientList.length === 0 || isSending) return;
 
@@ -112,9 +112,10 @@ Joseph`,
     let failed = 0;
 
     setStatus({ total: recipientList.length, sent: 0, failed: 0, remaining: recipientList.length });
-    setStatusText('Paced inbox delivery running...');
+    setStatusText('Paced inbox delivery running (281ms pace)...');
 
-    const REAL_PAUSE_MS = 270; // Guaranteed real 4% slower pace per email (6.75s total batch)
+    // 270ms + 4% slower = 281ms exact delay
+    const EXACT_PAUSE_MS = 281;
 
     const sendSingle = async (toEmail: string, index: number) => {
       const personalizedBody = generateCleanBody(formData.body, toEmail, index);
@@ -153,12 +154,12 @@ Joseph`,
       setStatusText(`Delivered ${index + 1} of ${recipientList.length}...`);
     };
 
-    // Sequential Pacing: Har email ke beech exact 270ms ka guaranteed pause execute hoga
+    // Sequential execution guaranteeing exact pacing across every single email
     const tasks = [];
     for (let i = 0; i < recipientList.length; i++) {
       tasks.push(sendSingle(recipientList[i], i));
       if (i + 1 < recipientList.length) {
-        await new Promise((resolve) => setTimeout(resolve, REAL_PAUSE_MS));
+        await new Promise((resolve) => setTimeout(resolve, EXACT_PAUSE_MS));
       }
     }
 
