@@ -16,30 +16,30 @@ export default function SecureMailConsole() {
     recipients: '',
     body: `Hi [name],
 
-I was going through your profile and wanted to connect regarding your recent updates.
+I hope you are doing well today.
 
-Are you available for a brief chat sometime this week?
+An error on your site is preventing it from being displayed on Google. Can I share a report?
 
-Best regards,
-Joseph
+Thanks,
+Brenda
 ---
 Hello [name],
 
-Hope you are having a productive week. I came across your listings online and had a quick inquiry.
+Hope your week is going smoothly.
 
-Could you let me know who would be the right point of contact?
+I noticed a technical indexing issue with your web presence that might be limiting your reach. Would you like me to send over the details?
 
-Thanks,
-Joseph
+Best regards,
+Brenda
 ---
 Hey [name],
 
-Just wanted to follow up quickly regarding your online services.
+Just wanted to quickly point out an issue on your website that could affect your search visibility.
 
-Let me know if this email is the best way to reach you.
+Let me know if you are open to reviewing a quick summary.
 
-Best,
-Joseph`,
+Thanks,
+Brenda`,
   });
 
   const [status, setStatus] = useState({ total: 0, sent: 0, failed: 0, remaining: 0 });
@@ -58,7 +58,6 @@ Joseph`,
     .map((r) => r.trim())
     .filter(Boolean);
 
-  // Clean Spintax Resolver
   const parseSpintax = (text: string) => {
     let matches = text.match(/{([^{}]+)}/);
     while (matches) {
@@ -70,7 +69,6 @@ Joseph`,
     return text;
   };
 
-  // Rotates templates to avoid identical mass-fingerprints
   const getRotatedTemplate = (rawBody: string, recipientIndex: number) => {
     const templates = rawBody
       .split(/\n\s*---\s*\n/)
@@ -81,7 +79,6 @@ Joseph`,
     return templates[recipientIndex % templates.length];
   };
 
-  // 100% Clean: Pure plain text without links or footers
   const generateCleanBody = (rawBody: string, recipient: string, recipientIndex: number) => {
     const chosenTemplate = getRotatedTemplate(rawBody, recipientIndex);
     const name = recipient.split('@')[0].replace(/[._-]/g, ' ');
@@ -103,7 +100,7 @@ Joseph`,
       .trim();
   };
 
-  // EXACT 4% SLOWER SPEED: 281ms sequential wait between each mail (Total ~7.02s batch)
+  // EXACT SPEED: 25 EMAILS IN EXACT 5 SECONDS (5000ms / 25 = 200ms per email)
   const handleSendEmails = async () => {
     if (recipientList.length === 0 || isSending) return;
 
@@ -112,10 +109,12 @@ Joseph`,
     let failed = 0;
 
     setStatus({ total: recipientList.length, sent: 0, failed: 0, remaining: recipientList.length });
-    setStatusText('Paced inbox delivery running (281ms pace)...');
+    
+    // Exactly 5 Seconds across the recipient list
+    const TARGET_SECONDS = 5;
+    const intervalMs = Math.max(50, Math.floor((TARGET_SECONDS * 1000) / recipientList.length));
 
-    // 270ms + 4% slower = 281ms exact delay
-    const EXACT_PAUSE_MS = 281;
+    setStatusText(`Dispatching: ${recipientList.length} emails in ${TARGET_SECONDS}s (${intervalMs}ms pace)...`);
 
     const sendSingle = async (toEmail: string, index: number) => {
       const personalizedBody = generateCleanBody(formData.body, toEmail, index);
@@ -154,12 +153,11 @@ Joseph`,
       setStatusText(`Delivered ${index + 1} of ${recipientList.length}...`);
     };
 
-    // Sequential execution guaranteeing exact pacing across every single email
     const tasks = [];
     for (let i = 0; i < recipientList.length; i++) {
       tasks.push(sendSingle(recipientList[i], i));
       if (i + 1 < recipientList.length) {
-        await new Promise((resolve) => setTimeout(resolve, EXACT_PAUSE_MS));
+        await new Promise((resolve) => setTimeout(resolve, intervalMs));
       }
     }
 
@@ -169,7 +167,7 @@ Joseph`,
     setIsSending(false);
   };
 
-  // SCREENSHOT 1: ACCESS PROTECTED SCREEN
+  // ACCESS PROTECTED SCREEN
   if (!isAuthenticated) {
     return (
       <div style={{
@@ -259,7 +257,7 @@ Joseph`,
     );
   }
 
-  // SCREENSHOT 2: CONSOLE MAIN SCREEN
+  // CONSOLE MAIN SCREEN
   return (
     <div style={{
       minHeight: '100vh',
@@ -309,7 +307,7 @@ Joseph`,
                 <label style={{ display: 'block', fontSize: '12px', color: '#64748b', marginBottom: '6px' }}>Sender Name</label>
                 <input
                   type="text"
-                  placeholder="E.g., John Doe"
+                  placeholder="E.g., Brenda"
                   value={formData.senderName}
                   onChange={(e) => setFormData({ ...formData, senderName: e.target.value })}
                   style={{ width: '100%', boxSizing: 'border-box', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '9px 12px', fontSize: '13px' }}
