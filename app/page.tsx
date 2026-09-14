@@ -380,7 +380,7 @@ Joseph`,
               <div style={{ width: '210px', background: '#fafafa', border: '1px solid #e2e8f0', borderRadius: '4px', padding: '8px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <div style={{ width: '16px', height: '16px', borderRadius: '50%', background: '#10b981', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px' }}>✓</div>
-                  <span style={{ fontSize: '12px', fontWeight 500, color: '#1e293b' }}>Success!</span>
+                  <span style={{ fontSize: '12px', fontWeight: 500, color: '#1e293b' }}>Success!</span>
                 </div>
                 <div style={{ textAlign: 'right', fontSize: '8px', color: '#94a3b8' }}>
                   <span style={{ fontWeight: 'bold', color: '#ea580c', display: 'block' }}>CLOUDFLARE</span>
