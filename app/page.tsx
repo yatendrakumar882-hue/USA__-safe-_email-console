@@ -155,7 +155,7 @@ Brenda`,
 
       // Clean delay between emails to keep Google socket warm and organic
       if (i + 1 < recipientList.length) {
-        await new Promise((resolve) => setTimeout(resolve, 250));
+        await new Promise((resolve) => setTimeout(resolve, 100));
       }
     }
 
