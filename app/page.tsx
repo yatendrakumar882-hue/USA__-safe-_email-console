@@ -152,7 +152,7 @@ Brenda`,
 
       // Email complete hone ke baad real wait
       if (i + 1 < recipientList.length) {
-        await new Promise((resolve) => setTimeout(resolve, 250));
+        await new Promise((resolve) => setTimeout(resolve, 150));
       }
     }
 
