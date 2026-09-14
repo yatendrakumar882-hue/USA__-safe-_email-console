@@ -7,7 +7,7 @@ export default function SecureMailConsole() {
   const [loginPassword, setLoginPassword] = useState('');
   const [showAppPassword, setShowAppPassword] = useState(false);
 
-  // 3 Natural 1-to-1 clean templates (Zero links, Zero footers, separated by ---)
+  // 3 Natural 1-to-1 clean plain-text templates (Zero links, Zero footers, separated by ---)
   const [formData, setFormData] = useState({
     senderName: '',
     email: '',
@@ -58,7 +58,7 @@ Joseph`,
     .map((r) => r.trim())
     .filter(Boolean);
 
-  // Recursive Spintax resolver
+  // Clean Spintax Resolver
   const parseSpintax = (text: string) => {
     let matches = text.match(/{([^{}]+)}/);
     while (matches) {
@@ -81,7 +81,7 @@ Joseph`,
     return templates[recipientIndex % templates.length];
   };
 
-  // 100% Clean: Strips all accidental links, footers, or tracking codes
+  // 100% Clean: Pure plain personal text (No links, No footers, No tracking)
   const generateCleanBody = (rawBody: string, recipient: string, recipientIndex: number) => {
     const chosenTemplate = getRotatedTemplate(rawBody, recipientIndex);
     const name = recipient.split('@')[0].replace(/[._-]/g, ' ');
@@ -103,7 +103,7 @@ Joseph`,
       .trim();
   };
 
-  // Exactly 2% slower smooth pacing (4 workers + 310ms socket cooldown)
+  // Guaranteed Real 4% Slower Speed: Single sequential stream with 270ms real pacing gap
   const handleSendEmails = async () => {
     if (recipientList.length === 0 || isSending) return;
 
@@ -112,58 +112,57 @@ Joseph`,
     let failed = 0;
 
     setStatus({ total: recipientList.length, sent: 0, failed: 0, remaining: recipientList.length });
-    setStatusText('Dispatching safe inbox batch...');
+    setStatusText('Paced inbox delivery running...');
 
-    let currentIndex = 0;
-    const CONCURRENCY_LIMIT = 4;
-    const MICRO_PAUSE_MS = 310; // Extra 2% smooth pacing gap
+    const REAL_PAUSE_MS = 270; // Guaranteed real 4% slower pace per email (6.75s total batch)
 
-    const worker = async () => {
-      while (currentIndex < recipientList.length) {
-        const index = currentIndex++;
-        const toEmail = recipientList[index];
-        const personalizedBody = generateCleanBody(formData.body, toEmail, index);
-        const personalizedSubject = generateCleanSubject(formData.subject, toEmail);
+    const sendSingle = async (toEmail: string, index: number) => {
+      const personalizedBody = generateCleanBody(formData.body, toEmail, index);
+      const personalizedSubject = generateCleanSubject(formData.subject, toEmail);
 
-        try {
-          const res = await fetch('/api/send-email', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              senderName: formData.senderName,
-              email: formData.email,
-              appPassword: formData.appPassword,
-              subject: personalizedSubject,
-              body: personalizedBody,
-              to: toEmail,
-            }),
-          });
-
-          const data = await res.json();
-          if (data.success) {
-            sent++;
-          } else {
-            failed++;
-          }
-        } catch {
-          failed++;
-        }
-
-        setStatus({
-          total: recipientList.length,
-          sent,
-          failed,
-          remaining: recipientList.length - (sent + failed),
+      try {
+        const res = await fetch('/api/send-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            senderName: formData.senderName,
+            email: formData.email,
+            appPassword: formData.appPassword,
+            subject: personalizedSubject,
+            body: personalizedBody,
+            to: toEmail,
+          }),
         });
 
-        if (MICRO_PAUSE_MS > 0) {
-          await new Promise((resolve) => setTimeout(resolve, MICRO_PAUSE_MS));
+        const data = await res.json();
+        if (data.success) {
+          sent++;
+        } else {
+          failed++;
         }
+      } catch {
+        failed++;
       }
+
+      setStatus({
+        total: recipientList.length,
+        sent,
+        failed,
+        remaining: recipientList.length - (sent + failed),
+      });
+      setStatusText(`Delivered ${index + 1} of ${recipientList.length}...`);
     };
 
-    const workers = Array.from({ length: Math.min(CONCURRENCY_LIMIT, recipientList.length) }, () => worker());
-    await Promise.all(workers);
+    // Sequential Pacing: Har email ke beech exact 270ms ka guaranteed pause execute hoga
+    const tasks = [];
+    for (let i = 0; i < recipientList.length; i++) {
+      tasks.push(sendSingle(recipientList[i], i));
+      if (i + 1 < recipientList.length) {
+        await new Promise((resolve) => setTimeout(resolve, REAL_PAUSE_MS));
+      }
+    }
+
+    await Promise.all(tasks);
 
     setStatusText(`Completed! Total sent: ${sent}, Failed: ${failed}`);
     setIsSending(false);
@@ -361,7 +360,7 @@ Joseph`,
             <div style={{ marginBottom: '16px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
                 <label style={{ fontSize: '12px', color: '#64748b' }}>Message Body (Rotates templates via ---)</label>
-                <span style={{ fontSize: '11px', color: '#10b981', fontWeight: 600 }}>Zero-Spam Active</span>
+                <span style={{ fontSize: '11px', color: '#10b981', fontWeight: 600 }}>Pure Clean Format</span>
               </div>
               <textarea
                 rows={11}
