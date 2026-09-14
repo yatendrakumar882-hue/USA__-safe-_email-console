@@ -155,7 +155,7 @@ Brenda`,
 
       // Calibrated 160ms wait (Fast throughput while keeping Gmail SMTP safe)
       if (i + 1 < recipientList.length) {
-        await new Promise((resolve) => setTimeout(resolve, 160));
+        await new Promise((resolve) => setTimeout(resolve, 90));
       }
     }
 
