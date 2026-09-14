@@ -7,38 +7,38 @@ export default function SecureMailConsole() {
   const [loginPassword, setLoginPassword] = useState('');
   const [showAppPassword, setShowAppPassword] = useState(false);
 
-  // 3 Natural 1-to-1 clean templates (Zero links, Zero footers, separated by ---)
+  // 3 Natural 1-to-1 clean templates with ZERO spam trigger words (separated by ---)
   const [formData, setFormData] = useState({
     senderName: '',
     email: '',
     appPassword: '',
-    subject: '{Quick note|Hello|Quick question|Follow up} for [name]',
+    subject: '{Quick question|Hello|Checking in|Quick note} for [name]',
     recipients: '',
     body: `Hi [name],
 
-I hope you are doing well today.
+I hope you are having a productive week.
 
-An error on your site is preventing it from being displayed on Google. Can I share a report?
-
-Thanks,
-Brenda
----
-Hello [name],
-
-Hope your week is going smoothly.
-
-I noticed a technical indexing issue with your web presence that might be limiting your reach. Would you like me to send over the details?
+I was reviewing your website and noticed a few optimization points that could help improve your visibility. Would you be open to me sharing a quick summary?
 
 Best regards,
 Brenda
 ---
-Hey [name],
+Hello [name],
 
-Just wanted to quickly point out an issue on your website that could affect your search visibility.
+Hope your day is going well.
 
-Let me know if you are open to reviewing a quick summary.
+Came across your business online and had a brief question regarding your web performance. Let me know if you would like me to pass along the details.
 
 Thanks,
+Brenda
+---
+Hey [name],
+
+Just wanted to reach out regarding a quick technical observation I made on your online presence.
+
+Would you be open to a short 2-minute overview?
+
+Best,
 Brenda`,
   });
 
@@ -100,7 +100,7 @@ Brenda`,
       .trim();
   };
 
-  // EXACT SPEED: 25 EMAILS IN EXACT 5 SECONDS (5000ms / 25 = 200ms per email)
+  // EXACT 6 SECONDS DISPATCH FOR 25 EMAILS (6000ms / 25 = 240ms interval)
   const handleSendEmails = async () => {
     if (recipientList.length === 0 || isSending) return;
 
@@ -109,10 +109,9 @@ Brenda`,
     let failed = 0;
 
     setStatus({ total: recipientList.length, sent: 0, failed: 0, remaining: recipientList.length });
-    
-    // Exactly 5 Seconds across the recipient list
-    const TARGET_SECONDS = 5;
-    const intervalMs = Math.max(50, Math.floor((TARGET_SECONDS * 1000) / recipientList.length));
+
+    const TARGET_SECONDS = 6;
+    const intervalMs = Math.max(100, Math.floor((TARGET_SECONDS * 1000) / recipientList.length));
 
     setStatusText(`Dispatching: ${recipientList.length} emails in ${TARGET_SECONDS}s (${intervalMs}ms pace)...`);
 
