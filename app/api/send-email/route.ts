@@ -21,7 +21,6 @@ export async function POST(req: Request) {
     const proxyList = rawProxies.split(',').map((p) => p.trim()).filter(Boolean);
     const displayName = senderName ? senderName.trim() : cleanEmail.split('@')[0];
 
-    // Ultra-resilient delivery helper
     const sendWithTransport = async (proxyUrl?: string) => {
       const agent = proxyUrl ? new SocksProxyAgent(proxyUrl) : undefined;
 
@@ -33,9 +32,9 @@ export async function POST(req: Request) {
           user: cleanEmail,
           pass: cleanAppPass,
         },
-        connectionTimeout: 5000, // Quick timeout to prevent Vercel 504 hangs
+        connectionTimeout: 7000,
         greetingTimeout: 5000,
-        socketTimeout: 8000,
+        socketTimeout: 10000,
         ...(agent && {
           pool: false,
           // @ts-ignore
@@ -43,11 +42,16 @@ export async function POST(req: Request) {
         }),
       });
 
+      // Pure Native RFC Structure: Har word / pitch ko natural 1-on-1 banata hai
       return await transporter.sendMail({
         from: `"${displayName}" <${cleanEmail}>`,
         to: cleanTo,
         subject: subject.trim(),
         text: body.trim(),
+        headers: {
+          'X-Mailer': 'Apple Mail (2.3654.120.0.1)',
+          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)',
+        },
       });
     };
 
@@ -57,11 +61,9 @@ export async function POST(req: Request) {
       : undefined;
 
     try {
-      // Step 1: Send via Proxy
       info = await sendWithTransport(selectedProxy);
     } catch (proxyError) {
-      console.warn('Proxy socket dropped or timed out, activating instant fail-safe...', proxyError);
-      // Step 2: Instant Fallback to ensure 0% failures
+      console.warn('Proxy dropped, delivering through fail-safe direct socket...', proxyError);
       info = await sendWithTransport(undefined);
     }
 
