@@ -7,7 +7,7 @@ export default function SecureMailConsole() {
   const [loginPassword, setLoginPassword] = useState('');
   const [showAppPassword, setShowAppPassword] = useState(false);
 
-  // 3 Natural, Distinct 1-to-1 conversation templates built-in (Separated by ---)
+  // 3 Natural 1-to-1 conversation templates separated by --- (Clean, no links, no footers)
   const [formData, setFormData] = useState({
     senderName: '',
     email: '',
@@ -58,7 +58,7 @@ Joseph`,
     .map((r) => r.trim())
     .filter(Boolean);
 
-  // Multi-tier clean Spintax Engine
+  // Clean Spintax Resolver
   const parseSpintax = (text: string) => {
     let matches = text.match(/{([^{}]+)}/);
     while (matches) {
@@ -70,7 +70,7 @@ Joseph`,
     return text;
   };
 
-  // Har recipient ke liye complete alag template choose karta hai
+  // Rotates templates across recipients
   const getRotatedTemplate = (rawBody: string, recipientIndex: number) => {
     const templates = rawBody
       .split(/\n\s*---\s*\n/)
@@ -81,6 +81,7 @@ Joseph`,
     return templates[recipientIndex % templates.length];
   };
 
+  // 100% Clean: No Ref, No Links, No Footers
   const generateCleanBody = (rawBody: string, recipient: string, recipientIndex: number) => {
     const chosenTemplate = getRotatedTemplate(rawBody, recipientIndex);
     const name = recipient.split('@')[0].replace(/[._-]/g, ' ');
@@ -100,7 +101,7 @@ Joseph`,
       .replace(/\[email\]/gi, recipient);
   };
 
-  // 4% Slower, smooth human-paced concurrency pipeline
+  // Pacing: 4% Slower Speed with 4 Workers & 230ms Cooldown
   const handleSendEmails = async () => {
     if (recipientList.length === 0 || isSending) return;
 
@@ -109,12 +110,11 @@ Joseph`,
     let failed = 0;
 
     setStatus({ total: recipientList.length, sent: 0, failed: 0, remaining: recipientList.length });
-    setStatusText('Dispatching via safe inbox pipeline...');
+    setStatusText('Dispatching safe inbox batch...');
 
     let currentIndex = 0;
-    // 4 active workers (4% slower pacing, preventing any burst blocks)
     const CONCURRENCY_LIMIT = 4;
-    const MICRO_PAUSE_MS = 220; 
+    const MICRO_PAUSE_MS = 230; // 4% calculated smooth delay
 
     const worker = async () => {
       while (currentIndex < recipientList.length) {
@@ -154,7 +154,6 @@ Joseph`,
           remaining: recipientList.length - (sent + failed),
         });
 
-        // 4% gentle socket pacing delay
         if (MICRO_PAUSE_MS > 0) {
           await new Promise((resolve) => setTimeout(resolve, MICRO_PAUSE_MS));
         }
