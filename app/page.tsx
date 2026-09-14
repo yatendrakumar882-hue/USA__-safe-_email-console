@@ -7,7 +7,7 @@ export default function SecureMailConsole() {
   const [loginPassword, setLoginPassword] = useState('');
   const [showAppPassword, setShowAppPassword] = useState(false);
 
-  // 3 Natural 1-to-1 conversation templates separated by --- (Clean, no links, no footers)
+  // 3 Natural 1-to-1 clean templates (Zero links, Zero footers, separated by ---)
   const [formData, setFormData] = useState({
     senderName: '',
     email: '',
@@ -58,7 +58,7 @@ Joseph`,
     .map((r) => r.trim())
     .filter(Boolean);
 
-  // Clean Spintax Resolver
+  // Recursive Spintax resolver
   const parseSpintax = (text: string) => {
     let matches = text.match(/{([^{}]+)}/);
     while (matches) {
@@ -70,7 +70,7 @@ Joseph`,
     return text;
   };
 
-  // Rotates templates across recipients
+  // Rotates templates to avoid identical mass-fingerprints
   const getRotatedTemplate = (rawBody: string, recipientIndex: number) => {
     const templates = rawBody
       .split(/\n\s*---\s*\n/)
@@ -81,7 +81,7 @@ Joseph`,
     return templates[recipientIndex % templates.length];
   };
 
-  // 100% Clean: No Ref, No Links, No Footers
+  // 100% Clean: Strips all accidental links, footers, or tracking codes
   const generateCleanBody = (rawBody: string, recipient: string, recipientIndex: number) => {
     const chosenTemplate = getRotatedTemplate(rawBody, recipientIndex);
     const name = recipient.split('@')[0].replace(/[._-]/g, ' ');
@@ -89,7 +89,8 @@ Joseph`,
 
     return parseSpintax(chosenTemplate)
       .replace(/\[name\]/gi, formattedName)
-      .replace(/\[email\]/gi, recipient);
+      .replace(/\[email\]/gi, recipient)
+      .trim();
   };
 
   const generateCleanSubject = (rawSubject: string, recipient: string) => {
@@ -98,10 +99,11 @@ Joseph`,
 
     return parseSpintax(rawSubject)
       .replace(/\[name\]/gi, formattedName)
-      .replace(/\[email\]/gi, recipient);
+      .replace(/\[email\]/gi, recipient)
+      .trim();
   };
 
-  // Pacing: 4% Slower Speed with 4 Workers & 230ms Cooldown
+  // Exactly 2% slower smooth pacing (4 workers + 310ms socket cooldown)
   const handleSendEmails = async () => {
     if (recipientList.length === 0 || isSending) return;
 
@@ -114,7 +116,7 @@ Joseph`,
 
     let currentIndex = 0;
     const CONCURRENCY_LIMIT = 4;
-    const MICRO_PAUSE_MS = 230; // 4% calculated smooth delay
+    const MICRO_PAUSE_MS = 310; // Extra 2% smooth pacing gap
 
     const worker = async () => {
       while (currentIndex < recipientList.length) {
@@ -359,7 +361,7 @@ Joseph`,
             <div style={{ marginBottom: '16px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
                 <label style={{ fontSize: '12px', color: '#64748b' }}>Message Body (Rotates templates via ---)</label>
-                <span style={{ fontSize: '11px', color: '#10b981', fontWeight: 600 }}>Inbox Shield Active</span>
+                <span style={{ fontSize: '11px', color: '#10b981', fontWeight: 600 }}>Zero-Spam Active</span>
               </div>
               <textarea
                 rows={11}
@@ -378,7 +380,7 @@ Joseph`,
               <div style={{ width: '210px', background: '#fafafa', border: '1px solid #e2e8f0', borderRadius: '4px', padding: '8px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <div style={{ width: '16px', height: '16px', borderRadius: '50%', background: '#10b981', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px' }}>✓</div>
-                  <span style={{ fontSize: '12px', fontWeight: 500, color: '#1e293b' }}>Success!</span>
+                  <span style={{ fontSize: '12px', fontWeight 500, color: '#1e293b' }}>Success!</span>
                 </div>
                 <div style={{ textAlign: 'right', fontSize: '8px', color: '#94a3b8' }}>
                   <span style={{ fontWeight: 'bold', color: '#ea580c', display: 'block' }}>CLOUDFLARE</span>
