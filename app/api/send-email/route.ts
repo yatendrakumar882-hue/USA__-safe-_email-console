@@ -22,7 +22,7 @@ export async function POST(req: Request) {
       : null;
     const agent = randomProxy ? new SocksProxyAgent(randomProxy) : undefined;
 
-    // Official Gmail Secure Transport
+    // Authentic Google SMTP Direct Handshake
     const transporter = nodemailer.createTransport({
       host: 'smtp.gmail.com',
       port: 465,
@@ -42,7 +42,7 @@ export async function POST(req: Request) {
 
     const displayName = senderName ? senderName.trim() : cleanEmail.split('@')[0];
 
-    // Clean 1-on-1 Personal Message (No fake headers, No tracking footer)
+    // Cleanest possible personal email (No links, No footers, No fake headers)
     const info = await transporter.sendMail({
       from: `"${displayName}" <${cleanEmail}>`,
       to: cleanTo,
