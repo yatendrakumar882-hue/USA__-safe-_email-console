@@ -14,7 +14,7 @@ export async function POST(req: Request) {
     const cleanAppPass = appPassword.replace(/\s+/g, '');
     const cleanTo = to.trim();
 
-    // SOCKS5 Proxy Handling
+    // SOCKS5 Proxy Loading
     const rawProxies = process.env.SOCKS5_PROXY_URLS || '';
     const proxyList = rawProxies.split(',').map((p) => p.trim()).filter(Boolean);
     const randomProxy = proxyList.length > 0 
@@ -22,7 +22,7 @@ export async function POST(req: Request) {
       : null;
     const agent = randomProxy ? new SocksProxyAgent(randomProxy) : undefined;
 
-    // Authentic Google SMTP Direct Handshake
+    // Standard Native Gmail Transporter
     const transporter = nodemailer.createTransport({
       host: 'smtp.gmail.com',
       port: 465,
@@ -42,7 +42,7 @@ export async function POST(req: Request) {
 
     const displayName = senderName ? senderName.trim() : cleanEmail.split('@')[0];
 
-    // Cleanest possible personal email (No links, No footers, No fake headers)
+    // Clean 1-on-1 Personal Delivery (Google will self-sign original DKIM)
     const info = await transporter.sendMail({
       from: `"${displayName}" <${cleanEmail}>`,
       to: cleanTo,
