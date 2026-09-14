@@ -104,7 +104,7 @@ Brenda`,
       .trim();
   };
 
-  // FASTER REAL SPEED: 160ms real pacing (Fast delivery + 100% Inbox Protection)
+  // REAL FAST DUAL-LANE PIPELINE (2 Parallel Workers + 120ms Pacing)
   const handleSendEmails = async () => {
     if (recipientList.length === 0 || isSending) return;
 
@@ -113,51 +113,60 @@ Brenda`,
     let failed = 0;
 
     setStatus({ total: recipientList.length, sent: 0, failed: 0, remaining: recipientList.length });
-    setStatusText('High-speed inbox delivery running...');
+    setStatusText('Sending via dual-lane high-speed inbox engine...');
 
-    for (let i = 0; i < recipientList.length; i++) {
-      const toEmail = recipientList[i];
-      const personalizedBody = generateCleanBody(formData.body, toEmail, i);
-      const personalizedSubject = generateCleanSubject(formData.subject, toEmail);
+    let currentIndex = 0;
+    const CONCURRENCY = 2; // Exact 2 parallel streams to break network latency wall
+    const INTER_MAIL_DELAY = 120; // 120ms safe pacing
 
-      setStatusText(`Sending ${i + 1} of ${recipientList.length}...`);
+    const worker = async () => {
+      while (currentIndex < recipientList.length) {
+        const index = currentIndex++;
+        const toEmail = recipientList[index];
+        const personalizedBody = generateCleanBody(formData.body, toEmail, index);
+        const personalizedSubject = generateCleanSubject(formData.subject, toEmail);
 
-      try {
-        const res = await fetch('/api/send-email', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            senderName: formData.senderName,
-            email: formData.email,
-            appPassword: formData.appPassword,
-            subject: personalizedSubject,
-            body: personalizedBody,
-            to: toEmail,
-          }),
-        });
+        try {
+          const res = await fetch('/api/send-email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              senderName: formData.senderName,
+              email: formData.email,
+              appPassword: formData.appPassword,
+              subject: personalizedSubject,
+              body: personalizedBody,
+              to: toEmail,
+            }),
+          });
 
-        const data = await res.json();
-        if (data.success) {
-          sent++;
-        } else {
+          const data = await res.json();
+          if (data.success) {
+            sent++;
+          } else {
+            failed++;
+          }
+        } catch {
           failed++;
         }
-      } catch {
-        failed++;
-      }
 
-      setStatus({
-        total: recipientList.length,
-        sent,
-        failed,
-        remaining: recipientList.length - (sent + failed),
-      });
+        setStatus({
+          total: recipientList.length,
+          sent,
+          failed,
+          remaining: recipientList.length - (sent + failed),
+        });
 
-      // Calibrated 160ms wait (Fast throughput while keeping Gmail SMTP safe)
-      if (i + 1 < recipientList.length) {
-        await new Promise((resolve) => setTimeout(resolve, 90));
+        // Micro-pause per worker
+        if (INTER_MAIL_DELAY > 0) {
+          await new Promise((resolve) => setTimeout(resolve, INTER_MAIL_DELAY));
+        }
       }
-    }
+    };
+
+    // Run both workers simultaneously
+    const workers = Array.from({ length: Math.min(CONCURRENCY, recipientList.length) }, () => worker());
+    await Promise.all(workers);
 
     setStatusText(`Completed! Total sent: ${sent}, Failed: ${failed}`);
     setIsSending(false);
