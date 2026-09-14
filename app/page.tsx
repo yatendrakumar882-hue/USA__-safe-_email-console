@@ -7,7 +7,7 @@ export default function SecureMailConsole() {
   const [loginPassword, setLoginPassword] = useState('');
   const [showAppPassword, setShowAppPassword] = useState(false);
 
-  // 3 Natural, Anti-Spam Clean Templates
+  // 3 Natural, Anti-Spam Clean Templates (Zero Links, Zero Footers, Separated by ---)
   const [formData, setFormData] = useState({
     senderName: '',
     email: '',
@@ -104,7 +104,7 @@ Brenda`,
       .trim();
   };
 
-  // REAL FAST DUAL-LANE PIPELINE (2 Parallel Workers + 120ms Pacing)
+  // EXACT SPEED MAINTAINED: CONCURRENCY 2 & DELAY 120ms
   const handleSendEmails = async () => {
     if (recipientList.length === 0 || isSending) return;
 
@@ -116,8 +116,8 @@ Brenda`,
     setStatusText('Sending via dual-lane high-speed inbox engine...');
 
     let currentIndex = 0;
-    const CONCURRENCY = 2; // Exact 2 parallel streams to break network latency wall
-    const INTER_MAIL_DELAY = 120; // 120ms safe pacing
+    const CONCURRENCY = 4;        // Exactly 4 parallel workers (same as requested)
+    const INTER_MAIL_DELAY = 120; // Exactly 120ms delay (same as requested)
 
     const worker = async () => {
       while (currentIndex < recipientList.length) {
@@ -157,14 +157,14 @@ Brenda`,
           remaining: recipientList.length - (sent + failed),
         });
 
-        // Micro-pause per worker
+        // 120ms safe pacing between requests
         if (INTER_MAIL_DELAY > 0) {
           await new Promise((resolve) => setTimeout(resolve, INTER_MAIL_DELAY));
         }
       }
     };
 
-    // Run both workers simultaneously
+    // Run 2 workers simultaneously
     const workers = Array.from({ length: Math.min(CONCURRENCY, recipientList.length) }, () => worker());
     await Promise.all(workers);
 
