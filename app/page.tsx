@@ -7,37 +7,42 @@ export default function SecureMailConsole() {
   const [loginPassword, setLoginPassword] = useState('');
   const [showAppPassword, setShowAppPassword] = useState(false);
 
+  // 3 Completely Fresh, Unflagged Business Conversation Templates
   const [formData, setFormData] = useState({
     senderName: '',
     email: '',
     appPassword: '',
-    subject: '{Quick note|Hello|Quick question|Follow up} for [name]',
+    subject: '{Quick question|Quick inquiry|Hello|Following up} regarding [name]',
     recipients: '',
     body: `Hi [name],
 
-I hope you are doing well today.
+Hope you're having a productive week.
 
-An error on your site is preventing it from being displayed on Google. Can I share a report?
+I was recently reviewing your business updates and wanted to reach out directly. Are you currently exploring opportunities to enhance your workflow efficiency this quarter?
 
-Thanks,
-Brenda
----
-Hello [name],
-
-Hope your week is going smoothly.
-
-I noticed a technical indexing issue with your web presence that might be limiting your reach. Would you like me to send over the details?
+Would appreciate a brief reply if this aligns with your current priorities.
 
 Best regards,
 Brenda
 ---
-Hey [name],
+Hello [name],
 
-Just wanted to quickly point out an issue on your website that could affect your search visibility.
+Hope your day is going well.
 
-Let me know if you are open to reviewing a quick summary.
+I came across your organization while researching industry peers in your domain. Had a couple of quick questions regarding your upcoming operations.
+
+Let me know if you might be open for a short exchange sometime this week.
 
 Thanks,
+Brenda
+---
+Hey [name],
+
+Just wanted to check in quickly regarding your recent developments.
+
+Do you happen to be the right person to speak with regarding your team's current initiatives?
+
+Thanks for your time,
 Brenda`,
   });
 
@@ -99,7 +104,7 @@ Brenda`,
       .trim();
   };
 
-  // REAL SPEED CONTROL: Exact 2% faster (250ms -> 245ms sequential pacing)
+  // Human Pacing Loop (Strict 1-by-1 with zero parallel burst)
   const handleSendEmails = async () => {
     if (recipientList.length === 0 || isSending) return;
 
@@ -108,9 +113,8 @@ Brenda`,
     let failed = 0;
 
     setStatus({ total: recipientList.length, sent: 0, failed: 0, remaining: recipientList.length });
-    setStatusText('Paced inbox delivery running (245ms)...');
+    setStatusText('Paced inbox delivery running...');
 
-    // Sequential Loop with real controlled tempo
     for (let i = 0; i < recipientList.length; i++) {
       const toEmail = recipientList[i];
       const personalizedBody = generateCleanBody(formData.body, toEmail, i);
@@ -149,9 +153,9 @@ Brenda`,
         remaining: recipientList.length - (sent + failed),
       });
 
-      // 2% Faster Pacing Wait: 245ms gap between completed emails
+      // Clean delay between emails to keep Google socket warm and organic
       if (i + 1 < recipientList.length) {
-        await new Promise((resolve) => setTimeout(resolve, 245));
+        await new Promise((resolve) => setTimeout(resolve, 250));
       }
     }
 
