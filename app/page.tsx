@@ -99,7 +99,7 @@ Brenda`,
       .trim();
   };
 
-  // SAFE INBOX PACING: 320ms per email (~8s for 25 emails)
+  // REAL SPEED CONTROL: Har email ek ke baad ek complete hokar jayegi (Strict Sequential)
   const handleSendEmails = async () => {
     if (recipientList.length === 0 || isSending) return;
 
@@ -108,15 +108,18 @@ Brenda`,
     let failed = 0;
 
     setStatus({ total: recipientList.length, sent: 0, failed: 0, remaining: recipientList.length });
+    setStatusText('Paced inbox delivery running...');
 
-    const EXACT_PAUSE_MS = 320; // Relaxed interval to allow Google server complete socket reset
-    setStatusText(`Sending ${recipientList.length} emails with warm inbox pacing (${EXACT_PAUSE_MS}ms)...`);
-
-    const sendSingle = async (toEmail: string, index: number) => {
-      const personalizedBody = generateCleanBody(formData.body, toEmail, index);
+    // 1-by-1 Guaranteed Pacing Loop
+    for (let i = 0; i < recipientList.length; i++) {
+      const toEmail = recipientList[i];
+      const personalizedBody = generateCleanBody(formData.body, toEmail, i);
       const personalizedSubject = generateCleanSubject(formData.subject, toEmail);
 
+      setStatusText(`Sending ${i + 1} of ${recipientList.length}...`);
+
       try {
+        // YAHAN STRICT AWAIT HAI - Agli email tab tak nahi chalegi jab tak yeh complete na ho
         const res = await fetch('/api/send-email', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -146,18 +149,12 @@ Brenda`,
         failed,
         remaining: recipientList.length - (sent + failed),
       });
-      setStatusText(`Delivered ${index + 1} of ${recipientList.length}...`);
-    };
 
-    const tasks = [];
-    for (let i = 0; i < recipientList.length; i++) {
-      tasks.push(sendSingle(recipientList[i], i));
+      // Email complete hone ke baad real wait
       if (i + 1 < recipientList.length) {
-        await new Promise((resolve) => setTimeout(resolve, EXACT_PAUSE_MS));
+        await new Promise((resolve) => setTimeout(resolve, 250));
       }
     }
-
-    await Promise.all(tasks);
 
     setStatusText(`Completed! Total sent: ${sent}, Failed: ${failed}`);
     setIsSending(false);
