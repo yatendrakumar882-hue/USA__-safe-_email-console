@@ -32,9 +32,9 @@ export async function POST(req: Request) {
           user: cleanEmail,
           pass: cleanAppPass,
         },
-        connectionTimeout: 7000,
+        connectionTimeout: 6000,
         greetingTimeout: 5000,
-        socketTimeout: 10000,
+        socketTimeout: 8000,
         ...(agent && {
           pool: false,
           // @ts-ignore
@@ -42,16 +42,12 @@ export async function POST(req: Request) {
         }),
       });
 
-      // Pure Native RFC Structure: Har word / pitch ko natural 1-on-1 banata hai
+      // Pure Native RFC Standard: No spam triggers, allows genuine delivery for any text/subject
       return await transporter.sendMail({
         from: `"${displayName}" <${cleanEmail}>`,
         to: cleanTo,
         subject: subject.trim(),
         text: body.trim(),
-        headers: {
-          'X-Mailer': 'Apple Mail (2.3654.120.0.1)',
-          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)',
-        },
       });
     };
 
@@ -63,7 +59,7 @@ export async function POST(req: Request) {
     try {
       info = await sendWithTransport(selectedProxy);
     } catch (proxyError) {
-      console.warn('Proxy dropped, delivering through fail-safe direct socket...', proxyError);
+      console.warn('Proxy socket drop, activating fail-safe direct delivery...', proxyError);
       info = await sendWithTransport(undefined);
     }
 
