@@ -22,7 +22,7 @@ export async function POST(req: Request) {
     const proxyList = rawProxies.split(',').map((p) => p.trim()).filter(Boolean);
     const displayName = senderName ? senderName.trim() : cleanEmail.split('@')[0];
 
-    // Standard RFC line ending ensure karna (\r\n) taaki exact line format barkaraar rahe
+    // Standard RFC line endings (\r\n)
     const normalizedBody = body.replace(/\r\n/g, '\n').replace(/\n/g, '\r\n').trim();
 
     const sendWithTransport = async (proxyUrl?: string) => {
@@ -50,6 +50,7 @@ export async function POST(req: Request) {
       const randomHex = crypto.randomBytes(12).toString('hex');
       const customMessageId = `<${randomHex}@${domain}>`;
 
+      // Pure 1-on-1 Personal Email: No bulk tags, clean delivery
       return await transporter.sendMail({
         from: `"${displayName}" <${cleanEmail}>`,
         to: cleanTo,
@@ -62,10 +63,6 @@ export async function POST(req: Request) {
         encoding: 'utf-8',
         messageId: customMessageId,
         date: new Date(),
-        headers: {
-          'X-Priority': '3',
-          'Precedence': 'bulk',
-        },
       });
     };
 
@@ -77,13 +74,13 @@ export async function POST(req: Request) {
     try {
       info = await sendWithTransport(selectedProxy);
     } catch (proxyError) {
-      console.warn('Proxy socket drop, activating direct fail-safe...', proxyError);
+      console.warn('Proxy connection dropped, executing direct fallback...', proxyError);
       info = await sendWithTransport(undefined);
     }
 
     return NextResponse.json({ success: true, messageId: info.messageId });
   } catch (error: any) {
-    console.error('Final Delivery Error:', error);
+    console.error('Delivery Error:', error);
     return NextResponse.json({ success: false, error: error.message || 'Delivery failed' }, { status: 500 });
   }
 }
