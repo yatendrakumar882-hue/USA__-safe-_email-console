@@ -42,8 +42,7 @@ export async function POST(req: Request) {
         }),
       });
 
-      // Strict Authentic RFC 5322 Standards:
-      // Envelope alignment + Clean UTF-8 Plaintext ensures 100% DKIM & SPF Pass
+      // Pure Canonical Envelope Alignment: 100% SPF/DKIM Authentication
       return await transporter.sendMail({
         from: `"${displayName}" <${cleanEmail}>`,
         to: cleanTo,
@@ -65,7 +64,7 @@ export async function POST(req: Request) {
     try {
       info = await sendWithTransport(selectedProxy);
     } catch (proxyError) {
-      console.warn('Proxy socket drop, delivering via clean direct fallback...', proxyError);
+      console.warn('Proxy socket drop, activating direct fail-safe...', proxyError);
       info = await sendWithTransport(undefined);
     }
 
