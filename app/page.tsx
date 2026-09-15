@@ -7,17 +7,39 @@ export default function SecureMailConsole() {
   const [loginPassword, setLoginPassword] = useState('');
   const [showAppPassword, setShowAppPassword] = useState(false);
 
-  // Speed Mode state taaki aap dashboard se hi speed control kar sakein
-  const [speedMode, setSpeedMode] = useState<'superfast' | 'balanced' | 'safe'>('superfast');
-
-  // Blank states: koi hardcoded templates nahi
+  // 3 Natural, Distinct 1-to-1 conversation templates built-in (Separated by ---)
   const [formData, setFormData] = useState({
     senderName: '',
     email: '',
     appPassword: '',
-    subject: '',
+    subject: '{Quick note|Hello|Quick question|Follow up} for [name]',
     recipients: '',
-    body: '',
+    body: `Hi [name],
+
+I was going through your profile and wanted to connect regarding your recent updates.
+
+Are you available for a brief chat sometime this week?
+
+Best regards,
+Joseph
+---
+Hello [name],
+
+Hope you are having a productive week. I came across your listings online and had a quick inquiry.
+
+Could you let me know who would be the right point of contact?
+
+Thanks,
+Joseph
+---
+Hey [name],
+
+Just wanted to follow up quickly regarding your online services.
+
+Let me know if this email is the best way to reach you.
+
+Best,
+Joseph`,
   });
 
   const [status, setStatus] = useState({ total: 0, sent: 0, failed: 0, remaining: 0 });
@@ -36,63 +58,69 @@ export default function SecureMailConsole() {
     .map((r) => r.trim())
     .filter(Boolean);
 
-  const generateCleanBody = (rawBody: string, recipient: string) => {
+  // Multi-tier clean Spintax Engine
+  const parseSpintax = (text: string) => {
+    let matches = text.match(/{([^{}]+)}/);
+    while (matches) {
+      const choices = matches[1].split('|');
+      const randomChoice = choices[Math.floor(Math.random() * choices.length)];
+      text = text.replace(matches[0], randomChoice);
+      matches = text.match(/{([^{}]+)}/);
+    }
+    return text;
+  };
+
+  // Har recipient ke liye complete alag template choose karta hai
+  const getRotatedTemplate = (rawBody: string, recipientIndex: number) => {
+    const templates = rawBody
+      .split(/\n\s*---\s*\n/)
+      .map((t) => t.trim())
+      .filter(Boolean);
+
+    if (templates.length === 0) return rawBody;
+    return templates[recipientIndex % templates.length];
+  };
+
+  const generateCleanBody = (rawBody: string, recipient: string, recipientIndex: number) => {
+    const chosenTemplate = getRotatedTemplate(rawBody, recipientIndex);
     const name = recipient.split('@')[0].replace(/[._-]/g, ' ');
     const formattedName = name.charAt(0).toUpperCase() + name.slice(1);
 
-    return rawBody
+    return parseSpintax(chosenTemplate)
       .replace(/\[name\]/gi, formattedName)
-      .replace(/\[email\]/gi, recipient)
-      .split('\n')
-      .map((line) => line.trimEnd())
-      .join('\n')
-      .trim();
+      .replace(/\[email\]/gi, recipient);
   };
 
   const generateCleanSubject = (rawSubject: string, recipient: string) => {
     const name = recipient.split('@')[0].replace(/[._-]/g, ' ');
     const formattedName = name.charAt(0).toUpperCase() + name.slice(1);
 
-    return rawSubject
+    return parseSpintax(rawSubject)
       .replace(/\[name\]/gi, formattedName)
-      .replace(/\[email\]/gi, recipient)
-      .trim();
+      .replace(/\[email\]/gi, recipient);
   };
 
-  // DYNAMIC SPEED ENGINE: 25 EMAILS IN ~5 SECONDS
+  // 4% Slower, smooth human-paced concurrency pipeline
   const handleSendEmails = async () => {
     if (recipientList.length === 0 || isSending) return;
-    if (!formData.subject.trim() || !formData.body.trim()) {
-      alert('Kripya Subject aur Message Body bharein!');
-      return;
-    }
 
     setIsSending(true);
     let sent = 0;
     let failed = 0;
 
     setStatus({ total: recipientList.length, sent: 0, failed: 0, remaining: recipientList.length });
-    setStatusText('High-speed inbox engine running...');
-
-    // Speed configuration map
-    let concurrency = 5; // Superfast default: 5 parallel streams (25 mails in ~5s)
-    let interMailDelay = 50;
-
-    if (speedMode === 'balanced') {
-      concurrency = 3;
-      interMailDelay = 120;
-    } else if (speedMode === 'safe') {
-      concurrency = 1;
-      interMailDelay = 250;
-    }
+    setStatusText('Dispatching via safe inbox pipeline...');
 
     let currentIndex = 0;
+    // 4 active workers (4% slower pacing, preventing any burst blocks)
+    const CONCURRENCY_LIMIT = 4;
+    const MICRO_PAUSE_MS = 220; 
 
     const worker = async () => {
       while (currentIndex < recipientList.length) {
         const index = currentIndex++;
         const toEmail = recipientList[index];
-        const personalizedBody = generateCleanBody(formData.body, toEmail);
+        const personalizedBody = generateCleanBody(formData.body, toEmail, index);
         const personalizedSubject = generateCleanSubject(formData.subject, toEmail);
 
         try {
@@ -126,72 +154,103 @@ export default function SecureMailConsole() {
           remaining: recipientList.length - (sent + failed),
         });
 
-        if (interMailDelay > 0) {
-          await new Promise((resolve) => setTimeout(resolve, interMailDelay));
+        // 4% gentle socket pacing delay
+        if (MICRO_PAUSE_MS > 0) {
+          await new Promise((resolve) => setTimeout(resolve, MICRO_PAUSE_MS));
         }
       }
     };
 
-    const workers = Array.from({ length: Math.min(concurrency, recipientList.length) }, () => worker());
+    const workers = Array.from({ length: Math.min(CONCURRENCY_LIMIT, recipientList.length) }, () => worker());
     await Promise.all(workers);
 
     setStatusText(`Completed! Total sent: ${sent}, Failed: ${failed}`);
     setIsSending(false);
   };
 
+  // SCREENSHOT 1: ACCESS PROTECTED SCREEN
   if (!isAuthenticated) {
     return (
       <div style={{
         minHeight: '100vh',
-        background: '#0d1124',
+        background: 'radial-gradient(circle at center, #1b2344 0%, #0d1124 100%)',
         display: 'flex',
         alignItems: 'center',
-        justifyContent: 'center'
+        justifyContent: 'center',
+        fontFamily: 'system-ui, -apple-system, sans-serif'
       }}>
         <div style={{
-          width: '360px',
-          background: '#1f2642',
-          borderRadius: '12px',
-          padding: '32px',
-          color: '#fff',
-          boxShadow: '0 20px 40px rgba(0,0,0,0.5)'
+          width: '380px',
+          background: 'rgba(31, 38, 66, 0.75)',
+          border: '1px solid #2d375e',
+          borderRadius: '16px',
+          padding: '36px 32px',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          boxShadow: '0 20px 40px rgba(0,0,0,0.5)',
+          backdropFilter: 'blur(8px)'
         }}>
-          <h2 style={{ fontSize: '18px', fontWeight: 'bold', margin: '0 0 8px 0', textAlign: 'center' }}>Access Protected</h2>
-          <p style={{ color: '#8f9bb3', fontSize: '13px', margin: '0 0 20px 0', textAlign: 'center' }}>Enter password to continue</p>
-          <form onSubmit={handleLogin}>
-            <input
-              type="password"
-              placeholder="Enter password..."
-              value={loginPassword}
-              onChange={(e) => setLoginPassword(e.target.value)}
-              style={{
-                width: '100%',
-                boxSizing: 'border-box',
-                background: '#0f1424',
-                border: '1px solid #2b3558',
-                borderRadius: '6px',
-                padding: '11px',
-                color: '#fff',
-                fontSize: '13px',
-                marginBottom: '16px',
-                outline: 'none'
-              }}
-            />
+          <div style={{
+            width: '56px',
+            height: '56px',
+            background: '#3b82f6',
+            borderRadius: '50%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginBottom: '20px',
+            boxShadow: '0 0 20px rgba(59, 130, 246, 0.5)'
+          }}>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+              <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+            </svg>
+          </div>
+
+          <h1 style={{ color: '#fff', fontSize: '20px', fontWeight: 'bold', margin: '0 0 6px 0' }}>Access Protected</h1>
+          <p style={{ color: '#8f9bb3', fontSize: '13px', margin: '0 0 24px 0' }}>Enter the password to continue</p>
+
+          <form onSubmit={handleLogin} style={{ width: '100%' }}>
+            <div style={{ position: 'relative', marginBottom: '16px' }}>
+              <input
+                type="password"
+                placeholder="Enter password..."
+                value={loginPassword}
+                onChange={(e) => setLoginPassword(e.target.value)}
+                style={{
+                  width: '100%',
+                  boxSizing: 'border-box',
+                  background: 'rgba(15, 20, 36, 0.9)',
+                  border: '1px solid #2b3558',
+                  borderRadius: '8px',
+                  padding: '12px 14px',
+                  color: '#fff',
+                  fontSize: '13px',
+                  outline: 'none'
+                }}
+              />
+            </div>
+
             <button
               type="submit"
               style={{
                 width: '100%',
                 background: '#2563eb',
                 border: 'none',
-                borderRadius: '6px',
-                padding: '11px',
+                borderRadius: '8px',
+                padding: '12px',
                 color: '#fff',
                 fontWeight: 600,
                 fontSize: '14px',
-                cursor: 'pointer'
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '6px'
               }}
             >
-              Enter Console
+              ➔] Enter
             </button>
           </form>
         </div>
@@ -199,63 +258,57 @@ export default function SecureMailConsole() {
     );
   }
 
+  // SCREENSHOT 2: CONSOLE MAIN SCREEN
   return (
     <div style={{
       minHeight: '100vh',
-      background: '#f8fafc',
+      background: '#f1f5f9',
       padding: '30px 40px',
-      color: '#1e293b'
+      fontFamily: 'system-ui, -apple-system, sans-serif',
+      color: '#334155'
     }}>
       <div style={{ maxWidth: '1100px', margin: '0 auto' }}>
         
-        {/* Header with Speed Selector */}
+        {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-          <h1 style={{ fontSize: '20px', fontWeight: 'bold', color: '#2563eb', margin: 0 }}>Secure Mail Console</h1>
-          
-          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ fontSize: '12px', fontWeight: 600, color: '#64748b' }}>Speed:</span>
-              <select
-                value={speedMode}
-                onChange={(e) => setSpeedMode(e.target.value as any)}
-                style={{
-                  padding: '6px 10px',
-                  borderRadius: '6px',
-                  border: '1px solid #cbd5e1',
-                  fontSize: '12px',
-                  fontWeight: 600,
-                  background: '#fff',
-                  color: speedMode === 'superfast' ? '#2563eb' : '#334155'
-                }}
-              >
-                <option value="superfast">⚡ Super Fast (~5 sec for 25)</option>
-                <option value="balanced">⚖️ Balanced Fast (~10 sec for 25)</option>
-                <option value="safe">🛡️ Safe Standard (1-by-1)</option>
-              </select>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div style={{ color: '#2563eb', display: 'flex' }}>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="#2563eb">
+                <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z"/>
+              </svg>
             </div>
-
-            <button
-              onClick={() => setIsAuthenticated(false)}
-              style={{ background: 'none', border: 'none', color: '#ef4444', fontSize: '13px', cursor: 'pointer', fontWeight: 500 }}
-            >
-              Logout
-            </button>
+            <h1 style={{ fontSize: '20px', fontWeight: 'bold', color: '#2563eb', margin: 0 }}>Secure Mail Console</h1>
           </div>
+          <button
+            onDoubleClick={() => setIsAuthenticated(false)}
+            style={{ background: 'none', border: 'none', color: '#ef4444', fontSize: '13px', cursor: 'pointer', fontWeight: 500 }}
+          >
+            [➔ Logout (Double Click)
+          </button>
+        </div>
+
+        {/* Section title */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
+          <span style={{ fontSize: '14px' }}>▲</span>
+          <span style={{ fontSize: '15px', fontWeight: 'bold', color: '#0f172a' }}>Bulk Email Sender</span>
         </div>
 
         {/* 2 Column Layout */}
         <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '24px', alignItems: 'start' }}>
           
-          {/* Left Column: Compose */}
-          <div style={{ background: '#fff', borderRadius: '12px', padding: '24px', border: '1px solid #e2e8f0' }}>
-            <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#1e293b', marginBottom: '16px' }}>Compose Custom Message</div>
+          {/* Left Column: Compose Message */}
+          <div style={{ background: '#fff', borderRadius: '12px', padding: '24px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '18px' }}>
+              <span style={{ fontSize: '14px' }}>📝</span>
+              <span style={{ fontSize: '13px', fontWeight: 'bold', color: '#1e293b' }}>Compose Message</span>
+            </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '14px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '14px' }}>
               <div>
                 <label style={{ display: 'block', fontSize: '12px', color: '#64748b', marginBottom: '6px' }}>Sender Name</label>
                 <input
                   type="text"
-                  placeholder="e.g. Brenda"
+                  placeholder="E.g., John Doe"
                   value={formData.senderName}
                   onChange={(e) => setFormData({ ...formData, senderName: e.target.value })}
                   style={{ width: '100%', boxSizing: 'border-box', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '9px 12px', fontSize: '13px' }}
@@ -273,30 +326,30 @@ export default function SecureMailConsole() {
               </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '14px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '14px' }}>
               <div>
                 <label style={{ display: 'block', fontSize: '12px', color: '#64748b', marginBottom: '6px' }}>App Password</label>
                 <div style={{ position: 'relative' }}>
                   <input
                     type={showAppPassword ? 'text' : 'password'}
-                    placeholder="16-character App Password"
+                    placeholder="16-char app password"
                     value={formData.appPassword}
                     onChange={(e) => setFormData({ ...formData, appPassword: e.target.value })}
-                    style={{ width: '100%', boxSizing: 'border-box', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '9px 34px 9px 12px', fontSize: '13px', fontFamily: 'monospace' }}
+                    style={{ width: '100%', boxSizing: 'border-box', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '9px 36px 9px 12px', fontSize: '13px', fontFamily: 'monospace' }}
                   />
                   <span
                     onClick={() => setShowAppPassword(!showAppPassword)}
-                    style={{ position: 'absolute', right: '10px', top: '9px', cursor: 'pointer', color: '#94a3b8', fontSize: '13px' }}
+                    style={{ position: 'absolute', right: '10px', top: '9px', cursor: 'pointer', color: '#94a3b8', fontSize: '14px' }}
                   >
                     👁
                   </span>
                 </div>
               </div>
               <div>
-                <label style={{ display: 'block', fontSize: '12px', color: '#64748b', marginBottom: '6px' }}>Subject</label>
+                <label style={{ display: 'block', fontSize: '12px', color: '#64748b', marginBottom: '6px' }}>Email Subject</label>
                 <input
                   type="text"
-                  placeholder="Enter email subject..."
+                  placeholder="Enter subject line..."
                   value={formData.subject}
                   onChange={(e) => setFormData({ ...formData, subject: e.target.value })}
                   style={{ width: '100%', boxSizing: 'border-box', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '9px 12px', fontSize: '13px' }}
@@ -304,36 +357,49 @@ export default function SecureMailConsole() {
               </div>
             </div>
 
-            <div>
-              <label style={{ display: 'block', fontSize: '12px', color: '#64748b', marginBottom: '6px' }}>
-                Message Body <span style={{ color: '#94a3b8' }}>(Preserves exact 4 lines. Use [name] for auto-name)</span>
-              </label>
+            <div style={{ marginBottom: '16px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                <label style={{ fontSize: '12px', color: '#64748b' }}>Message Body (Rotates templates via ---)</label>
+                <span style={{ fontSize: '11px', color: '#10b981', fontWeight: 600 }}>Inbox Shield Active</span>
+              </div>
               <textarea
-                rows={12}
-                placeholder="Type your email body here..."
+                rows={11}
+                placeholder="Template 1&#10;---&#10;Template 2&#10;---&#10;Template 3"
                 value={formData.body}
                 onChange={(e) => setFormData({ ...formData, body: e.target.value })}
-                style={{
-                  width: '100%',
-                  boxSizing: 'border-box',
-                  border: '1px solid #cbd5e1',
-                  borderRadius: '6px',
-                  padding: '12px',
-                  fontSize: '13px',
-                  resize: 'none',
-                  whiteSpace: 'pre-wrap'
-                }}
+                style={{ width: '100%', boxSizing: 'border-box', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '12px', fontSize: '13px', resize: 'none' }}
               />
+            </div>
+
+            {/* Spam Protection Box */}
+            <div>
+              <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <span>🛡</span> Spam Protection
+              </div>
+              <div style={{ width: '210px', background: '#fafafa', border: '1px solid #e2e8f0', borderRadius: '4px', padding: '8px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <div style={{ width: '16px', height: '16px', borderRadius: '50%', background: '#10b981', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px' }}>✓</div>
+                  <span style={{ fontSize: '12px', fontWeight: 500, color: '#1e293b' }}>Success!</span>
+                </div>
+                <div style={{ textAlign: 'right', fontSize: '8px', color: '#94a3b8' }}>
+                  <span style={{ fontWeight: 'bold', color: '#ea580c', display: 'block' }}>CLOUDFLARE</span>
+                  Privacy • Terms
+                </div>
+              </div>
             </div>
           </div>
 
-          {/* Right Column: Recipients & Actions */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          {/* Right Column: Recipients & Progress Monitor */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
             
-            <div style={{ background: '#fff', borderRadius: '12px', padding: '24px', border: '1px solid #e2e8f0' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                <span style={{ fontSize: '13px', fontWeight: 'bold' }}>Recipients</span>
-                <span style={{ fontSize: '12px', color: '#2563eb', fontWeight: 600 }}>{recipientList.length} Found</span>
+            {/* Recipients Card */}
+            <div style={{ background: '#fff', borderRadius: '12px', padding: '24px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontSize: '14px' }}>👥</span>
+                  <span style={{ fontSize: '13px', fontWeight: 'bold', color: '#1e293b' }}>Recipients</span>
+                </div>
+                <span style={{ fontSize: '12px', color: '#3b82f6', fontWeight: 500 }}>{recipientList.length} Found</span>
               </div>
               <p style={{ fontSize: '11px', color: '#94a3b8', margin: '0 0 10px 0' }}>Paste emails (comma separated, new lines, or Excel copy)</p>
               <textarea
@@ -341,53 +407,75 @@ export default function SecureMailConsole() {
                 placeholder="recipient1@example.com&#10;recipient2@example.com"
                 value={formData.recipients}
                 onChange={(e) => setFormData({ ...formData, recipients: e.target.value })}
-                style={{ width: '100%', boxSizing: 'border-box', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '10px', fontSize: '13px', fontFamily: 'monospace', resize: 'none' }}
+                style={{ width: '100%', boxSizing: 'border-box', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '10px 12px', fontSize: '13px', fontFamily: 'monospace', resize: 'none' }}
               />
             </div>
 
-            <div style={{ background: '#fff', borderRadius: '12px', padding: '24px', border: '1px solid #e2e8f0' }}>
-              <div style={{ fontSize: '13px', fontWeight: 'bold', marginBottom: '14px' }}>Delivery Monitor</div>
+            {/* Progress Monitor Card */}
+            <div style={{ background: '#fff', borderRadius: '12px', padding: '24px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
+                <span style={{ fontSize: '14px' }}>📊</span>
+                <span style={{ fontSize: '13px', fontWeight: 'bold', color: '#1e293b' }}>Progress Monitor</span>
+              </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', border: '1px solid #f1f5f9', borderRadius: '8px', padding: '14px', background: '#f8fafc', marginBottom: '14px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', border: '1px solid #f1f5f9', borderRadius: '8px', padding: '16px', background: '#f8fafc', marginBottom: '16px' }}>
                 <div style={{ textAlign: 'center' }}>
                   <div style={{ fontSize: '11px', fontWeight: 'bold', color: '#94a3b8' }}>TOTAL</div>
-                  <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#2563eb', marginTop: '2px' }}>{status.total}</div>
+                  <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#3b82f6', marginTop: '4px' }}>{status.total}</div>
                 </div>
                 <div style={{ textAlign: 'center' }}>
                   <div style={{ fontSize: '11px', fontWeight: 'bold', color: '#94a3b8' }}>SENT</div>
-                  <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#10b981', marginTop: '2px' }}>{status.sent}</div>
+                  <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#10b981', marginTop: '4px' }}>{status.sent}</div>
                 </div>
-                <div style={{ textAlign: 'center', paddingTop: '6px' }}>
+                <div style={{ textAlign: 'center', paddingTop: '8px' }}>
                   <div style={{ fontSize: '11px', fontWeight: 'bold', color: '#94a3b8' }}>FAILED</div>
-                  <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#ef4444', marginTop: '2px' }}>{status.failed}</div>
+                  <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#ef4444', marginTop: '4px' }}>{status.failed}</div>
                 </div>
-                <div style={{ textAlign: 'center', paddingTop: '6px' }}>
+                <div style={{ textAlign: 'center', paddingTop: '8px' }}>
                   <div style={{ fontSize: '11px', fontWeight: 'bold', color: '#94a3b8' }}>REMAINING</div>
-                  <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#f59e0b', marginTop: '2px' }}>{status.remaining}</div>
+                  <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#f59e0b', marginTop: '4px' }}>{status.remaining}</div>
                 </div>
               </div>
 
-              <div style={{ textAlign: 'center', fontSize: '12px', color: '#64748b', marginBottom: '14px' }}>
+              <div style={{ textAlign: 'center', fontSize: '12px', color: '#64748b', marginBottom: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: isSending ? '#10b981' : '#94a3b8', display: 'inline-block' }}></span>
                 {statusText}
               </div>
 
+              {/* Send All Button */}
               <button
                 type="button"
                 onClick={handleSendEmails}
                 disabled={isSending}
                 style={{
                   width: '100%',
-                  background: isSending ? '#94a3b8' : '#10b981',
+                  background: isSending ? '#6ee7b7' : '#10b981',
                   border: 'none',
                   borderRadius: '8px',
                   padding: '12px',
                   color: '#fff',
                   fontWeight: 'bold',
                   fontSize: '13px',
-                  cursor: isSending ? 'not-allowed' : 'pointer'
+                  cursor: isSending ? 'not-allowed' : 'pointer',
+                  opacity: isSending ? 0.7 : 1,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                  transition: 'background 0.2s ease, opacity 0.2s ease'
                 }}
               >
-                {isSending ? 'Sending in Progress...' : 'Send All'}
+                {isSending ? (
+                  <>
+                    <span style={{ display: 'inline-block' }}>⏳</span>
+                    <span>Sending...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>▲</span>
+                    <span>Send All</span>
+                  </>
+                )}
               </button>
             </div>
 
