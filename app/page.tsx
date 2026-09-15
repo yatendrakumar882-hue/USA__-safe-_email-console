@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 
+// AAPKI SAARI 100 SUBJECT LINES LIST
 const PRESET_SUBJECTS = [
   "Polished site missing prime search slot",
   "Well-made portal unseen on first listing",
@@ -105,6 +106,7 @@ const PRESET_SUBJECTS = [
   "High platform hidden from initial listings"
 ];
 
+// EXACT 4-LINE AND MULTI-LINE TEMPLATES
 const DEFAULT_BODY_TEMPLATES = `Hello,
 
 Your website looks fantastic, but it does not appear on the front pages.
@@ -120,163 +122,263 @@ An error on your site is preventing it from being displayed on Google. Can I sha
 Thanks
 ---
 Hello,
-Your website looks sharp, but it doesn't appear on the front pages; may I send you a report?
+
+Your website looks sharp, but it doesn't appear on the front pages.
+
+May I send you a report?
 ---
 Hello,
-Your site looks strong, but it is not showing on the front pages; can I share a report?
+
+Your site looks strong, but it is not showing on the front pages.
+
+Can I share a report?
 ---
 Hello,
-Your website is well-built but has not appeared on the front pages; may I send a report?
+
+Your website is well-built but has not appeared on the front pages.
+
+May I send a report?
 ---
 Hello,
-Your site looks solid but is not listed on the front pages; can I share a report?
+
+Your site looks solid but is not listed on the front pages.
+
+Can I share a report?
 ---
 Hello,
-Your website seems robust but does not appear on the front pages; may I send a report?
+
+Your website seems robust but does not appear on the front pages.
+
+May I send a report?
 ---
 Hello,
-Your site looks polished but is not showing up on the front pages; can I share a report?
+
+Your site looks polished but is not showing up on the front pages.
+
+Can I share a report?
 ---
 Hello,
-Your website appears reliable but has not shown on the front pages; may I send a report?
+
+Your website appears reliable but has not shown on the front pages.
+
+May I send a report?
 ---
 Hello,
-Your site looks professional but is not present on the front pages; can I share a report?
+
+Your site looks professional but is not present on the front pages.
+
+Can I share a report?
 ---
 Hello,
-Your website looks great but has not appeared on the front pages; may I send a report?
+
+Your website looks great but has not appeared on the front pages.
+
+May I send a report?
 ---
 Hello,
-Your site looks steady but is not visible on the front pages; can I share a report?
+
+Your site looks steady but is not visible on the front pages.
+
+Can I share a report?
 ---
 Hello,
-Your website appears strong but has not shown on the front pages; may I send a report?
+
+Your website appears strong but has not shown on the front pages.
+
+May I send a report?
 ---
 Hello,
-Your site looks well-made but is not on the front pages; can I share a report?
+
+Your site looks well-made but is not on the front pages.
+
+Can I share a report?
 ---
 Hello,
-Your website seems solid but has not appeared on the front pages; may I send a report?
+
+Your website seems solid but has not appeared on the front pages.
+
+May I send a report?
 ---
 Hello,
-Your site looks firm but is not showing on the front pages; can I share a report?
+
+Your site looks firm but is not showing on the front pages.
+
+Can I share a report?
 ---
 Hello,
-Your website appears polished but is not visible on the front pages; may I send a report?
+
+Your website appears polished but is not visible on the front pages.
+
+May I send a report?
 ---
 Hello,
-Your site looks reliable but has not shown on the front pages; can I share a report?
+
+Your site looks reliable but has not shown on the front pages.
+
+Can I share a report?
 ---
 Hello,
-Your website looks sharp but is not present on the front pages; may I send a report?
+
+Your website looks sharp but is not present on the front pages.
+
+May I send a report?
 ---
 Hello,
-Your site looks professional but has not appeared on the front pages; can I share a report?
+
+Your site looks professional but has not appeared on the front pages.
+
+Can I share a report?
 ---
 Hello,
-Your website appears solid but is not showing on the front pages; may I send a report?
+
+Your website appears solid but is not showing on the front pages.
+
+May I send a report?
 ---
 Hello,
-Your site looks polished but has not appeared on the front pages; can I share a report?
+
+Your site looks polished but has not appeared on the front pages.
+
+Can I share a report?
 ---
 Hello,
+
 Your website looks sharp, but it does not appear on the front pages.
 It has great potential to grow.
+
 May I send you a report?
 ---
 Hello,
+
 Your website looks sharp, but it does not appear on the front pages.
 Some improvements could boost visibility.
+
 May I send you a report?
 ---
 Hello,
+
 Your website looks sharp, but it does not appear on the front pages.
 There is room for better reach.
+
 May I send you a report?
 ---
 Hello,
+
 Your website looks sharp, but it does not appear on the front pages.
 Targeted updates can help ranking.
+
 May I send you a report?
 ---
 Hello,
+
 Your website looks sharp, but it does not appear on the front pages.
 Simple changes may increase traffic.
+
 May I send you a report?
 ---
 Hello,
+
 Your website looks sharp, but it does not appear on the front pages.
 Performance can be improved easily.
+
 May I send you a report?
 ---
 Hello,
+
 Your website looks sharp, but it does not appear on the front pages.
 Optimizations could enhance your results.
+
 May I send you a report?
 ---
 Hello,
+
 Your website looks sharp, but it does not appear on the front pages.
 There is potential to grow further.
+
 May I send you a report?
 ---
 Hello,
+
 Your website looks sharp, but it does not appear on the front pages.
 A few tweaks may help boost.
+
 May I send you a report?
 ---
 Hello,
+
 Your website looks sharp, but it does not appear on the front pages.
 Improvements can increase your audience.
+
 May I send you a report?
 ---
 Hello,
+
 Your website looks sharp, but it does not appear on the front pages.
 Better visibility can be achieved.
+
 May I send you a report?
 ---
 Hello,
+
 Your website looks sharp, but it does not appear on the front pages.
 Small changes may bring results.
+
 May I send you a report?
 ---
 Hello,
+
 Your website looks sharp, but it does not appear on the front pages.
 Enhancements could improve your reach.
+
 May I send you a report?
 ---
 Hello,
+
 Your website looks sharp, but it does not appear on the front pages.
 Growth opportunities are available now.
+
 May I send you a report?
 ---
 Hello,
+
 Your website looks sharp, but it does not appear on the front pages.
 Traffic can increase with updates.
+
 May I send you a report?
 ---
 Hello,
+
 Your website looks sharp, but it does not appear on the front pages.
 There is room to improve rankings.
+
 May I send you a report?
 ---
 Hello,
+
 Your website looks sharp, but it does not appear on the front pages.
 Better results are within reach.
+
 May I send you a report?
 ---
 Hello,
+
 Your website looks sharp, but it does not appear on the front pages.
 Some adjustments may boost traffic.
+
 May I send you a report?
 ---
 Hello,
+
 Your website looks sharp, but it does not appear on the front pages.
 Optimization can improve visibility.
+
 May I send you a report?
 ---
 Hello,
+
 Your website looks sharp, but it does not appear on the front pages.
 There is potential for increased traffic.
+
 May I send you a report?`;
 
 export default function SecureMailConsole() {
@@ -330,14 +432,16 @@ export default function SecureMailConsole() {
     return templates[recipientIndex % templates.length];
   };
 
-  // Normalizes quotes, punctuation, and removes suspicious triggers
-  const sanitizeText = (str: string) => {
+  // KISI BHI NEWLINE YA BREAK KO DESTROY NAHI KAREGA - Exact line formatting safe rahegi
+  const sanitizeTextPreservingLines = (str: string) => {
     return str
       .replace(/[\u2018\u2019]/g, "'")
       .replace(/[\u201C\u201D]/g, '"')
       .replace(/!{2,}/g, '.')
       .replace(/^\s*!\s*/gm, '')
-      .replace(/\s+/g, ' ')
+      .split('\n')
+      .map((line) => line.trim()) // har line ki extra side spaces hateyenge, lekin line break waisa ka waisa rahega
+      .join('\n')
       .trim();
   };
 
@@ -348,10 +452,9 @@ export default function SecureMailConsole() {
 
     const parsed = parseSpintax(chosenTemplate)
       .replace(/\[name\]/gi, formattedName)
-      .replace(/\[email\]/gi, recipient)
-      .trim();
+      .replace(/\[email\]/gi, recipient);
 
-    return sanitizeText(parsed);
+    return sanitizeTextPreservingLines(parsed);
   };
 
   const generateCleanSubject = (rawSubject: string, recipientIndex: number) => {
@@ -361,7 +464,7 @@ export default function SecureMailConsole() {
     return parseSpintax(rawSubject).trim();
   };
 
-  // Speed: CONCURRENCY = 2 & DELAY = 120ms
+  // SPEED: CONCURRENCY 2 & DELAY 120ms EXACT RAKHI GAYI HAI
   const handleSendEmails = async () => {
     if (recipientList.length === 0 || isSending) return;
 
@@ -618,14 +721,14 @@ export default function SecureMailConsole() {
 
             <div style={{ marginBottom: '16px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
-                <label style={{ fontSize: '12px', color: '#64748b' }}>Message Body (40+ Rotating Templates via ---)</label>
-                <span style={{ fontSize: '11px', color: '#10b981', fontWeight: 600 }}>Zero-Spam Active</span>
+                <label style={{ fontSize: '12px', color: '#64748b' }}>Message Body (Preserves exact line structure)</label>
+                <span style={{ fontSize: '11px', color: '#10b981', fontWeight: 600 }}>Exact Lines Active</span>
               </div>
               <textarea
                 rows={11}
                 value={formData.body}
                 onChange={(e) => setFormData({ ...formData, body: e.target.value })}
-                style={{ width: '100%', boxSizing: 'border-box', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '12px', fontSize: '13px', resize: 'none' }}
+                style={{ width: '100%', boxSizing: 'border-box', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '12px', fontSize: '13px', resize: 'none', whiteSpace: 'pre-wrap' }}
               />
             </div>
 
