@@ -7,7 +7,6 @@ export default function SecureMailConsole() {
   const [loginPassword, setLoginPassword] = useState('');
   const [showAppPassword, setShowAppPassword] = useState(false);
 
-  // Speed Mode state: Safe by default to guarantee Primary Inbox delivery
   const [speedMode, setSpeedMode] = useState<'superfast' | 'balanced' | 'safe'>('balanced');
 
   const [formData, setFormData] = useState({
@@ -21,7 +20,7 @@ export default function SecureMailConsole() {
 
   const [status, setStatus] = useState({ total: 0, sent: 0, failed: 0, remaining: 0 });
   const [isSending, setIsSending] = useState(false);
-  const [statusText, setStatusText] = useState('System ready. Webmail emulation active.');
+  const [statusText, setStatusText] = useState('System ready. Native MIME engine active.');
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -35,7 +34,6 @@ export default function SecureMailConsole() {
     .map((r) => r.trim())
     .filter(Boolean);
 
-  // Clean Line & Quote Preservation (Does not merge lines)
   const sanitizeTextPreservingLines = (str: string) => {
     return str
       .replace(/[\u2018\u2019]/g, "'")
@@ -81,10 +79,9 @@ export default function SecureMailConsole() {
     let failed = 0;
 
     setStatus({ total: recipientList.length, sent: 0, failed: 0, remaining: recipientList.length });
-    setStatusText('Sending via authentic inbox protocol...');
+    setStatusText('Sending via clean native protocol...');
 
-    // Dynamic Concurrency & Delay Setup
-    let concurrency = 2; // Balanced fast (Safe from socket flags)
+    let concurrency = 2; // Default balanced
     let interMailDelay = 150;
 
     if (speedMode === 'superfast') {
@@ -217,12 +214,11 @@ export default function SecureMailConsole() {
     }}>
       <div style={{ maxWidth: '1100px', margin: '0 auto' }}>
         
-        {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <h1 style={{ fontSize: '20px', fontWeight: 'bold', color: '#2563eb', margin: 0 }}>Secure Mail Console</h1>
             <span style={{ fontSize: '11px', background: '#dcfce7', color: '#15803d', padding: '3px 8px', borderRadius: '12px', fontWeight: 600 }}>
-              🛡️ Webmail Emulation Active
+              🛡️ Pure Native MIME Active
             </span>
           </div>
           
@@ -242,7 +238,7 @@ export default function SecureMailConsole() {
                   color: speedMode === 'superfast' ? '#2563eb' : '#334155'
                 }}
               >
-                <option value="balanced">⚡ Balanced (Recommended for Inbox)</option>
+                <option value="balanced">⚡ Balanced (Recommended)</option>
                 <option value="superfast">🚀 High Burst (~5 sec)</option>
                 <option value="safe">🛡️ Safe Standard (1-by-1)</option>
               </select>
@@ -257,10 +253,9 @@ export default function SecureMailConsole() {
           </div>
         </div>
 
-        {/* 2 Column Layout */}
         <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '24px', alignItems: 'start' }}>
           
-          {/* Left Column: Compose */}
+          {/* Left Column */}
           <div style={{ background: '#fff', borderRadius: '12px', padding: '24px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
             <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#1e293b', marginBottom: '16px' }}>Compose Custom Clean Email</div>
 
@@ -320,11 +315,11 @@ export default function SecureMailConsole() {
 
             <div>
               <label style={{ display: 'block', fontSize: '12px', color: '#64748b', marginBottom: '6px' }}>
-                Message Body <span style={{ color: '#94a3b8' }}>(Preserves exact lines. Use [name] for auto-name)</span>
+                Message Body <span style={{ color: '#94a3b8' }}>(Preserves exact 4 lines. Use [name] for recipient's name)</span>
               </label>
               <textarea
                 rows={12}
-                placeholder="Type your clean email body here... (Exact 4 lines will be preserved in client's inbox)"
+                placeholder="Type your clean email body here..."
                 value={formData.body}
                 onChange={(e) => setFormData({ ...formData, body: e.target.value })}
                 style={{
@@ -341,7 +336,7 @@ export default function SecureMailConsole() {
             </div>
           </div>
 
-          {/* Right Column: Recipients & Monitor */}
+          {/* Right Column */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
             
             <div style={{ background: '#fff', borderRadius: '12px', padding: '24px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
@@ -349,7 +344,7 @@ export default function SecureMailConsole() {
                 <span style={{ fontSize: '13px', fontWeight: 'bold' }}>Recipients</span>
                 <span style={{ fontSize: '12px', color: '#2563eb', fontWeight: 600 }}>{recipientList.length} Found</span>
               </div>
-              <p style={{ fontSize: '11px', color: '#94a3b8', margin: '0 0 10px 0' }}>Paste emails (comma separated, new lines, or Excel copy)</p>
+              <p style={{ fontSize: '11px', color: '#94a3b8', margin: '0 0 10px 0' }}>Paste emails (comma separated or new lines)</p>
               <textarea
                 rows={6}
                 placeholder="recipient1@example.com&#10;recipient2@example.com"
