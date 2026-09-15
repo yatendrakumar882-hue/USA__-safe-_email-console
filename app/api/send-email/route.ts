@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import nodemailer from 'nodemailer';
-import { SocksProxyAgent } from 'socks-proxy-agent';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -16,56 +15,28 @@ export async function POST(req: Request) {
     const cleanEmail = email.trim().toLowerCase();
     const cleanAppPass = appPassword.replace(/\s+/g, '');
     const cleanTo = to.trim().toLowerCase();
-
-    const rawProxies = process.env.SOCKS5_PROXY_URLS || '';
-    const proxyList = rawProxies.split(',').map((p) => p.trim()).filter(Boolean);
     const displayName = senderName ? senderName.trim() : cleanEmail.split('@')[0];
 
-    // Exact line breaks preserve karne ke liye normal standard CRLF
+    // Preserve exact 4-line breaks
     const normalizedBody = body.replace(/\r\n/g, '\n').replace(/\n/g, '\r\n').trim();
 
-    const sendWithTransport = async (proxyUrl?: string) => {
-      const agent = proxyUrl ? new SocksProxyAgent(proxyUrl) : undefined;
+    // Direct authentic Google Transport (Bina proxy ke direct IP trust)
+    const transporter = nodemailer.createTransport({
+      host: 'smtp.gmail.com',
+      port: 465,
+      secure: true,
+      auth: {
+        user: cleanEmail,
+        pass: cleanAppPass,
+      },
+    });
 
-      // Bilkul standard, reliable transporter
-      const transporter = nodemailer.createTransport({
-        host: 'smtp.gmail.com',
-        port: 465,
-        secure: true,
-        auth: {
-          user: cleanEmail,
-          pass: cleanAppPass,
-        },
-        connectionTimeout: 10000,
-        greetingTimeout: 8000,
-        socketTimeout: 12000,
-        ...(agent && {
-          pool: false,
-          // @ts-ignore
-          agent: agent,
-        }),
-      });
-
-      // Koi artificial headers nahi, Google khud genuine signature lagayega
-      return await transporter.sendMail({
-        from: `"${displayName}" <${cleanEmail}>`,
-        to: cleanTo,
-        subject: subject.trim(),
-        text: normalizedBody,
-      });
-    };
-
-    let info;
-    const selectedProxy = proxyList.length > 0 
-      ? proxyList[Math.floor(Math.random() * proxyList.length)] 
-      : undefined;
-
-    try {
-      info = await sendWithTransport(selectedProxy);
-    } catch (proxyError) {
-      console.warn('Proxy retry, direct delivery running...', proxyError);
-      info = await sendWithTransport(undefined);
-    }
+    const info = await transporter.sendMail({
+      from: `"${displayName}" <${cleanEmail}>`,
+      to: cleanTo,
+      subject: subject.trim(),
+      text: normalizedBody,
+    });
 
     return NextResponse.json({ success: true, messageId: info.messageId });
   } catch (error: any) {
