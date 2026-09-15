@@ -1,65 +1,75 @@
-// 2-LANE CONCURRENT ENGINE (Speed Noticeably Fast)
-  const handleSendEmails = async () => {
-    if (recipientList.length === 0 || isSending) return;
+import { NextResponse } from 'next/server';
+import nodemailer from 'nodemailer';
+import { SocksProxyAgent } from 'socks-proxy-agent';
 
-    setIsSending(true);
-    let sent = 0;
-    let failed = 0;
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
-    setStatus({ total: recipientList.length, sent: 0, failed: 0, remaining: recipientList.length });
-    setStatusText('Paced inbox delivery running...');
+export async function POST(req: Request) {
+  try {
+    const { senderName, email, appPassword, subject, body, to } = await req.json();
 
-    let currentIndex = 0;
-    const CONCURRENCY = 2; // 2 Emails ek sath chalengi (Network wait aadha ho jayega)
-    const INTER_MAIL_DELAY = 100; // 100ms safe pause
+    if (!email || !appPassword || !to) {
+      return NextResponse.json({ success: false, error: 'Parameters missing' }, { status: 400 });
+    }
 
-    const worker = async () => {
-      while (currentIndex < recipientList.length) {
-        const index = currentIndex++;
-        const toEmail = recipientList[index];
-        const personalizedBody = generateCleanBody(formData.body, toEmail, index);
-        const personalizedSubject = generateCleanSubject(formData.subject, index);
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanAppPass = appPassword.replace(/\s+/g, '');
+    const cleanTo = to.trim().toLowerCase();
+    const displayName = senderName ? senderName.trim() : cleanEmail.split('@')[0];
 
-        try {
-          const res = await fetch('/api/send-email', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              senderName: formData.senderName,
-              email: formData.email,
-              appPassword: formData.appPassword,
-              subject: personalizedSubject,
-              body: personalizedBody,
-              to: toEmail,
-            }),
-          });
+    // Standard RFC line endings (\r\n) taaki exact line structure preserve rahe
+    const normalizedBody = body.replace(/\r\n/g, '\n').replace(/\n/g, '\r\n').trim();
 
-          const data = await res.json();
-          if (data.success) {
-            sent++;
-          } else {
-            failed++;
-          }
-        } catch {
-          failed++;
-        }
+    const rawProxies = process.env.SOCKS5_PROXY_URLS || '';
+    const proxyList = rawProxies.split(',').map((p) => p.trim()).filter(Boolean);
 
-        setStatus({
-          total: recipientList.length,
-          sent,
-          failed,
-          remaining: recipientList.length - (sent + failed),
-        });
+    const sendEmailViaSmtp = async (useProxy: boolean) => {
+      let agent: SocksProxyAgent | undefined = undefined;
 
-        if (INTER_MAIL_DELAY > 0) {
-          await new Promise((resolve) => setTimeout(resolve, INTER_MAIL_DELAY));
-        }
+      if (useProxy && proxyList.length > 0) {
+        const randomProxy = proxyList[Math.floor(Math.random() * proxyList.length)];
+        agent = new SocksProxyAgent(randomProxy);
       }
+
+      const transporter = nodemailer.createTransport({
+        host: 'smtp.gmail.com',
+        port: 465,
+        secure: true,
+        auth: {
+          user: cleanEmail,
+          pass: cleanAppPass,
+        },
+        connectionTimeout: 10000,
+        greetingTimeout: 8000,
+        socketTimeout: 12000,
+        ...(agent && {
+          pool: false,
+          // @ts-ignore
+          agent: agent,
+        }),
+      });
+
+      // Pure Native Google Transport (100% authentic SPF/DKIM signature)
+      return await transporter.sendMail({
+        from: `"${displayName}" <${cleanEmail}>`,
+        to: cleanTo,
+        subject: subject.trim(),
+        text: normalizedBody,
+      });
     };
 
-    const workers = Array.from({ length: Math.min(CONCURRENCY, recipientList.length) }, () => worker());
-    await Promise.all(workers);
+    let info;
+    try {
+      info = await sendEmailViaSmtp(proxyList.length > 0);
+    } catch (primaryErr: any) {
+      console.warn('Initial transport dropped, using direct clean connection...', primaryErr?.message);
+      info = await sendEmailViaSmtp(false);
+    }
 
-    setStatusText(`Completed! Total sent: ${sent}, Failed: ${failed}`);
-    setIsSending(false);
-  };
+    return NextResponse.json({ success: true, messageId: info.messageId });
+  } catch (error: any) {
+    console.error('Final SMTP Delivery Error:', error);
+    return NextResponse.json({ success: false, error: error.message || 'Delivery failed' }, { status: 500 });
+  }
+}
