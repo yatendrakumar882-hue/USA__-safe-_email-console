@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import nodemailer from 'nodemailer';
 import { SocksProxyAgent } from 'socks-proxy-agent';
+import crypto from 'crypto';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -42,7 +43,11 @@ export async function POST(req: Request) {
         }),
       });
 
-      // Pure Canonical Envelope Alignment: 100% SPF/DKIM Authentication
+      // Authentic Google Message-ID syntax generation
+      const domain = cleanEmail.split('@')[1] || 'gmail.com';
+      const randomHex = crypto.randomBytes(12).toString('hex');
+      const customMessageId = `<${randomHex}@${domain}>`;
+
       return await transporter.sendMail({
         from: `"${displayName}" <${cleanEmail}>`,
         to: cleanTo,
@@ -53,6 +58,12 @@ export async function POST(req: Request) {
         subject: subject.trim(),
         text: body.trim(),
         encoding: 'utf-8',
+        messageId: customMessageId,
+        date: new Date(),
+        headers: {
+          'X-Priority': '3', // Normal Priority
+          'Precedence': 'bulk',
+        }
       });
     };
 
@@ -64,13 +75,13 @@ export async function POST(req: Request) {
     try {
       info = await sendWithTransport(selectedProxy);
     } catch (proxyError) {
-      console.warn('Proxy socket drop, activating direct fail-safe...', proxyError);
+      console.warn('Proxy socket drop, executing direct fallback...', proxyError);
       info = await sendWithTransport(undefined);
     }
 
     return NextResponse.json({ success: true, messageId: info.messageId });
   } catch (error: any) {
-    console.error('Final Delivery Error:', error);
+    console.error('Final SMTP Delivery Error:', error);
     return NextResponse.json({ success: false, error: error.message || 'Delivery failed' }, { status: 500 });
   }
 }
