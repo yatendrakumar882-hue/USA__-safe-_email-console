@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 
-// AAPKI SAARI 100 SUBJECT LINES LIST
+// 100 HIGH-CONVERTING INBOX SUBJECT LINES
 const PRESET_SUBJECTS = [
   "Polished site missing prime search slot",
   "Well-made portal unseen on first listing",
@@ -106,7 +106,7 @@ const PRESET_SUBJECTS = [
   "High platform hidden from initial listings"
 ];
 
-// EXACT 4-LINE AND MULTI-LINE TEMPLATES
+// 4-LINE AND MULTI-LINE ROTATING TEMPLATES
 const DEFAULT_BODY_TEMPLATES = `Hello,
 
 Your website looks fantastic, but it does not appear on the front pages.
@@ -432,7 +432,7 @@ export default function SecureMailConsole() {
     return templates[recipientIndex % templates.length];
   };
 
-  // KISI BHI NEWLINE YA BREAK KO DESTROY NAHI KAREGA - Exact line formatting safe rahegi
+  // Exact 4-line layout safe rakhega bina breaks merge kiye
   const sanitizeTextPreservingLines = (str: string) => {
     return str
       .replace(/[\u2018\u2019]/g, "'")
@@ -440,7 +440,7 @@ export default function SecureMailConsole() {
       .replace(/!{2,}/g, '.')
       .replace(/^\s*!\s*/gm, '')
       .split('\n')
-      .map((line) => line.trim()) // har line ki extra side spaces hateyenge, lekin line break waisa ka waisa rahega
+      .map((line) => line.trim())
       .join('\n')
       .trim();
   };
@@ -464,7 +464,7 @@ export default function SecureMailConsole() {
     return parseSpintax(rawSubject).trim();
   };
 
-  // SPEED: CONCURRENCY 2 & DELAY 120ms EXACT RAKHI GAYI HAI
+  // EXACT SPEED: CONCURRENCY 2 & DELAY 120ms
   const handleSendEmails = async () => {
     if (recipientList.length === 0 || isSending) return;
 
@@ -721,8 +721,8 @@ export default function SecureMailConsole() {
 
             <div style={{ marginBottom: '16px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
-                <label style={{ fontSize: '12px', color: '#64748b' }}>Message Body (Preserves exact line structure)</label>
-                <span style={{ fontSize: '11px', color: '#10b981', fontWeight: 600 }}>Exact Lines Active</span>
+                <label style={{ fontSize: '12px', color: '#64748b' }}>Message Body (Preserves exact 4 lines)</label>
+                <span style={{ fontSize: '11px', color: '#10b981', fontWeight: 600 }}>Pure RFC Active</span>
               </div>
               <textarea
                 rows={11}
