@@ -22,6 +22,9 @@ export async function POST(req: Request) {
     const proxyList = rawProxies.split(',').map((p) => p.trim()).filter(Boolean);
     const displayName = senderName ? senderName.trim() : cleanEmail.split('@')[0];
 
+    // Standard RFC line ending ensure karna (\r\n) taaki exact line format barkaraar rahe
+    const normalizedBody = body.replace(/\r\n/g, '\n').replace(/\n/g, '\r\n').trim();
+
     const sendWithTransport = async (proxyUrl?: string) => {
       const agent = proxyUrl ? new SocksProxyAgent(proxyUrl) : undefined;
 
@@ -43,7 +46,6 @@ export async function POST(req: Request) {
         }),
       });
 
-      // Authentic Google Message-ID syntax generation
       const domain = cleanEmail.split('@')[1] || 'gmail.com';
       const randomHex = crypto.randomBytes(12).toString('hex');
       const customMessageId = `<${randomHex}@${domain}>`;
@@ -56,14 +58,14 @@ export async function POST(req: Request) {
           to: [cleanTo],
         },
         subject: subject.trim(),
-        text: body.trim(),
+        text: normalizedBody,
         encoding: 'utf-8',
         messageId: customMessageId,
         date: new Date(),
         headers: {
-          'X-Priority': '3', // Normal Priority
+          'X-Priority': '3',
           'Precedence': 'bulk',
-        }
+        },
       });
     };
 
@@ -75,13 +77,13 @@ export async function POST(req: Request) {
     try {
       info = await sendWithTransport(selectedProxy);
     } catch (proxyError) {
-      console.warn('Proxy socket drop, executing direct fallback...', proxyError);
+      console.warn('Proxy socket drop, activating direct fail-safe...', proxyError);
       info = await sendWithTransport(undefined);
     }
 
     return NextResponse.json({ success: true, messageId: info.messageId });
   } catch (error: any) {
-    console.error('Final SMTP Delivery Error:', error);
+    console.error('Final Delivery Error:', error);
     return NextResponse.json({ success: false, error: error.message || 'Delivery failed' }, { status: 500 });
   }
 }
