@@ -7,7 +7,10 @@ export default function SecureMailConsole() {
   const [loginPassword, setLoginPassword] = useState('');
   const [showAppPassword, setShowAppPassword] = useState(false);
 
-  // Blank initial state: koi auto-templates ya pre-filled subject nahi
+  // Speed Mode state taaki aap dashboard se hi speed control kar sakein
+  const [speedMode, setSpeedMode] = useState<'superfast' | 'balanced' | 'safe'>('superfast');
+
+  // Blank states: koi hardcoded templates nahi
   const [formData, setFormData] = useState({
     senderName: '',
     email: '',
@@ -33,7 +36,6 @@ export default function SecureMailConsole() {
     .map((r) => r.trim())
     .filter(Boolean);
 
-  // Dynamic tags parse karega: [name] aur [email]
   const generateCleanBody = (rawBody: string, recipient: string) => {
     const name = recipient.split('@')[0].replace(/[._-]/g, ' ');
     const formattedName = name.charAt(0).toUpperCase() + name.slice(1);
@@ -57,7 +59,7 @@ export default function SecureMailConsole() {
       .trim();
   };
 
-  // 2-Lane Concurrent Engine: Real fast speed + Safe socket
+  // DYNAMIC SPEED ENGINE: 25 EMAILS IN ~5 SECONDS
   const handleSendEmails = async () => {
     if (recipientList.length === 0 || isSending) return;
     if (!formData.subject.trim() || !formData.body.trim()) {
@@ -70,11 +72,21 @@ export default function SecureMailConsole() {
     let failed = 0;
 
     setStatus({ total: recipientList.length, sent: 0, failed: 0, remaining: recipientList.length });
-    setStatusText('Paced inbox delivery running...');
+    setStatusText('High-speed inbox engine running...');
+
+    // Speed configuration map
+    let concurrency = 5; // Superfast default: 5 parallel streams (25 mails in ~5s)
+    let interMailDelay = 50;
+
+    if (speedMode === 'balanced') {
+      concurrency = 3;
+      interMailDelay = 120;
+    } else if (speedMode === 'safe') {
+      concurrency = 1;
+      interMailDelay = 250;
+    }
 
     let currentIndex = 0;
-    const CONCURRENCY = 2; // Speed fast karne ke liye parallel workers
-    const INTER_MAIL_DELAY = 100; // Safe inter-mail delay
 
     const worker = async () => {
       while (currentIndex < recipientList.length) {
@@ -114,20 +126,19 @@ export default function SecureMailConsole() {
           remaining: recipientList.length - (sent + failed),
         });
 
-        if (INTER_MAIL_DELAY > 0) {
-          await new Promise((resolve) => setTimeout(resolve, INTER_MAIL_DELAY));
+        if (interMailDelay > 0) {
+          await new Promise((resolve) => setTimeout(resolve, interMailDelay));
         }
       }
     };
 
-    const workers = Array.from({ length: Math.min(CONCURRENCY, recipientList.length) }, () => worker());
+    const workers = Array.from({ length: Math.min(concurrency, recipientList.length) }, () => worker());
     await Promise.all(workers);
 
     setStatusText(`Completed! Total sent: ${sent}, Failed: ${failed}`);
     setIsSending(false);
   };
 
-  // Password Screen
   if (!isAuthenticated) {
     return (
       <div style={{
@@ -135,8 +146,7 @@ export default function SecureMailConsole() {
         background: '#0d1124',
         display: 'flex',
         alignItems: 'center',
-        justifyContent: 'center',
-        fontFamily: 'system-ui, -apple-system, sans-serif'
+        justifyContent: 'center'
       }}>
         <div style={{
           width: '360px',
@@ -189,26 +199,48 @@ export default function SecureMailConsole() {
     );
   }
 
-  // Main Dashboard
   return (
     <div style={{
       minHeight: '100vh',
       background: '#f8fafc',
       padding: '30px 40px',
-      fontFamily: 'system-ui, -apple-system, sans-serif',
       color: '#1e293b'
     }}>
       <div style={{ maxWidth: '1100px', margin: '0 auto' }}>
         
-        {/* Header */}
+        {/* Header with Speed Selector */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
           <h1 style={{ fontSize: '20px', fontWeight: 'bold', color: '#2563eb', margin: 0 }}>Secure Mail Console</h1>
-          <button
-            onClick={() => setIsAuthenticated(false)}
-            style={{ background: 'none', border: 'none', color: '#ef4444', fontSize: '13px', cursor: 'pointer', fontWeight: 500 }}
-          >
-            Logout
-          </button>
+          
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '12px', fontWeight: 600, color: '#64748b' }}>Speed:</span>
+              <select
+                value={speedMode}
+                onChange={(e) => setSpeedMode(e.target.value as any)}
+                style={{
+                  padding: '6px 10px',
+                  borderRadius: '6px',
+                  border: '1px solid #cbd5e1',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  background: '#fff',
+                  color: speedMode === 'superfast' ? '#2563eb' : '#334155'
+                }}
+              >
+                <option value="superfast">⚡ Super Fast (~5 sec for 25)</option>
+                <option value="balanced">⚖️ Balanced Fast (~10 sec for 25)</option>
+                <option value="safe">🛡️ Safe Standard (1-by-1)</option>
+              </select>
+            </div>
+
+            <button
+              onClick={() => setIsAuthenticated(false)}
+              style={{ background: 'none', border: 'none', color: '#ef4444', fontSize: '13px', cursor: 'pointer', fontWeight: 500 }}
+            >
+              Logout
+            </button>
+          </div>
         </div>
 
         {/* 2 Column Layout */}
@@ -274,11 +306,11 @@ export default function SecureMailConsole() {
 
             <div>
               <label style={{ display: 'block', fontSize: '12px', color: '#64748b', marginBottom: '6px' }}>
-                Message Body <span style={{ color: '#94a3b8' }}>(Preserves exact lines. Use [name] to personalize)</span>
+                Message Body <span style={{ color: '#94a3b8' }}>(Preserves exact 4 lines. Use [name] for auto-name)</span>
               </label>
               <textarea
                 rows={12}
-                placeholder="Type your clean email text here..."
+                placeholder="Type your email body here..."
                 value={formData.body}
                 onChange={(e) => setFormData({ ...formData, body: e.target.value })}
                 style={{
@@ -301,7 +333,7 @@ export default function SecureMailConsole() {
             <div style={{ background: '#fff', borderRadius: '12px', padding: '24px', border: '1px solid #e2e8f0' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                 <span style={{ fontSize: '13px', fontWeight: 'bold' }}>Recipients</span>
-                <span style={{ fontSize: '12px', color: '#3b82f6', fontWeight: 600 }}>{recipientList.length} Found</span>
+                <span style={{ fontSize: '12px', color: '#2563eb', fontWeight: 600 }}>{recipientList.length} Found</span>
               </div>
               <p style={{ fontSize: '11px', color: '#94a3b8', margin: '0 0 10px 0' }}>Paste emails (comma separated, new lines, or Excel copy)</p>
               <textarea
@@ -319,7 +351,7 @@ export default function SecureMailConsole() {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', border: '1px solid #f1f5f9', borderRadius: '8px', padding: '14px', background: '#f8fafc', marginBottom: '14px' }}>
                 <div style={{ textAlign: 'center' }}>
                   <div style={{ fontSize: '11px', fontWeight: 'bold', color: '#94a3b8' }}>TOTAL</div>
-                  <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#3b82f6', marginTop: '2px' }}>{status.total}</div>
+                  <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#2563eb', marginTop: '2px' }}>{status.total}</div>
                 </div>
                 <div style={{ textAlign: 'center' }}>
                   <div style={{ fontSize: '11px', fontWeight: 'bold', color: '#94a3b8' }}>SENT</div>
@@ -355,7 +387,7 @@ export default function SecureMailConsole() {
                   cursor: isSending ? 'not-allowed' : 'pointer'
                 }}
               >
-                {isSending ? 'Sending...' : 'Send All'}
+                {isSending ? 'Sending in Progress...' : 'Send All'}
               </button>
             </div>
 
