@@ -1,7 +1,9 @@
+import type { Metadata } from 'next';
 import './globals.css';
 
-export const metadata = {
+export const metadata: Metadata = {
   title: 'Secure Mail Console',
+  description: 'Clean Inbox Dispatcher Console',
 };
 
 export default function RootLayout({
