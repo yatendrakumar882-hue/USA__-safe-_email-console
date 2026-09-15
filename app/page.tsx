@@ -513,9 +513,9 @@ export default function SecureMailConsole() {
         remaining: recipientList.length - (sent + failed),
       });
 
-      // 180ms Natural Gap (Neither too slow nor robotic fast)
+      // 100ms Natural Gap (Neither too slow nor robotic fast)
       if (i + 1 < recipientList.length) {
-        await new Promise((resolve) => setTimeout(resolve, 180));
+        await new Promise((resolve) => setTimeout(resolve, 100));
       }
     }
 
