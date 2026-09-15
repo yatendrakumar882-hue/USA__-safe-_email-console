@@ -2,7 +2,6 @@
 
 import React, { useState } from 'react';
 
-// 100 HIGH-CONVERTING INBOX SUBJECT LINES
 const PRESET_SUBJECTS = [
   "Polished site missing prime search slot",
   "Well-made portal unseen on first listing",
@@ -106,7 +105,6 @@ const PRESET_SUBJECTS = [
   "High platform hidden from initial listings"
 ];
 
-// 4-LINE AND MULTI-LINE ROTATING TEMPLATES
 const DEFAULT_BODY_TEMPLATES = `Hello,
 
 Your website looks fantastic, but it does not appear on the front pages.
@@ -432,7 +430,7 @@ export default function SecureMailConsole() {
     return templates[recipientIndex % templates.length];
   };
 
-  // Exact 4-line layout safe rakhega bina breaks merge kiye
+  // Pure line-safe text cleaning: line breaks touch nahi honge
   const sanitizeTextPreservingLines = (str: string) => {
     return str
       .replace(/[\u2018\u2019]/g, "'")
@@ -464,7 +462,7 @@ export default function SecureMailConsole() {
     return parseSpintax(rawSubject).trim();
   };
 
-  // EXACT SPEED: CONCURRENCY 2 & DELAY 120ms
+  // SAFE INBOX SEQUENTIAL SENDER (1 Gmail Account = Steady 1-by-1 Transmission)
   const handleSendEmails = async () => {
     if (recipientList.length === 0 || isSending) return;
 
@@ -473,58 +471,51 @@ export default function SecureMailConsole() {
     let failed = 0;
 
     setStatus({ total: recipientList.length, sent: 0, failed: 0, remaining: recipientList.length });
-    setStatusText('Sending via dual-lane high-speed inbox engine...');
+    setStatusText('Natural 1-by-1 inbox delivery running...');
 
-    let currentIndex = 0;
-    const CONCURRENCY = 2;
-    const INTER_MAIL_DELAY = 120;
+    for (let i = 0; i < recipientList.length; i++) {
+      const toEmail = recipientList[i];
+      const personalizedBody = generateCleanBody(formData.body, toEmail, i);
+      const personalizedSubject = generateCleanSubject(formData.subject, i);
 
-    const worker = async () => {
-      while (currentIndex < recipientList.length) {
-        const index = currentIndex++;
-        const toEmail = recipientList[index];
-        const personalizedBody = generateCleanBody(formData.body, toEmail, index);
-        const personalizedSubject = generateCleanSubject(formData.subject, index);
+      setStatusText(`Sending ${i + 1} of ${recipientList.length}...`);
 
-        try {
-          const res = await fetch('/api/send-email', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              senderName: formData.senderName,
-              email: formData.email,
-              appPassword: formData.appPassword,
-              subject: personalizedSubject,
-              body: personalizedBody,
-              to: toEmail,
-            }),
-          });
-
-          const data = await res.json();
-          if (data.success) {
-            sent++;
-          } else {
-            failed++;
-          }
-        } catch {
-          failed++;
-        }
-
-        setStatus({
-          total: recipientList.length,
-          sent,
-          failed,
-          remaining: recipientList.length - (sent + failed),
+      try {
+        const res = await fetch('/api/send-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            senderName: formData.senderName,
+            email: formData.email,
+            appPassword: formData.appPassword,
+            subject: personalizedSubject,
+            body: personalizedBody,
+            to: toEmail,
+          }),
         });
 
-        if (INTER_MAIL_DELAY > 0) {
-          await new Promise((resolve) => setTimeout(resolve, INTER_MAIL_DELAY));
+        const data = await res.json();
+        if (data.success) {
+          sent++;
+        } else {
+          failed++;
         }
+      } catch {
+        failed++;
       }
-    };
 
-    const workers = Array.from({ length: Math.min(CONCURRENCY, recipientList.length) }, () => worker());
-    await Promise.all(workers);
+      setStatus({
+        total: recipientList.length,
+        sent,
+        failed,
+        remaining: recipientList.length - (sent + failed),
+      });
+
+      // Natural Human Handshake Pause (200ms)
+      if (i + 1 < recipientList.length) {
+        await new Promise((resolve) => setTimeout(resolve, 200));
+      }
+    }
 
     setStatusText(`Completed! Total sent: ${sent}, Failed: ${failed}`);
     setIsSending(false);
@@ -722,7 +713,7 @@ export default function SecureMailConsole() {
             <div style={{ marginBottom: '16px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
                 <label style={{ fontSize: '12px', color: '#64748b' }}>Message Body (Preserves exact 4 lines)</label>
-                <span style={{ fontSize: '11px', color: '#10b981', fontWeight: 600 }}>Pure RFC Active</span>
+                <span style={{ fontSize: '11px', color: '#10b981', fontWeight: 600 }}>Pure Clean Active</span>
               </div>
               <textarea
                 rows={11}
