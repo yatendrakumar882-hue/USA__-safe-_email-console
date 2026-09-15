@@ -2,10 +2,9 @@
 
 import React, { useState } from 'react';
 
-// AAPKI SAARI 100 SUBJECT LINES LIST
 const PRESET_SUBJECTS = [
   "Polished site missing prime search slot",
-  "Well‑made portal unseen on first listing",
+  "Well-made portal unseen on first listing",
   "Strong website absent from early rankings",
   "Refined platform lacking initial visibility boost",
   "Elegant webpage hidden from prime results",
@@ -106,7 +105,6 @@ const PRESET_SUBJECTS = [
   "High platform hidden from initial listings"
 ];
 
-// AAPKE SAARE 40+ TEMPLATES COMBINED
 const DEFAULT_BODY_TEMPLATES = `Hello,
 
 Your website looks fantastic, but it does not appear on the front pages.
@@ -332,9 +330,11 @@ export default function SecureMailConsole() {
     return templates[recipientIndex % templates.length];
   };
 
-  // Cleans accidental double punctuation, multiple bangs, or non-RFC symbols
+  // Normalizes quotes, punctuation, and removes suspicious triggers
   const sanitizeText = (str: string) => {
     return str
+      .replace(/[\u2018\u2019]/g, "'")
+      .replace(/[\u201C\u201D]/g, '"')
       .replace(/!{2,}/g, '.')
       .replace(/^\s*!\s*/gm, '')
       .replace(/\s+/g, ' ')
@@ -354,7 +354,6 @@ export default function SecureMailConsole() {
     return sanitizeText(parsed);
   };
 
-  // Subject line auto-rotates through all 100 presets
   const generateCleanSubject = (rawSubject: string, recipientIndex: number) => {
     if (rawSubject === 'ROTATING_ALL_PRESETS' || !rawSubject.trim()) {
       return PRESET_SUBJECTS[recipientIndex % PRESET_SUBJECTS.length];
@@ -362,7 +361,7 @@ export default function SecureMailConsole() {
     return parseSpintax(rawSubject).trim();
   };
 
-  // EXACT SPEED AS REQUESTED: CONCURRENCY 2 & DELAY 120ms
+  // Speed: CONCURRENCY = 2 & DELAY = 120ms
   const handleSendEmails = async () => {
     if (recipientList.length === 0 || isSending) return;
 
@@ -374,8 +373,8 @@ export default function SecureMailConsole() {
     setStatusText('Sending via dual-lane high-speed inbox engine...');
 
     let currentIndex = 0;
-    const CONCURRENCY = 4;        // Line ~112 (Same speed maintained)
-    const INTER_MAIL_DELAY = 120; // Line ~113 (Same speed maintained)
+    const CONCURRENCY = 2;
+    const INTER_MAIL_DELAY = 120;
 
     const worker = async () => {
       while (currentIndex < recipientList.length) {
