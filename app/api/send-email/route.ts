@@ -18,8 +18,14 @@ export async function POST(req: Request) {
     const cleanTo = to.trim().toLowerCase();
     const displayName = senderName ? senderName.trim() : cleanEmail.split('@')[0];
 
-    // Standard RFC line ending mapping
+    // Standard RFC line endings
     const normalizedBody = body.replace(/\r\n/g, '\n').replace(/\n/g, '\r\n').trim();
+
+    // Line breaks ko HTML paragraphs me convert karna (Authentic MIME multipart ke liye)
+    const formattedHtml = normalizedBody
+      .split('\r\n\r\n')
+      .map((paragraph: string) => `<p style="margin: 0 0 12px 0; font-family: sans-serif; font-size: 14px; line-height: 1.5; color: #222222;">${paragraph.replace(/\r\n/g, '<br/>')}</p>`)
+      .join('');
 
     const rawProxies = process.env.SOCKS5_PROXY_URLS || '';
     const proxyList = rawProxies.split(',').map((p) => p.trim()).filter(Boolean);
@@ -40,9 +46,9 @@ export async function POST(req: Request) {
           user: cleanEmail,
           pass: cleanAppPass,
         },
-        connectionTimeout: 15000,
-        greetingTimeout: 10000,
-        socketTimeout: 15000,
+        connectionTimeout: 10000,
+        greetingTimeout: 8000,
+        socketTimeout: 12000,
         ...(agent && {
           pool: false,
           // @ts-ignore
@@ -50,16 +56,13 @@ export async function POST(req: Request) {
         }),
       });
 
-      // Natural Google Webmail Simulation (Zero Bot Footprint)
+      // Zero artificial headers: Google SMTP authentic DKIM & SPF sign karega
       return await transporter.sendMail({
         from: `"${displayName}" <${cleanEmail}>`,
         to: cleanTo,
         subject: subject.trim(),
         text: normalizedBody,
-        headers: {
-          'X-Mailer': 'Gmail Webmail',
-          'MIME-Version': '1.0',
-        },
+        html: `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="margin:0;padding:10px;">${formattedHtml}</body></html>`,
       });
     };
 
@@ -67,7 +70,7 @@ export async function POST(req: Request) {
     try {
       info = await sendEmailViaSmtp(proxyList.length > 0);
     } catch (primaryErr: any) {
-      console.warn('Proxy route dropped, falling back to direct clean IP...', primaryErr?.message);
+      console.warn('Initial transport dropped, using direct clean route...', primaryErr?.message);
       info = await sendEmailViaSmtp(false);
     }
 
