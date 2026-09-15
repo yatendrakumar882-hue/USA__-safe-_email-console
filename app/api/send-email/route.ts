@@ -18,7 +18,7 @@ export async function POST(req: Request) {
     const cleanTo = to.trim().toLowerCase();
     const displayName = senderName ? senderName.trim() : cleanEmail.split('@')[0];
 
-    // Standard RFC line endings (\r\n) taaki exact line structure preserve rahe
+    // Standard RFC line endings (\r\n) taaki exact 4 lines bina toote deliver hon
     const normalizedBody = body.replace(/\r\n/g, '\n').replace(/\n/g, '\r\n').trim();
 
     const rawProxies = process.env.SOCKS5_PROXY_URLS || '';
@@ -50,7 +50,7 @@ export async function POST(req: Request) {
         }),
       });
 
-      // Pure Native Google Transport (100% authentic SPF/DKIM signature)
+      // Pure Native Google Transport: Google SMTP creates authentic Message-ID and signs DKIM/SPF
       return await transporter.sendMail({
         from: `"${displayName}" <${cleanEmail}>`,
         to: cleanTo,
@@ -63,7 +63,7 @@ export async function POST(req: Request) {
     try {
       info = await sendEmailViaSmtp(proxyList.length > 0);
     } catch (primaryErr: any) {
-      console.warn('Initial transport dropped, using direct clean connection...', primaryErr?.message);
+      console.warn('Initial route dropped, delivering via direct clean connection...', primaryErr?.message);
       info = await sendEmailViaSmtp(false);
     }
 
