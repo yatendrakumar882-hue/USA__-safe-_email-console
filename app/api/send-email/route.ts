@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import nodemailer from 'nodemailer';
 import { SocksProxyAgent } from 'socks-proxy-agent';
-import crypto from 'crypto';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -22,7 +21,7 @@ export async function POST(req: Request) {
     const proxyList = rawProxies.split(',').map((p) => p.trim()).filter(Boolean);
     const displayName = senderName ? senderName.trim() : cleanEmail.split('@')[0];
 
-    // Standard RFC line endings (\r\n)
+    // Standard RFC line ending mapping
     const normalizedBody = body.replace(/\r\n/g, '\n').replace(/\n/g, '\r\n').trim();
 
     const sendWithTransport = async (proxyUrl?: string) => {
@@ -46,23 +45,14 @@ export async function POST(req: Request) {
         }),
       });
 
-      const domain = cleanEmail.split('@')[1] || 'gmail.com';
-      const randomHex = crypto.randomBytes(12).toString('hex');
-      const customMessageId = `<${randomHex}@${domain}>`;
-
-      // Pure 1-on-1 Personal Email: No bulk tags, clean delivery
+      // Pure Native Google Dispatch:
+      // Koi manual messageId ya artificial envelope nahi lagaya hai.
+      // Google SMTP khud authentic cryptographic DKIM aur official Message-ID assign karega.
       return await transporter.sendMail({
         from: `"${displayName}" <${cleanEmail}>`,
         to: cleanTo,
-        envelope: {
-          from: cleanEmail,
-          to: [cleanTo],
-        },
         subject: subject.trim(),
         text: normalizedBody,
-        encoding: 'utf-8',
-        messageId: customMessageId,
-        date: new Date(),
       });
     };
 
@@ -74,13 +64,13 @@ export async function POST(req: Request) {
     try {
       info = await sendWithTransport(selectedProxy);
     } catch (proxyError) {
-      console.warn('Proxy connection dropped, executing direct fallback...', proxyError);
+      console.warn('Proxy socket issue, executing direct fallback...', proxyError);
       info = await sendWithTransport(undefined);
     }
 
     return NextResponse.json({ success: true, messageId: info.messageId });
   } catch (error: any) {
-    console.error('Delivery Error:', error);
+    console.error('Final SMTP Delivery Error:', error);
     return NextResponse.json({ success: false, error: error.message || 'Delivery failed' }, { status: 500 });
   }
 }
