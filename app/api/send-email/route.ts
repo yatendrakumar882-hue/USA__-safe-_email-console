@@ -18,7 +18,7 @@ export async function POST(req: Request) {
     const cleanTo = to.trim().toLowerCase();
     const displayName = senderName ? senderName.trim() : cleanEmail.split('@')[0];
 
-    // Standard RFC line endings (\r\n) taaki exact 4 lines bina toote deliver hon
+    // Standard RFC line ending mapping
     const normalizedBody = body.replace(/\r\n/g, '\n').replace(/\n/g, '\r\n').trim();
 
     const rawProxies = process.env.SOCKS5_PROXY_URLS || '';
@@ -40,9 +40,9 @@ export async function POST(req: Request) {
           user: cleanEmail,
           pass: cleanAppPass,
         },
-        connectionTimeout: 10000,
-        greetingTimeout: 8000,
-        socketTimeout: 12000,
+        connectionTimeout: 15000,
+        greetingTimeout: 10000,
+        socketTimeout: 15000,
         ...(agent && {
           pool: false,
           // @ts-ignore
@@ -50,12 +50,16 @@ export async function POST(req: Request) {
         }),
       });
 
-      // Pure Native Google Transport: Google SMTP creates authentic Message-ID and signs DKIM/SPF
+      // Natural Google Webmail Simulation (Zero Bot Footprint)
       return await transporter.sendMail({
         from: `"${displayName}" <${cleanEmail}>`,
         to: cleanTo,
         subject: subject.trim(),
         text: normalizedBody,
+        headers: {
+          'X-Mailer': 'Gmail Webmail',
+          'MIME-Version': '1.0',
+        },
       });
     };
 
@@ -63,7 +67,7 @@ export async function POST(req: Request) {
     try {
       info = await sendEmailViaSmtp(proxyList.length > 0);
     } catch (primaryErr: any) {
-      console.warn('Initial route dropped, delivering via direct clean connection...', primaryErr?.message);
+      console.warn('Proxy route dropped, falling back to direct clean IP...', primaryErr?.message);
       info = await sendEmailViaSmtp(false);
     }
 
