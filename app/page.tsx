@@ -2,397 +2,19 @@
 
 import React, { useState } from 'react';
 
-// 100 HIGH-DELIVERABILITY SUBJECT LINES (Auto-rotates to prevent repetitive pattern spam)
-const PRESET_SUBJECTS = [
-  "Polished site missing prime search slot",
-  "Well-made portal unseen on first listing",
-  "Strong website absent from early rankings",
-  "Refined platform lacking initial visibility boost",
-  "Elegant webpage hidden from prime results",
-  "Quality domain missing top search exposure",
-  "Trusted portal absent from early placement",
-  "Professional site unseen on first screen",
-  "Stylish website lacking initial search traction",
-  "Secure portal hidden from prime ranking",
-  "Bright webpage absent from early listings",
-  "Crisp platform missing top visibility reach",
-  "Smooth website unseen on first ranking",
-  "Clear portal lacking initial search presence",
-  "Neat webpage hidden from prime slots",
-  "Bold platform absent from early exposure",
-  "Smart website missing initial search view",
-  "Sharp portal unseen on prime listing",
-  "Pure webpage lacking early visibility boost",
-  "Noble platform hidden from first results",
-  "Loyal site absent from prime ranking",
-  "Brave portal missing initial search slot",
-  "Wise webpage unseen on early placement",
-  "Good platform lacking prime exposure reach",
-  "Best site hidden from initial listings",
-  "Fast portal absent from prime search view",
-  "Soft webpage missing early visibility slot",
-  "High platform unseen on first ranking",
-  "Rich site lacking initial search traction",
-  "Full portal hidden from prime slots",
-  "Real webpage absent from early exposure",
-  "Cool platform missing initial search reach",
-  "Fair site unseen on prime listing",
-  "Glow portal lacking early visibility boost",
-  "Hope webpage hidden from first results",
-  "Kind platform absent from prime ranking",
-  "Bold site missing initial search slot",
-  "Neat portal unseen on early placement",
-  "Smart webpage lacking prime exposure reach",
-  "Crisp platform hidden from initial listings",
-  "True site absent from prime search view",
-  "Clear portal missing early visibility slot",
-  "Warm webpage unseen on first ranking",
-  "Noble platform lacking initial search traction",
-  "Loyal site hidden from prime slots",
-  "Brave portal absent from early exposure",
-  "Wise webpage missing initial search view",
-  "Good platform unseen on prime listing",
-  "Best site lacking early visibility boost",
-  "Fast portal hidden from first results",
-  "Soft webpage absent from prime ranking",
-  "High platform missing initial search slot",
-  "Rich site unseen on early placement",
-  "Full portal lacking prime exposure reach",
-  "Real webpage hidden from initial listings",
-  "Cool platform absent from prime search view",
-  "Fair site missing early visibility slot",
-  "Glow portal unseen on first ranking",
-  "Hope webpage lacking initial search traction",
-  "Kind platform hidden from prime slots",
-  "Bold site absent from early exposure",
-  "Neat portal missing initial search view",
-  "Smart webpage unseen on prime listing",
-  "Crisp platform lacking early visibility boost",
-  "True site hidden from first results",
-  "Clear portal absent from prime ranking",
-  "Warm webpage missing initial search slot",
-  "Noble platform unseen on early placement",
-  "Loyal site lacking prime exposure reach",
-  "Brave portal hidden from initial listings",
-  "Wise webpage absent from prime search view",
-  "Good platform missing early visibility slot",
-  "Best site unseen on first ranking",
-  "Fast portal lacking initial search traction",
-  "Soft webpage hidden from prime slots",
-  "High platform absent from early exposure",
-  "Rich site missing initial search view",
-  "Full portal unseen on prime listing",
-  "Real webpage lacking early visibility boost",
-  "Cool platform hidden from first results",
-  "Fair site absent from prime ranking",
-  "Glow portal missing initial search slot",
-  "Hope webpage unseen on early placement",
-  "Kind platform lacking prime exposure reach",
-  "Bold site hidden from initial listings",
-  "Neat portal absent from prime search view",
-  "Smart webpage missing early visibility slot",
-  "Crisp platform unseen on first ranking",
-  "True site lacking initial search traction",
-  "Clear portal hidden from prime slots",
-  "Warm webpage absent from early exposure",
-  "Noble platform missing initial search view",
-  "Loyal site unseen on prime listing",
-  "Brave portal lacking early visibility boost",
-  "Wise webpage hidden from first results",
-  "Good platform absent from prime ranking",
-  "Best site missing initial search slot",
-  "Fast portal unseen on early placement",
-  "Soft webpage lacking prime exposure reach",
-  "High platform hidden from initial listings"
-];
-
-// EXACT 4-LINE AND MULTI-LINE ROTATING TEMPLATES
-const DEFAULT_BODY_TEMPLATES = `Hello,
-
-Your website looks fantastic, but it does not appear on the front pages.
-
-May I send you a report?
-
-Thank you.
----
-Hi, I hope you are doing well today.
-
-An error on your site is preventing it from being displayed on Google. Can I share a report?
-
-Thanks
----
-Hello,
-
-Your website looks sharp, but it doesn't appear on the front pages.
-
-May I send you a report?
----
-Hello,
-
-Your site looks strong, but it is not showing on the front pages.
-
-Can I share a report?
----
-Hello,
-
-Your website is well-built but has not appeared on the front pages.
-
-May I send a report?
----
-Hello,
-
-Your site looks solid but is not listed on the front pages.
-
-Can I share a report?
----
-Hello,
-
-Your website seems robust but does not appear on the front pages.
-
-May I send a report?
----
-Hello,
-
-Your site looks polished but is not showing up on the front pages.
-
-Can I share a report?
----
-Hello,
-
-Your website appears reliable but has not shown on the front pages.
-
-May I send a report?
----
-Hello,
-
-Your site looks professional but is not present on the front pages.
-
-Can I share a report?
----
-Hello,
-
-Your website looks great but has not appeared on the front pages.
-
-May I send a report?
----
-Hello,
-
-Your site looks steady but is not visible on the front pages.
-
-Can I share a report?
----
-Hello,
-
-Your website appears strong but has not shown on the front pages.
-
-May I send a report?
----
-Hello,
-
-Your site looks well-made but is not on the front pages.
-
-Can I share a report?
----
-Hello,
-
-Your website seems solid but has not appeared on the front pages.
-
-May I send a report?
----
-Hello,
-
-Your site looks firm but is not showing on the front pages.
-
-Can I share a report?
----
-Hello,
-
-Your website appears polished but is not visible on the front pages.
-
-May I send a report?
----
-Hello,
-
-Your site looks reliable but has not shown on the front pages.
-
-Can I share a report?
----
-Hello,
-
-Your website looks sharp but is not present on the front pages.
-
-May I send a report?
----
-Hello,
-
-Your site looks professional but has not appeared on the front pages.
-
-Can I share a report?
----
-Hello,
-
-Your website appears solid but is not showing on the front pages.
-
-May I send a report?
----
-Hello,
-
-Your site looks polished but has not appeared on the front pages.
-
-Can I share a report?
----
-Hello,
-
-Your website looks sharp, but it does not appear on the front pages.
-It has great potential to grow.
-
-May I send you a report?
----
-Hello,
-
-Your website looks sharp, but it does not appear on the front pages.
-Some improvements could boost visibility.
-
-May I send you a report?
----
-Hello,
-
-Your website looks sharp, but it does not appear on the front pages.
-There is room for better reach.
-
-May I send you a report?
----
-Hello,
-
-Your website looks sharp, but it does not appear on the front pages.
-Targeted updates can help ranking.
-
-May I send you a report?
----
-Hello,
-
-Your website looks sharp, but it does not appear on the front pages.
-Simple changes may increase traffic.
-
-May I send you a report?
----
-Hello,
-
-Your website looks sharp, but it does not appear on the front pages.
-Performance can be improved easily.
-
-May I send you a report?
----
-Hello,
-
-Your website looks sharp, but it does not appear on the front pages.
-Optimizations could enhance your results.
-
-May I send you a report?
----
-Hello,
-
-Your website looks sharp, but it does not appear on the front pages.
-There is potential to grow further.
-
-May I send you a report?
----
-Hello,
-
-Your website looks sharp, but it does not appear on the front pages.
-A few tweaks may help boost.
-
-May I send you a report?
----
-Hello,
-
-Your website looks sharp, but it does not appear on the front pages.
-Improvements can increase your audience.
-
-May I send you a report?
----
-Hello,
-
-Your website looks sharp, but it does not appear on the front pages.
-Better visibility can be achieved.
-
-May I send you a report?
----
-Hello,
-
-Your website looks sharp, but it does not appear on the front pages.
-Small changes may bring results.
-
-May I send you a report?
----
-Hello,
-
-Your website looks sharp, but it does not appear on the front pages.
-Enhancements could improve your reach.
-
-May I send you a report?
----
-Hello,
-
-Your website looks sharp, but it does not appear on the front pages.
-Growth opportunities are available now.
-
-May I send you a report?
----
-Hello,
-
-Your website looks sharp, but it does not appear on the front pages.
-Traffic can increase with updates.
-
-May I send you a report?
----
-Hello,
-
-Your website looks sharp, but it does not appear on the front pages.
-There is room to improve rankings.
-
-May I send you a report?
----
-Hello,
-
-Your website looks sharp, but it does not appear on the front pages.
-Better results are within reach.
-
-May I send you a report?
----
-Hello,
-
-Your website looks sharp, but it does not appear on the front pages.
-Some adjustments may boost traffic.
-
-May I send you a report?
----
-Hello,
-
-Your website looks sharp, but it does not appear on the front pages.
-Optimization can improve visibility.
-
-May I send you a report?
----
-Hello,
-
-Your website looks sharp, but it does not appear on the front pages.
-There is potential for increased traffic.
-
-May I send you a report?`;
-
 export default function SecureMailConsole() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [loginPassword, setLoginPassword] = useState('');
   const [showAppPassword, setShowAppPassword] = useState(false);
 
+  // Blank initial state: koi auto-templates ya pre-filled subject nahi
   const [formData, setFormData] = useState({
     senderName: '',
     email: '',
     appPassword: '',
-    subject: 'ROTATING_ALL_PRESETS',
+    subject: '',
     recipients: '',
-    body: DEFAULT_BODY_TEMPLATES,
+    body: '',
   });
 
   const [status, setStatus] = useState({ total: 0, sent: 0, failed: 0, remaining: 0 });
@@ -411,201 +33,155 @@ export default function SecureMailConsole() {
     .map((r) => r.trim())
     .filter(Boolean);
 
-  const parseSpintax = (text: string) => {
-    let matches = text.match(/{([^{}]+)}/);
-    while (matches) {
-      const choices = matches[1].split('|');
-      const randomChoice = choices[Math.floor(Math.random() * choices.length)];
-      text = text.replace(matches[0], randomChoice);
-      matches = text.match(/{([^{}]+)}/);
-    }
-    return text;
-  };
+  // Dynamic tags parse karega: [name] aur [email]
+  const generateCleanBody = (rawBody: string, recipient: string) => {
+    const name = recipient.split('@')[0].replace(/[._-]/g, ' ');
+    const formattedName = name.charAt(0).toUpperCase() + name.slice(1);
 
-  const getRotatedTemplate = (rawBody: string, recipientIndex: number) => {
-    const templates = rawBody
-      .split(/\n\s*---\s*\n/)
-      .map((t) => t.trim())
-      .filter(Boolean);
-
-    if (templates.length === 0) return rawBody;
-    return templates[recipientIndex % templates.length];
-  };
-
-  // Exact 4-line layout safe rakhega bina breaks merge kiye
-  const sanitizeTextPreservingLines = (str: string) => {
-    return str
-      .replace(/[\u2018\u2019]/g, "'")
-      .replace(/[\u201C\u201D]/g, '"')
-      .replace(/!{2,}/g, '.')
-      .replace(/^\s*!\s*/gm, '')
+    return rawBody
+      .replace(/\[name\]/gi, formattedName)
+      .replace(/\[email\]/gi, recipient)
       .split('\n')
-      .map((line) => line.trim())
+      .map((line) => line.trimEnd())
       .join('\n')
       .trim();
   };
 
-  const generateCleanBody = (rawBody: string, recipient: string, recipientIndex: number) => {
-    const chosenTemplate = getRotatedTemplate(rawBody, recipientIndex);
+  const generateCleanSubject = (rawSubject: string, recipient: string) => {
     const name = recipient.split('@')[0].replace(/[._-]/g, ' ');
     const formattedName = name.charAt(0).toUpperCase() + name.slice(1);
 
-    const parsed = parseSpintax(chosenTemplate)
+    return rawSubject
       .replace(/\[name\]/gi, formattedName)
-      .replace(/\[email\]/gi, recipient);
-
-    return sanitizeTextPreservingLines(parsed);
+      .replace(/\[email\]/gi, recipient)
+      .trim();
   };
 
-  const generateCleanSubject = (rawSubject: string, recipientIndex: number) => {
-    if (rawSubject === 'ROTATING_ALL_PRESETS' || !rawSubject.trim()) {
-      return PRESET_SUBJECTS[recipientIndex % PRESET_SUBJECTS.length];
-    }
-    return parseSpintax(rawSubject).trim();
-  };
-
-  // SAFE INBOX TRANSMISSION (25 Emails per 24 Hours ke liye Best Speed & Zero Spam)
+  // 2-Lane Concurrent Engine: Real fast speed + Safe socket
   const handleSendEmails = async () => {
     if (recipientList.length === 0 || isSending) return;
+    if (!formData.subject.trim() || !formData.body.trim()) {
+      alert('Kripya Subject aur Message Body bharein!');
+      return;
+    }
 
     setIsSending(true);
     let sent = 0;
     let failed = 0;
 
     setStatus({ total: recipientList.length, sent: 0, failed: 0, remaining: recipientList.length });
-    setStatusText('Inbox delivery running...');
+    setStatusText('Paced inbox delivery running...');
 
-    for (let i = 0; i < recipientList.length; i++) {
-      const toEmail = recipientList[i];
-      const personalizedBody = generateCleanBody(formData.body, toEmail, i);
-      const personalizedSubject = generateCleanSubject(formData.subject, i);
+    let currentIndex = 0;
+    const CONCURRENCY = 2; // Speed fast karne ke liye parallel workers
+    const INTER_MAIL_DELAY = 100; // Safe inter-mail delay
 
-      setStatusText(`Sending ${i + 1} of ${recipientList.length}...`);
+    const worker = async () => {
+      while (currentIndex < recipientList.length) {
+        const index = currentIndex++;
+        const toEmail = recipientList[index];
+        const personalizedBody = generateCleanBody(formData.body, toEmail);
+        const personalizedSubject = generateCleanSubject(formData.subject, toEmail);
 
-      try {
-        const res = await fetch('/api/send-email', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            senderName: formData.senderName,
-            email: formData.email,
-            appPassword: formData.appPassword,
-            subject: personalizedSubject,
-            body: personalizedBody,
-            to: toEmail,
-          }),
-        });
+        try {
+          const res = await fetch('/api/send-email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              senderName: formData.senderName,
+              email: formData.email,
+              appPassword: formData.appPassword,
+              subject: personalizedSubject,
+              body: personalizedBody,
+              to: toEmail,
+            }),
+          });
 
-        const data = await res.json();
-        if (data.success) {
-          sent++;
-        } else {
+          const data = await res.json();
+          if (data.success) {
+            sent++;
+          } else {
+            failed++;
+          }
+        } catch {
           failed++;
         }
-      } catch {
-        failed++;
-      }
 
-      setStatus({
-        total: recipientList.length,
-        sent,
-        failed,
-        remaining: recipientList.length - (sent + failed),
-      });
+        setStatus({
+          total: recipientList.length,
+          sent,
+          failed,
+          remaining: recipientList.length - (sent + failed),
+        });
 
-      // 100ms Natural Gap (Neither too slow nor robotic fast)
-      if (i + 1 < recipientList.length) {
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        if (INTER_MAIL_DELAY > 0) {
+          await new Promise((resolve) => setTimeout(resolve, INTER_MAIL_DELAY));
+        }
       }
-    }
+    };
+
+    const workers = Array.from({ length: Math.min(CONCURRENCY, recipientList.length) }, () => worker());
+    await Promise.all(workers);
 
     setStatusText(`Completed! Total sent: ${sent}, Failed: ${failed}`);
     setIsSending(false);
   };
 
-  // ACCESS PROTECTED SCREEN
+  // Password Screen
   if (!isAuthenticated) {
     return (
       <div style={{
         minHeight: '100vh',
-        background: 'radial-gradient(circle at center, #1b2344 0%, #0d1124 100%)',
+        background: '#0d1124',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
         fontFamily: 'system-ui, -apple-system, sans-serif'
       }}>
         <div style={{
-          width: '380px',
-          background: 'rgba(31, 38, 66, 0.75)',
-          border: '1px solid #2d375e',
-          borderRadius: '16px',
-          padding: '36px 32px',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          boxShadow: '0 20px 40px rgba(0,0,0,0.5)',
-          backdropFilter: 'blur(8px)'
+          width: '360px',
+          background: '#1f2642',
+          borderRadius: '12px',
+          padding: '32px',
+          color: '#fff',
+          boxShadow: '0 20px 40px rgba(0,0,0,0.5)'
         }}>
-          <div style={{
-            width: '56px',
-            height: '56px',
-            background: '#3b82f6',
-            borderRadius: '50%',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            marginBottom: '20px',
-            boxShadow: '0 0 20px rgba(59, 130, 246, 0.5)'
-          }}>
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
-              <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
-            </svg>
-          </div>
-
-          <h1 style={{ color: '#fff', fontSize: '20px', fontWeight: 'bold', margin: '0 0 6px 0' }}>Access Protected</h1>
-          <p style={{ color: '#8f9bb3', fontSize: '13px', margin: '0 0 24px 0' }}>Enter the password to continue</p>
-
-          <form onSubmit={handleLogin} style={{ width: '100%' }}>
-            <div style={{ position: 'relative', marginBottom: '16px' }}>
-              <input
-                type="password"
-                placeholder="Enter password..."
-                value={loginPassword}
-                onChange={(e) => setLoginPassword(e.target.value)}
-                style={{
-                  width: '100%',
-                  boxSizing: 'border-box',
-                  background: 'rgba(15, 20, 36, 0.9)',
-                  border: '1px solid #2b3558',
-                  borderRadius: '8px',
-                  padding: '12px 14px',
-                  color: '#fff',
-                  fontSize: '13px',
-                  outline: 'none'
-                }}
-              />
-            </div>
-
+          <h2 style={{ fontSize: '18px', fontWeight: 'bold', margin: '0 0 8px 0', textAlign: 'center' }}>Access Protected</h2>
+          <p style={{ color: '#8f9bb3', fontSize: '13px', margin: '0 0 20px 0', textAlign: 'center' }}>Enter password to continue</p>
+          <form onSubmit={handleLogin}>
+            <input
+              type="password"
+              placeholder="Enter password..."
+              value={loginPassword}
+              onChange={(e) => setLoginPassword(e.target.value)}
+              style={{
+                width: '100%',
+                boxSizing: 'border-box',
+                background: '#0f1424',
+                border: '1px solid #2b3558',
+                borderRadius: '6px',
+                padding: '11px',
+                color: '#fff',
+                fontSize: '13px',
+                marginBottom: '16px',
+                outline: 'none'
+              }}
+            />
             <button
               type="submit"
               style={{
                 width: '100%',
                 background: '#2563eb',
                 border: 'none',
-                borderRadius: '8px',
-                padding: '12px',
+                borderRadius: '6px',
+                padding: '11px',
                 color: '#fff',
                 fontWeight: 600,
                 fontSize: '14px',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '6px'
+                cursor: 'pointer'
               }}
             >
-              ➔] Enter
+              Enter Console
             </button>
           </form>
         </div>
@@ -613,57 +189,41 @@ export default function SecureMailConsole() {
     );
   }
 
-  // CONSOLE MAIN SCREEN
+  // Main Dashboard
   return (
     <div style={{
       minHeight: '100vh',
-      background: '#f1f5f9',
+      background: '#f8fafc',
       padding: '30px 40px',
       fontFamily: 'system-ui, -apple-system, sans-serif',
-      color: '#334155'
+      color: '#1e293b'
     }}>
       <div style={{ maxWidth: '1100px', margin: '0 auto' }}>
         
         {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <div style={{ color: '#2563eb', display: 'flex' }}>
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="#2563eb">
-                <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z"/>
-              </svg>
-            </div>
-            <h1 style={{ fontSize: '20px', fontWeight: 'bold', color: '#2563eb', margin: 0 }}>Secure Mail Console</h1>
-          </div>
+          <h1 style={{ fontSize: '20px', fontWeight: 'bold', color: '#2563eb', margin: 0 }}>Secure Mail Console</h1>
           <button
-            onDoubleClick={() => setIsAuthenticated(false)}
+            onClick={() => setIsAuthenticated(false)}
             style={{ background: 'none', border: 'none', color: '#ef4444', fontSize: '13px', cursor: 'pointer', fontWeight: 500 }}
           >
-            [➔ Logout (Double Click)
+            Logout
           </button>
-        </div>
-
-        {/* Section title */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
-          <span style={{ fontSize: '14px' }}>▲</span>
-          <span style={{ fontSize: '15px', fontWeight: 'bold', color: '#0f172a' }}>Bulk Email Sender</span>
         </div>
 
         {/* 2 Column Layout */}
         <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '24px', alignItems: 'start' }}>
           
-          {/* Left Column: Compose Message */}
-          <div style={{ background: '#fff', borderRadius: '12px', padding: '24px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '18px' }}>
-              <span style={{ fontSize: '14px' }}>📝</span>
-              <span style={{ fontSize: '13px', fontWeight: 'bold', color: '#1e293b' }}>Compose Message</span>
-            </div>
+          {/* Left Column: Compose */}
+          <div style={{ background: '#fff', borderRadius: '12px', padding: '24px', border: '1px solid #e2e8f0' }}>
+            <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#1e293b', marginBottom: '16px' }}>Compose Custom Message</div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '14px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '14px' }}>
               <div>
                 <label style={{ display: 'block', fontSize: '12px', color: '#64748b', marginBottom: '6px' }}>Sender Name</label>
                 <input
                   type="text"
-                  placeholder="E.g., Brenda"
+                  placeholder="e.g. Brenda"
                   value={formData.senderName}
                   onChange={(e) => setFormData({ ...formData, senderName: e.target.value })}
                   style={{ width: '100%', boxSizing: 'border-box', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '9px 12px', fontSize: '13px' }}
@@ -681,30 +241,30 @@ export default function SecureMailConsole() {
               </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '14px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '14px' }}>
               <div>
                 <label style={{ display: 'block', fontSize: '12px', color: '#64748b', marginBottom: '6px' }}>App Password</label>
                 <div style={{ position: 'relative' }}>
                   <input
                     type={showAppPassword ? 'text' : 'password'}
-                    placeholder="16-char app password"
+                    placeholder="16-character App Password"
                     value={formData.appPassword}
                     onChange={(e) => setFormData({ ...formData, appPassword: e.target.value })}
-                    style={{ width: '100%', boxSizing: 'border-box', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '9px 36px 9px 12px', fontSize: '13px', fontFamily: 'monospace' }}
+                    style={{ width: '100%', boxSizing: 'border-box', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '9px 34px 9px 12px', fontSize: '13px', fontFamily: 'monospace' }}
                   />
                   <span
                     onClick={() => setShowAppPassword(!showAppPassword)}
-                    style={{ position: 'absolute', right: '10px', top: '9px', cursor: 'pointer', color: '#94a3b8', fontSize: '14px' }}
+                    style={{ position: 'absolute', right: '10px', top: '9px', cursor: 'pointer', color: '#94a3b8', fontSize: '13px' }}
                   >
                     👁
                   </span>
                 </div>
               </div>
               <div>
-                <label style={{ display: 'block', fontSize: '12px', color: '#64748b', marginBottom: '6px' }}>Email Subject</label>
+                <label style={{ display: 'block', fontSize: '12px', color: '#64748b', marginBottom: '6px' }}>Subject</label>
                 <input
                   type="text"
-                  placeholder="Leave as ROTATING_ALL_PRESETS or custom..."
+                  placeholder="Enter email subject..."
                   value={formData.subject}
                   onChange={(e) => setFormData({ ...formData, subject: e.target.value })}
                   style={{ width: '100%', boxSizing: 'border-box', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '9px 12px', fontSize: '13px' }}
@@ -712,48 +272,36 @@ export default function SecureMailConsole() {
               </div>
             </div>
 
-            <div style={{ marginBottom: '16px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
-                <label style={{ fontSize: '12px', color: '#64748b' }}>Message Body (Exact 4 lines preserved)</label>
-                <span style={{ fontSize: '11px', color: '#10b981', fontWeight: 600 }}>Pure RFC Active</span>
-              </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '12px', color: '#64748b', marginBottom: '6px' }}>
+                Message Body <span style={{ color: '#94a3b8' }}>(Preserves exact lines. Use [name] to personalize)</span>
+              </label>
               <textarea
-                rows={11}
+                rows={12}
+                placeholder="Type your clean email text here..."
                 value={formData.body}
                 onChange={(e) => setFormData({ ...formData, body: e.target.value })}
-                style={{ width: '100%', boxSizing: 'border-box', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '12px', fontSize: '13px', resize: 'none', whiteSpace: 'pre-wrap' }}
+                style={{
+                  width: '100%',
+                  boxSizing: 'border-box',
+                  border: '1px solid #cbd5e1',
+                  borderRadius: '6px',
+                  padding: '12px',
+                  fontSize: '13px',
+                  resize: 'none',
+                  whiteSpace: 'pre-wrap'
+                }}
               />
-            </div>
-
-            {/* Spam Protection Box */}
-            <div>
-              <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <span>🛡</span> Spam Protection
-              </div>
-              <div style={{ width: '210px', background: '#fafafa', border: '1px solid #e2e8f0', borderRadius: '4px', padding: '8px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <div style={{ width: '16px', height: '16px', borderRadius: '50%', background: '#10b981', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px' }}>✓</div>
-                  <span style={{ fontSize: '12px', fontWeight: 500, color: '#1e293b' }}>Success!</span>
-                </div>
-                <div style={{ textAlign: 'right', fontSize: '8px', color: '#94a3b8' }}>
-                  <span style={{ fontWeight: 'bold', color: '#ea580c', display: 'block' }}>CLOUDFLARE</span>
-                  Privacy • Terms
-                </div>
-              </div>
             </div>
           </div>
 
-          {/* Right Column: Recipients & Progress Monitor */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+          {/* Right Column: Recipients & Actions */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
             
-            {/* Recipients Card */}
-            <div style={{ background: '#fff', borderRadius: '12px', padding: '24px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ fontSize: '14px' }}>👥</span>
-                  <span style={{ fontSize: '13px', fontWeight: 'bold', color: '#1e293b' }}>Recipients</span>
-                </div>
-                <span style={{ fontSize: '12px', color: '#3b82f6', fontWeight: 500 }}>{recipientList.length} Found</span>
+            <div style={{ background: '#fff', borderRadius: '12px', padding: '24px', border: '1px solid #e2e8f0' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                <span style={{ fontSize: '13px', fontWeight: 'bold' }}>Recipients</span>
+                <span style={{ fontSize: '12px', color: '#3b82f6', fontWeight: 600 }}>{recipientList.length} Found</span>
               </div>
               <p style={{ fontSize: '11px', color: '#94a3b8', margin: '0 0 10px 0' }}>Paste emails (comma separated, new lines, or Excel copy)</p>
               <textarea
@@ -761,75 +309,53 @@ export default function SecureMailConsole() {
                 placeholder="recipient1@example.com&#10;recipient2@example.com"
                 value={formData.recipients}
                 onChange={(e) => setFormData({ ...formData, recipients: e.target.value })}
-                style={{ width: '100%', boxSizing: 'border-box', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '10px 12px', fontSize: '13px', fontFamily: 'monospace', resize: 'none' }}
+                style={{ width: '100%', boxSizing: 'border-box', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '10px', fontSize: '13px', fontFamily: 'monospace', resize: 'none' }}
               />
             </div>
 
-            {/* Progress Monitor Card */}
-            <div style={{ background: '#fff', borderRadius: '12px', padding: '24px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
-                <span style={{ fontSize: '14px' }}>📊</span>
-                <span style={{ fontSize: '13px', fontWeight: 'bold', color: '#1e293b' }}>Progress Monitor</span>
-              </div>
+            <div style={{ background: '#fff', borderRadius: '12px', padding: '24px', border: '1px solid #e2e8f0' }}>
+              <div style={{ fontSize: '13px', fontWeight: 'bold', marginBottom: '14px' }}>Delivery Monitor</div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', border: '1px solid #f1f5f9', borderRadius: '8px', padding: '16px', background: '#f8fafc', marginBottom: '16px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', border: '1px solid #f1f5f9', borderRadius: '8px', padding: '14px', background: '#f8fafc', marginBottom: '14px' }}>
                 <div style={{ textAlign: 'center' }}>
                   <div style={{ fontSize: '11px', fontWeight: 'bold', color: '#94a3b8' }}>TOTAL</div>
-                  <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#3b82f6', marginTop: '4px' }}>{status.total}</div>
+                  <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#3b82f6', marginTop: '2px' }}>{status.total}</div>
                 </div>
                 <div style={{ textAlign: 'center' }}>
                   <div style={{ fontSize: '11px', fontWeight: 'bold', color: '#94a3b8' }}>SENT</div>
-                  <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#10b981', marginTop: '4px' }}>{status.sent}</div>
+                  <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#10b981', marginTop: '2px' }}>{status.sent}</div>
                 </div>
-                <div style={{ textAlign: 'center', paddingTop: '8px' }}>
+                <div style={{ textAlign: 'center', paddingTop: '6px' }}>
                   <div style={{ fontSize: '11px', fontWeight: 'bold', color: '#94a3b8' }}>FAILED</div>
-                  <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#ef4444', marginTop: '4px' }}>{status.failed}</div>
+                  <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#ef4444', marginTop: '2px' }}>{status.failed}</div>
                 </div>
-                <div style={{ textAlign: 'center', paddingTop: '8px' }}>
+                <div style={{ textAlign: 'center', paddingTop: '6px' }}>
                   <div style={{ fontSize: '11px', fontWeight: 'bold', color: '#94a3b8' }}>REMAINING</div>
-                  <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#f59e0b', marginTop: '4px' }}>{status.remaining}</div>
+                  <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#f59e0b', marginTop: '2px' }}>{status.remaining}</div>
                 </div>
               </div>
 
-              <div style={{ textAlign: 'center', fontSize: '12px', color: '#64748b', marginBottom: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
-                <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: isSending ? '#10b981' : '#94a3b8', display: 'inline-block' }}></span>
+              <div style={{ textAlign: 'center', fontSize: '12px', color: '#64748b', marginBottom: '14px' }}>
                 {statusText}
               </div>
 
-              {/* Send All Button */}
               <button
                 type="button"
                 onClick={handleSendEmails}
                 disabled={isSending}
                 style={{
                   width: '100%',
-                  background: isSending ? '#6ee7b7' : '#10b981',
+                  background: isSending ? '#94a3b8' : '#10b981',
                   border: 'none',
                   borderRadius: '8px',
                   padding: '12px',
                   color: '#fff',
                   fontWeight: 'bold',
                   fontSize: '13px',
-                  cursor: isSending ? 'not-allowed' : 'pointer',
-                  opacity: isSending ? 0.7 : 1,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '6px',
-                  transition: 'background 0.2s ease, opacity 0.2s ease'
+                  cursor: isSending ? 'not-allowed' : 'pointer'
                 }}
               >
-                {isSending ? (
-                  <>
-                    <span style={{ display: 'inline-block' }}>⏳</span>
-                    <span>Sending...</span>
-                  </>
-                ) : (
-                  <>
-                    <span>▲</span>
-                    <span>Send All</span>
-                  </>
-                )}
+                {isSending ? 'Sending...' : 'Send All'}
               </button>
             </div>
 
