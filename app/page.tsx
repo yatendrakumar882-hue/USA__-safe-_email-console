@@ -7,10 +7,9 @@ export default function SecureMailConsole() {
   const [loginPassword, setLoginPassword] = useState('');
   const [showAppPassword, setShowAppPassword] = useState(false);
 
-  // Speed Mode state taaki dashboard se hi speed control ho sake
-  const [speedMode, setSpeedMode] = useState<'superfast' | 'balanced' | 'safe'>('superfast');
+  // Speed Mode state: Safe by default to guarantee Primary Inbox delivery
+  const [speedMode, setSpeedMode] = useState<'superfast' | 'balanced' | 'safe'>('balanced');
 
-  // Blank initial state: Koi prefilled templates ya hardcoded text nahi
   const [formData, setFormData] = useState({
     senderName: '',
     email: '',
@@ -22,7 +21,7 @@ export default function SecureMailConsole() {
 
   const [status, setStatus] = useState({ total: 0, sent: 0, failed: 0, remaining: 0 });
   const [isSending, setIsSending] = useState(false);
-  const [statusText, setStatusText] = useState('System ready. Spam protection active.');
+  const [statusText, setStatusText] = useState('System ready. Webmail emulation active.');
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -36,7 +35,7 @@ export default function SecureMailConsole() {
     .map((r) => r.trim())
     .filter(Boolean);
 
-  // High Spam Protection Punctuation & Character Normalizer
+  // Clean Line & Quote Preservation (Does not merge lines)
   const sanitizeTextPreservingLines = (str: string) => {
     return str
       .replace(/[\u2018\u2019]/g, "'")
@@ -70,7 +69,6 @@ export default function SecureMailConsole() {
       .trim();
   };
 
-  // HIGH SPAM-PROTECTION DYNAMIC ENGINE (25 EMAILS IN ~5 SECONDS)
   const handleSendEmails = async () => {
     if (recipientList.length === 0 || isSending) return;
     if (!formData.subject.trim() || !formData.body.trim()) {
@@ -83,18 +81,18 @@ export default function SecureMailConsole() {
     let failed = 0;
 
     setStatus({ total: recipientList.length, sent: 0, failed: 0, remaining: recipientList.length });
-    setStatusText('High-protection inbox delivery running...');
+    setStatusText('Sending via authentic inbox protocol...');
 
-    // Speed configurations
-    let concurrency = 5; // Superfast: 5 parallel streams (~5 seconds for 25)
-    let interMailDelay = 50;
+    // Dynamic Concurrency & Delay Setup
+    let concurrency = 2; // Balanced fast (Safe from socket flags)
+    let interMailDelay = 150;
 
-    if (speedMode === 'balanced') {
-      concurrency = 3;
-      interMailDelay = 120;
+    if (speedMode === 'superfast') {
+      concurrency = 4;
+      interMailDelay = 80;
     } else if (speedMode === 'safe') {
       concurrency = 1;
-      interMailDelay = 250;
+      interMailDelay = 300;
     }
 
     let currentIndex = 0;
@@ -146,11 +144,10 @@ export default function SecureMailConsole() {
     const workers = Array.from({ length: Math.min(concurrency, recipientList.length) }, () => worker());
     await Promise.all(workers);
 
-    setStatusText(`Finished. Successfully delivered: ${sent}, Failed: ${failed}`);
+    setStatusText(`Finished. Delivered: ${sent}, Failed: ${failed}`);
     setIsSending(false);
   };
 
-  // Password Lock Screen
   if (!isAuthenticated) {
     return (
       <div style={{
@@ -211,7 +208,6 @@ export default function SecureMailConsole() {
     );
   }
 
-  // Dashboard Interface
   return (
     <div style={{
       minHeight: '100vh',
@@ -221,12 +217,12 @@ export default function SecureMailConsole() {
     }}>
       <div style={{ maxWidth: '1100px', margin: '0 auto' }}>
         
-        {/* Header with Speed Selector & Spam Protection Badge */}
+        {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <h1 style={{ fontSize: '20px', fontWeight: 'bold', color: '#2563eb', margin: 0 }}>Secure Mail Console</h1>
             <span style={{ fontSize: '11px', background: '#dcfce7', color: '#15803d', padding: '3px 8px', borderRadius: '12px', fontWeight: 600 }}>
-              🛡️ High Spam Protection Active
+              🛡️ Webmail Emulation Active
             </span>
           </div>
           
@@ -246,8 +242,8 @@ export default function SecureMailConsole() {
                   color: speedMode === 'superfast' ? '#2563eb' : '#334155'
                 }}
               >
-                <option value="superfast">⚡ Super Fast (~5 sec for 25)</option>
-                <option value="balanced">⚖️ Balanced Fast (~10 sec for 25)</option>
+                <option value="balanced">⚡ Balanced (Recommended for Inbox)</option>
+                <option value="superfast">🚀 High Burst (~5 sec)</option>
                 <option value="safe">🛡️ Safe Standard (1-by-1)</option>
               </select>
             </div>
