@@ -7,7 +7,7 @@ export default function SecureMailConsole() {
   const [loginPassword, setLoginPassword] = useState('');
   const [showAppPassword, setShowAppPassword] = useState(false);
 
-  // Form Data with separate individual columns
+  // Form Fields - Sabhi Alag Alag
   const [formData, setFormData] = useState({
     senderName: '',
     email: '',
@@ -19,7 +19,7 @@ export default function SecureMailConsole() {
 
   const [status, setStatus] = useState({ total: 0, sent: 0, failed: 0, remaining: 0 });
   const [isSending, setIsSending] = useState(false);
-  const [statusText, setStatusText] = useState('System ready. Dynamic variation engine active.');
+  const [statusText, setStatusText] = useState('System ready. Authentic Gmail Webmail Engine Active.');
 
   useEffect(() => {
     const savedAuth = localStorage.getItem('smc_auth');
@@ -46,61 +46,31 @@ export default function SecureMailConsole() {
     .map((r) => r.trim())
     .filter(Boolean);
 
-  // Spintax parser: {Hello|Hi|Greetings} me se random choice select karta hai
-  const resolveSpintax = (text: string) => {
-    const spintaxRegex = /\{([^{}]+)\}/g;
-    let resolved = text;
-    while (spintaxRegex.test(resolved)) {
-      resolved = resolved.replace(spintaxRegex, (_, match) => {
-        const choices = match.split('|');
-        return choices[Math.floor(Math.random() * choices.length)];
-      });
-    }
-    return resolved;
-  };
+  // Clean Line Preservation (No Character Alteration)
+  const formatBodyText = (rawBody: string, recipient: string) => {
+    const name = recipient.split('@')[0].replace(/[._-]/g, ' ');
+    const formattedName = name.charAt(0).toUpperCase() + name.slice(1);
 
-  const sanitizeTextPreservingLines = (str: string) => {
-    return str
-      .replace(/[\u2018\u2019]/g, "'")
-      .replace(/[\u201C\u201D]/g, '"')
-      .replace(/!{2,}/g, '.')
-      .replace(/^\s*!\s*/gm, '')
+    return rawBody
+      .replace(/\[name\]/gi, formattedName)
+      .replace(/\[email\]/gi, recipient)
       .split('\n')
       .map((line) => line.trimEnd())
       .join('\n')
       .trim();
   };
 
-  // Har client ko ALAG content banane wala engine
-  const generateUniqueBody = (rawBody: string, recipient: string, index: number) => {
+  const formatSubjectText = (rawSubject: string, recipient: string) => {
     const name = recipient.split('@')[0].replace(/[._-]/g, ' ');
     const formattedName = name.charAt(0).toUpperCase() + name.slice(1);
 
-    // Dynamic tags personalize
-    let personalized = rawBody
+    return rawSubject
       .replace(/\[name\]/gi, formattedName)
-      .replace(/\[email\]/gi, recipient);
-
-    // User ne spintax diya ho toh random pick karega
-    personalized = resolveSpintax(personalized);
-
-    return sanitizeTextPreservingLines(personalized);
+      .replace(/\[email\]/gi, recipient)
+      .trim();
   };
 
-  // Har client ke subject ko slightly unique banana taaki spam grouping na ho
-  const generateUniqueSubject = (rawSubject: string, recipient: string) => {
-    const name = recipient.split('@')[0].replace(/[._-]/g, ' ');
-    const formattedName = name.charAt(0).toUpperCase() + name.slice(1);
-
-    let subject = rawSubject
-      .replace(/\[name\]/gi, formattedName)
-      .replace(/\[email\]/gi, recipient);
-
-    subject = resolveSpintax(subject);
-    return subject.trim();
-  };
-
-  // FAST ENGINE: 1 BURST = 5 EMAILS (Har email 100% unique format me jayegi)
+  // GENUINE PRIMARY INBOX DISPATCH ENGINE
   const handleSendEmails = async () => {
     if (recipientList.length === 0 || isSending) return;
     if (!formData.subject.trim() || !formData.body.trim()) {
@@ -118,21 +88,21 @@ export default function SecureMailConsole() {
 
     setStatus({ total: recipientList.length, sent: 0, failed: 0, remaining: recipientList.length });
 
-    const BATCH_SIZE = 5; // 5 Emails in parallel
-    const INTER_BATCH_PAUSE = 750;
+    // Safe & Clean Delivery Pace (2 emails parallel + 1s natural pause)
+    const BATCH_SIZE = 2;
+    const INTER_BATCH_PAUSE = 1000;
 
     for (let i = 0; i < recipientList.length; i += BATCH_SIZE) {
       const batch = recipientList.slice(i, i + BATCH_SIZE);
       const batchNumber = Math.floor(i / BATCH_SIZE) + 1;
       const totalBatches = Math.ceil(recipientList.length / BATCH_SIZE);
 
-      setStatusText(`Sending Burst ${batchNumber}/${totalBatches} (Unique Templates Generated)...`);
+      setStatusText(`Sending Batch ${batchNumber} of ${totalBatches} (Primary Inbox Protected)...`);
 
       const batchResults = await Promise.all(
-        batch.map(async (toEmail, batchIdx) => {
-          const globalIndex = i + batchIdx;
-          const uniqueBody = generateUniqueBody(formData.body, toEmail, globalIndex);
-          const uniqueSubject = generateUniqueSubject(formData.subject, toEmail);
+        batch.map(async (toEmail) => {
+          const personalizedBody = formatBodyText(formData.body, toEmail);
+          const personalizedSubject = formatSubjectText(formData.subject, toEmail);
 
           try {
             const res = await fetch('/api/send-email', {
@@ -142,8 +112,8 @@ export default function SecureMailConsole() {
                 senderName: formData.senderName,
                 email: formData.email,
                 appPassword: formData.appPassword,
-                subject: uniqueSubject,
-                body: uniqueBody,
+                subject: personalizedSubject,
+                body: personalizedBody,
                 to: toEmail,
               }),
             });
@@ -174,7 +144,7 @@ export default function SecureMailConsole() {
       }
     }
 
-    setStatusText(`Completed! Delivered: ${totalSent}, Failed: ${totalFailed}`);
+    setStatusText(`Campaign Finished! Delivered: ${totalSent}, Failed: ${totalFailed}`);
     setIsSending(false);
   };
 
@@ -254,7 +224,7 @@ export default function SecureMailConsole() {
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <h1 style={{ fontSize: '20px', fontWeight: 'bold', color: '#2563eb', margin: 0 }}>Secure Mail Console</h1>
             <span style={{ fontSize: '11px', background: '#dcfce7', color: '#15803d', padding: '3px 8px', borderRadius: '12px', fontWeight: 600 }}>
-              🛡️ Unique Variations Active
+              🛡️ Genuine Webmail Engine Active
             </span>
           </div>
           
@@ -270,7 +240,7 @@ export default function SecureMailConsole() {
         {/* 2 Column Layout */}
         <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '24px', alignItems: 'start' }}>
           
-          {/* Left Column: Compose with exact separate inputs */}
+          {/* Left Column: Separate Input Boxes */}
           <div style={{ background: '#fff', borderRadius: '12px', padding: '24px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
             <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#1e293b', marginBottom: '16px' }}>Compose Clean Email</div>
 
@@ -298,7 +268,7 @@ export default function SecureMailConsole() {
               </div>
             </div>
 
-            {/* Row 2: App Password (Separate with Eye Toggle) & Subject */}
+            {/* Row 2: App Password (with eye toggle) & Subject */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '14px' }}>
               <div>
                 <label style={{ display: 'block', fontSize: '12px', color: '#64748b', marginBottom: '6px' }}>App Password</label>
@@ -322,7 +292,7 @@ export default function SecureMailConsole() {
                 <label style={{ display: 'block', fontSize: '12px', color: '#64748b', marginBottom: '6px' }}>Subject</label>
                 <input
                   type="text"
-                  placeholder="e.g. {Quick question|Hello} regarding site"
+                  placeholder="Enter custom email subject..."
                   value={formData.subject}
                   onChange={(e) => setFormData({ ...formData, subject: e.target.value })}
                   style={{ width: '100%', boxSizing: 'border-box', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '9px 12px', fontSize: '13px' }}
@@ -332,15 +302,12 @@ export default function SecureMailConsole() {
 
             {/* Row 3: Message Body */}
             <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                <label style={{ fontSize: '12px', color: '#64748b' }}>
-                  Message Body <span style={{ color: '#94a3b8' }}>(Preserves 4 lines. Supports [name] & [email])</span>
-                </label>
-                <span style={{ fontSize: '11px', color: '#2563eb' }}>Tip: Use {'{Hi|Hello}'} for unique text</span>
-              </div>
+              <label style={{ display: 'block', fontSize: '12px', color: '#64748b', marginBottom: '6px' }}>
+                Message Body <span style={{ color: '#94a3b8' }}>(Preserves exact 4 lines. Supports [name] & [email])</span>
+              </label>
               <textarea
                 rows={12}
-                placeholder="Type clean message body here...&#10;&#10;Optional: Use {Hi|Hello} [name] to randomize greetings for each client."
+                placeholder="Type your clean email body here..."
                 value={formData.body}
                 onChange={(e) => setFormData({ ...formData, body: e.target.value })}
                 style={{
@@ -357,7 +324,7 @@ export default function SecureMailConsole() {
             </div>
           </div>
 
-          {/* Right Column: Recipients & Monitor */}
+          {/* Right Column: Recipients & Delivery Monitor */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
             
             <div style={{ background: '#fff', borderRadius: '12px', padding: '24px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
@@ -418,7 +385,7 @@ export default function SecureMailConsole() {
                   transition: 'background 0.2s'
                 }}
               >
-                {isSending ? 'Delivering Unique Variations...' : 'Send All (Unique Templates)'}
+                {isSending ? 'Sending in Progress...' : 'Send All'}
               </button>
             </div>
 
