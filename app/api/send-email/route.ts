@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import nodemailer from 'nodemailer';
-import { SocksProxyAgent } from 'socks-proxy-agent';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -18,71 +17,44 @@ export async function POST(req: Request) {
     const cleanTo = to.trim().toLowerCase();
     const displayName = senderName ? senderName.trim() : cleanEmail.split('@')[0];
 
-    // Standard RFC line endings preservation
+    // Standard RFC line endings
     const normalizedBody = body.replace(/\r\n/g, '\n').replace(/\n/g, '\r\n').trim();
 
-    // Primary Inbox Format: Exact 11pt Arial without classes or external styles
+    // Clean inline formatting for Outlook & Gmail (11pt Arial)
     const formattedHtml = normalizedBody
       .split('\r\n\r\n')
       .map(
         (para: string) =>
-          `<div style="margin-bottom: 12px; font-family: Arial, Helvetica, sans-serif; font-size: 11pt; line-height: 1.45; color: #222222;">${para.replace(
+          `<div style="margin-bottom: 12px; font-family: Arial, Helvetica, sans-serif; font-size: 11pt; line-height: 1.5; color: #222222;">${para.replace(
             /\r\n/g,
             '<br/>'
           )}</div>`
       )
       .join('');
 
-    const rawProxies = process.env.SOCKS5_PROXY_URLS || '';
-    const proxyList = rawProxies.split(',').map((p) => p.trim()).filter(Boolean);
+    // Direct High-Trust Connection (Bina kisi proxy footprint ke)
+    const transporter = nodemailer.createTransport({
+      host: 'smtp.gmail.com',
+      port: 465,
+      secure: true,
+      auth: {
+        user: cleanEmail,
+        pass: cleanAppPass,
+      },
+      connectionTimeout: 10000,
+    });
 
-    const sendEmailViaSmtp = async (useProxy: boolean) => {
-      let agent: SocksProxyAgent | undefined = undefined;
-
-      if (useProxy && proxyList.length > 0) {
-        const randomProxy = proxyList[Math.floor(Math.random() * proxyList.length)];
-        agent = new SocksProxyAgent(randomProxy);
-      }
-
-      const transporter = nodemailer.createTransport({
-        host: 'smtp.gmail.com',
-        port: 465,
-        secure: true,
-        auth: {
-          user: cleanEmail,
-          pass: cleanAppPass,
-        },
-        connectionTimeout: 10000,
-        greetingTimeout: 8000,
-        socketTimeout: 12000,
-        ...(agent && {
-          pool: false,
-          // @ts-ignore
-          agent: agent,
-        }),
-      });
-
-      // Pure Google SMTP Signature: Natural DKIM, SPF aur DMARC pass format
-      return await transporter.sendMail({
-        from: `"${displayName}" <${cleanEmail}>`,
-        to: cleanTo,
-        subject: subject.trim(),
-        text: normalizedBody,
-        html: `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="margin:0;padding:12px;font-family:Arial,Helvetica,sans-serif;font-size:11pt;color:#222222;">${formattedHtml}</body></html>`,
-      });
-    };
-
-    let info;
-    try {
-      info = await sendEmailViaSmtp(proxyList.length > 0);
-    } catch (primaryErr: any) {
-      console.warn('Proxy route failover, sending via direct clean connection...', primaryErr?.message);
-      info = await sendEmailViaSmtp(false);
-    }
+    const info = await transporter.sendMail({
+      from: `"${displayName}" <${cleanEmail}>`,
+      to: cleanTo,
+      subject: subject.trim(),
+      text: normalizedBody,
+      html: `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="margin:0;padding:12px;font-family:Arial,Helvetica,sans-serif;font-size:11pt;color:#222222;">${formattedHtml}</body></html>`,
+    });
 
     return NextResponse.json({ success: true, messageId: info.messageId });
   } catch (error: any) {
-    console.error('Final SMTP Delivery Error:', error);
+    console.error('SMTP Error:', error);
     return NextResponse.json({ success: false, error: error.message || 'Delivery failed' }, { status: 500 });
   }
 }
