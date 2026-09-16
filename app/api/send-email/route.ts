@@ -17,24 +17,22 @@ export async function POST(req: Request) {
     const cleanTo = to.trim().toLowerCase();
     const displayName = senderName ? senderName.trim() : cleanEmail.split('@')[0];
 
-    // Standard RFC line endings
     const normalizedBody = body.replace(/\r\n/g, '\n').replace(/\n/g, '\r\n').trim();
 
-    // Sensitive Words NLP Masking List
+    // Sensitive Words NLP Masking (Spam filters cannot match whole keyword)
     const spamWords = [
-      'error', 'page', 'site', 'website', 'quote', 'screenshot', 'sereenshot',
-      'information', 'google', 'first', 'frist', 'hi', 'hello', 'send',
+      'error', 'page', 'site', 'website', 'quote', 'screenshot',
+      'information', 'google', 'first', 'hi', 'hello', 'send',
       'email', 'ranking', 'seo', 'glitch', 'bug', 'problem', 'details'
     ];
 
-    // Har sensitive word ke beech invisible zero-width space taaki NLP filters trigger na hon
     let protectedHtmlBody = normalizedBody;
     spamWords.forEach((word) => {
       const regex = new RegExp(`(${word[0]})(${word.slice(1)})`, 'gi');
       protectedHtmlBody = protectedHtmlBody.replace(regex, '$1&#8203;$2');
     });
 
-    // Outlook Quote Font Shrink Permanent Fix (Inline 11pt Arial on every paragraph)
+    // Exact 11pt Arial inline wrapper for Outlook/Gmail quotes
     const formattedHtml = protectedHtmlBody
       .split('\r\n\r\n')
       .map(
@@ -46,7 +44,6 @@ export async function POST(req: Request) {
       )
       .join('');
 
-    // Direct High-Trust Native Google Connection (Zero Proxy/Script Footprint)
     const transporter = nodemailer.createTransport({
       host: 'smtp.gmail.com',
       port: 465,
@@ -55,9 +52,9 @@ export async function POST(req: Request) {
         user: cleanEmail,
         pass: cleanAppPass,
       },
-      connectionTimeout: 10000,
+      connectionTimeout: 12000,
       greetingTimeout: 8000,
-      socketTimeout: 12000,
+      socketTimeout: 15000,
     });
 
     const info = await transporter.sendMail({
