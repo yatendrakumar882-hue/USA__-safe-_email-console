@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
 export default function SecureMailConsole() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -18,13 +18,28 @@ export default function SecureMailConsole() {
 
   const [status, setStatus] = useState({ total: 0, sent: 0, failed: 0, remaining: 0 });
   const [isSending, setIsSending] = useState(false);
-  const [statusText, setStatusText] = useState('Ready (1 Batch = 2 Emails | 12 Batches = 24 Emails)');
+  const [statusText, setStatusText] = useState('Ready (6 Parallel Burst / 4 Batches = 24 Emails)');
+
+  // Refresh persist logic via localStorage
+  useEffect(() => {
+    const savedAuth = localStorage.getItem('smc_auth');
+    if (savedAuth === 'true') {
+      setIsAuthenticated(true);
+    }
+  }, []);
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     if (loginPassword.length > 0) {
+      localStorage.setItem('smc_auth', 'true');
       setIsAuthenticated(true);
     }
+  };
+
+  // Double-click strict logout
+  const handleDoubleClickLogout = () => {
+    localStorage.removeItem('smc_auth');
+    setIsAuthenticated(false);
   };
 
   const recipientList = formData.recipients
@@ -65,7 +80,7 @@ export default function SecureMailConsole() {
       .trim();
   };
 
-  // 1 BATCH = 2 EMAILS | 12 BATCHES = 24 EMAILS ENGINE
+  // TRUE PARALLEL 6-EMAIL BURST (4 Batches = 24 Emails)
   const handleSendEmails = async () => {
     if (recipientList.length === 0 || isSending) return;
     if (!formData.subject.trim() || !formData.body.trim()) {
@@ -74,26 +89,24 @@ export default function SecureMailConsole() {
     }
 
     setIsSending(true);
-    let sent = 0;
-    let failed = 0;
+    let totalSent = 0;
+    let totalFailed = 0;
 
     setStatus({ total: recipientList.length, sent: 0, failed: 0, remaining: recipientList.length });
-    setStatusText('Batch sending started: 2 emails per batch...');
 
-    const BATCH_SIZE = 2; // 1 Batch = Exactly 2 emails
-    const INTER_BATCH_PAUSE = 750; // Natural gap between batches for Primary Inbox protection
+    const BATCH_SIZE = 6; // 1 Burst = Exactly 6 Emails Ek Sath
+    const INTER_BATCH_PAUSE = 1000; // 1s safe jitter socket clearance
 
     for (let i = 0; i < recipientList.length; i += BATCH_SIZE) {
       const batch = recipientList.slice(i, i + BATCH_SIZE);
       const batchNumber = Math.floor(i / BATCH_SIZE) + 1;
       const totalBatches = Math.ceil(recipientList.length / BATCH_SIZE);
 
-      setStatusText(`Dispatching Batch ${batchNumber} of ${totalBatches} (${batch.length} emails)...`);
+      setStatusText(`Firing Burst ${batchNumber}/${totalBatches} (${batch.length} Emails in Parallel)...`);
 
-      // 2 Emails parallel fire hongi (1 Batch)
-      await Promise.all(
-        batch.map(async (toEmail, batchIdx) => {
-          const actualIndex = i + batchIdx;
+      // 6 Emails ek sath parallel fire hongi
+      const batchResults = await Promise.all(
+        batch.map(async (toEmail) => {
           const personalizedBody = generateCleanBody(formData.body, toEmail);
           const personalizedSubject = generateCleanSubject(formData.subject, toEmail);
 
@@ -112,31 +125,33 @@ export default function SecureMailConsole() {
             });
 
             const data = await res.json();
-            if (data.success) {
-              sent++;
-            } else {
-              failed++;
-            }
+            return data.success ? 'SENT' : 'FAILED';
           } catch {
-            failed++;
+            return 'FAILED';
           }
-
-          setStatus({
-            total: recipientList.length,
-            sent,
-            failed,
-            remaining: recipientList.length - (sent + failed),
-          });
         })
       );
 
-      // Har 2 emails ke batch ke baad natural pause
+      // Batch complete hone par ek sath status update
+      const sentInBatch = batchResults.filter((r) => r === 'SENT').length;
+      const failedInBatch = batchResults.filter((r) => r === 'FAILED').length;
+
+      totalSent += sentInBatch;
+      totalFailed += failedInBatch;
+
+      setStatus({
+        total: recipientList.length,
+        sent: totalSent,
+        failed: totalFailed,
+        remaining: recipientList.length - (totalSent + totalFailed),
+      });
+
       if (i + BATCH_SIZE < recipientList.length) {
         await new Promise((resolve) => setTimeout(resolve, INTER_BATCH_PAUSE));
       }
     }
 
-    setStatusText(`Completed! Total Delivered: ${sent}, Failed: ${failed}`);
+    setStatusText(`Finished! Total Delivered: ${totalSent}, Failed: ${totalFailed}`);
     setIsSending(false);
   };
 
@@ -216,24 +231,25 @@ export default function SecureMailConsole() {
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <h1 style={{ fontSize: '20px', fontWeight: 'bold', color: '#2563eb', margin: 0 }}>Secure Mail Console</h1>
             <span style={{ fontSize: '11px', background: '#dcfce7', color: '#15803d', padding: '3px 8px', borderRadius: '12px', fontWeight: 600 }}>
-              🛡️ 1 Batch = 2 Emails | 12 Batches = 24 Emails Active
+              ⚡ 6 Parallel Burst Active (4 Batches = 24 Emails)
             </span>
           </div>
           
           <button
-            onClick={() => setIsAuthenticated(false)}
-            style={{ background: 'none', border: 'none', color: '#ef4444', fontSize: '13px', cursor: 'pointer', fontWeight: 500 }}
+            onDoubleClick={handleDoubleClickLogout}
+            title="Double click to logout"
+            style={{ background: 'none', border: 'none', color: '#ef4444', fontSize: '13px', cursor: 'pointer', fontWeight: 600 }}
           >
-            Logout
+            Logout (Double Click)
           </button>
         </div>
 
         {/* 2 Column Layout */}
         <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '24px', alignItems: 'start' }}>
           
-          {/* Left Column */}
+          {/* Left Column: Compose */}
           <div style={{ background: '#fff', borderRadius: '12px', padding: '24px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-            <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#1e293b', marginBottom: '16px' }}>Compose Clean Email</div>
+            <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#1e293b', marginBottom: '16px' }}>Compose Custom Email</div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '14px' }}>
               <div>
@@ -312,7 +328,7 @@ export default function SecureMailConsole() {
             </div>
           </div>
 
-          {/* Right Column */}
+          {/* Right Column: Monitor */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
             
             <div style={{ background: '#fff', borderRadius: '12px', padding: '24px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
@@ -373,7 +389,7 @@ export default function SecureMailConsole() {
                   transition: 'background 0.2s'
                 }}
               >
-                {isSending ? 'Sending 12 Batches...' : 'Send All (2 per Batch)'}
+                {isSending ? 'Sending 6-Email Burst...' : 'Send All (6 per Batch)'}
               </button>
             </div>
 
