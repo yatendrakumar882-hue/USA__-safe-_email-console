@@ -94,7 +94,7 @@ export default function SecureMailConsole() {
     setStatus({ total: recipientList.length, sent: 0, failed: 0, remaining: recipientList.length });
 
     const BATCH_SIZE = 6; // Exactly 6 emails per burst
-    const INTER_BATCH_PAUSE = 850; // Socket clearance gap
+    const INTER_BATCH_PAUSE = 1500; // Socket clearance gap
 
     for (let i = 0; i < recipientList.length; i += BATCH_SIZE) {
       const batch = recipientList.slice(i, i + BATCH_SIZE);
