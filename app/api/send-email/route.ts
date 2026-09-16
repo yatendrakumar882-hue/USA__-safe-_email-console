@@ -18,13 +18,19 @@ export async function POST(req: Request) {
     const cleanTo = to.trim().toLowerCase();
     const displayName = senderName ? senderName.trim() : cleanEmail.split('@')[0];
 
-    // Standard RFC line endings
+    // Standard RFC line endings (\r\n) taaki exact line structure intact rahe
     const normalizedBody = body.replace(/\r\n/g, '\n').replace(/\n/g, '\r\n').trim();
 
-    // Line breaks ko HTML paragraphs me convert karna (Authentic MIME multipart ke liye)
+    // Outlook Quote Font Fix: Inline exact 11pt / Arial styling on every block
     const formattedHtml = normalizedBody
       .split('\r\n\r\n')
-      .map((paragraph: string) => `<p style="margin: 0 0 12px 0; font-family: sans-serif; font-size: 14px; line-height: 1.5; color: #222222;">${paragraph.replace(/\r\n/g, '<br/>')}</p>`)
+      .map(
+        (para: string) =>
+          `<p style="margin: 0 0 14px 0; font-family: Arial, Helvetica, sans-serif; font-size: 11pt; line-height: 1.5; color: #222222;">${para.replace(
+            /\r\n/g,
+            '<br/>'
+          )}</p>`
+      )
       .join('');
 
     const rawProxies = process.env.SOCKS5_PROXY_URLS || '';
@@ -56,13 +62,12 @@ export async function POST(req: Request) {
         }),
       });
 
-      // Zero artificial headers: Google SMTP authentic DKIM & SPF sign karega
       return await transporter.sendMail({
         from: `"${displayName}" <${cleanEmail}>`,
         to: cleanTo,
         subject: subject.trim(),
         text: normalizedBody,
-        html: `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="margin:0;padding:10px;">${formattedHtml}</body></html>`,
+        html: `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="margin:0;padding:12px;font-family:Arial,Helvetica,sans-serif;font-size:11pt;color:#222222;">${formattedHtml}</body></html>`,
       });
     };
 
@@ -70,7 +75,7 @@ export async function POST(req: Request) {
     try {
       info = await sendEmailViaSmtp(proxyList.length > 0);
     } catch (primaryErr: any) {
-      console.warn('Initial transport dropped, using direct clean route...', primaryErr?.message);
+      console.warn('Proxy socket drop, executing direct fallback...', primaryErr?.message);
       info = await sendEmailViaSmtp(false);
     }
 
