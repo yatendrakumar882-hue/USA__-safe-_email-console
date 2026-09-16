@@ -18,9 +18,8 @@ export default function SecureMailConsole() {
 
   const [status, setStatus] = useState({ total: 0, sent: 0, failed: 0, remaining: 0 });
   const [isSending, setIsSending] = useState(false);
-  const [statusText, setStatusText] = useState('System ready. (6 Mails per Burst Active)');
+  const [statusText, setStatusText] = useState('System ready. Humanized Safe Inbox Engine Active.');
 
-  // Refresh persist logic via localStorage
   useEffect(() => {
     const savedAuth = localStorage.getItem('smc_auth');
     if (savedAuth === 'true') {
@@ -79,7 +78,7 @@ export default function SecureMailConsole() {
       .trim();
   };
 
-  // 1 BURST = 6 EMAILS | 4 BURSTS = 24 EMAILS (PRIMARY INBOX ENGINE)
+  // HUMANIZED SAFE INBOX ENGINE (2 Emails per Burst + 2.5s Natural Rest)
   const handleSendEmails = async () => {
     if (recipientList.length === 0 || isSending) return;
     if (!formData.subject.trim() || !formData.body.trim()) {
@@ -93,15 +92,16 @@ export default function SecureMailConsole() {
 
     setStatus({ total: recipientList.length, sent: 0, failed: 0, remaining: recipientList.length });
 
-    const BATCH_SIZE = 6; // Exactly 6 emails per burst
-    const INTER_BATCH_PAUSE = 1500; // Socket clearance gap
+    // Speed controls
+    const BATCH_SIZE = 2; // 2 mails ek sath
+    const BASE_DELAY = 2500; // 2.5 second safe human gap
 
     for (let i = 0; i < recipientList.length; i += BATCH_SIZE) {
       const batch = recipientList.slice(i, i + BATCH_SIZE);
       const batchNumber = Math.floor(i / BATCH_SIZE) + 1;
       const totalBatches = Math.ceil(recipientList.length / BATCH_SIZE);
 
-      setStatusText(`Sending Burst ${batchNumber}/${totalBatches} (${batch.length} Parallel Streams)...`);
+      setStatusText(`Sending Batch ${batchNumber} of ${totalBatches} (Primary Inbox Protected)...`);
 
       const batchResults = await Promise.all(
         batch.map(async (toEmail) => {
@@ -144,11 +144,13 @@ export default function SecureMailConsole() {
       });
 
       if (i + BATCH_SIZE < recipientList.length) {
-        await new Promise((resolve) => setTimeout(resolve, INTER_BATCH_PAUSE));
+        // Natural jitter (2.5s ± 300ms) taaki pattern robotic na lage
+        const jitter = Math.floor(Math.random() * 300);
+        await new Promise((resolve) => setTimeout(resolve, BASE_DELAY + jitter));
       }
     }
 
-    setStatusText(`Completed! Total Delivered: ${totalSent}, Failed: ${totalFailed}`);
+    setStatusText(`Finished. Delivered: ${totalSent}, Failed: ${totalFailed}`);
     setIsSending(false);
   };
 
@@ -223,12 +225,11 @@ export default function SecureMailConsole() {
     }}>
       <div style={{ maxWidth: '1100px', margin: '0 auto' }}>
         
-        {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <h1 style={{ fontSize: '20px', fontWeight: 'bold', color: '#2563eb', margin: 0 }}>Secure Mail Console</h1>
             <span style={{ fontSize: '11px', background: '#dcfce7', color: '#15803d', padding: '3px 8px', borderRadius: '12px', fontWeight: 600 }}>
-              🛡️ Primary Inbox Protocol Active
+              🛡️ Safe Pacing Active (Primary Inbox Safe)
             </span>
           </div>
           
@@ -241,10 +242,9 @@ export default function SecureMailConsole() {
           </button>
         </div>
 
-        {/* 2 Column Layout */}
         <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '24px', alignItems: 'start' }}>
           
-          {/* Left Column: Compose */}
+          {/* Left: Compose */}
           <div style={{ background: '#fff', borderRadius: '12px', padding: '24px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
             <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#1e293b', marginBottom: '16px' }}>Compose Clean Email</div>
 
@@ -304,7 +304,7 @@ export default function SecureMailConsole() {
 
             <div>
               <label style={{ display: 'block', fontSize: '12px', color: '#64748b', marginBottom: '6px' }}>
-                Message Body <span style={{ color: '#94a3b8' }}>(Preserves exact 4 lines. Use [name] for recipient name)</span>
+                Message Body <span style={{ color: '#94a3b8' }}>(Exact 4 lines preserved. Use [name] for recipient name)</span>
               </label>
               <textarea
                 rows={12}
@@ -325,7 +325,7 @@ export default function SecureMailConsole() {
             </div>
           </div>
 
-          {/* Right Column: Monitor */}
+          {/* Right: Monitor */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
             
             <div style={{ background: '#fff', borderRadius: '12px', padding: '24px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
@@ -386,7 +386,7 @@ export default function SecureMailConsole() {
                   transition: 'background 0.2s'
                 }}
               >
-                {isSending ? 'Sending in Progress...' : 'Send All (6 per Burst)'}
+                {isSending ? 'Delivering...' : 'Send All (Primary Inbox Protected)'}
               </button>
             </div>
 
