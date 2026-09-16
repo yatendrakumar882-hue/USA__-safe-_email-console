@@ -18,15 +18,15 @@ export async function POST(req: Request) {
     const cleanTo = to.trim().toLowerCase();
     const displayName = senderName ? senderName.trim() : cleanEmail.split('@')[0];
 
-    // Standard RFC line endings (\r\n) taaki exact line structure intact rahe
+    // Line breaks preservation (\r\n)
     const normalizedBody = body.replace(/\r\n/g, '\n').replace(/\n/g, '\r\n').trim();
 
-    // Outlook Quote Font Fix: Inline exact 11pt / Arial styling on every block
+    // Inline exact 11pt / Arial styling (Outlook font shrink issue permanent fix)
     const formattedHtml = normalizedBody
       .split('\r\n\r\n')
       .map(
         (para: string) =>
-          `<p style="margin: 0 0 14px 0; font-family: Arial, Helvetica, sans-serif; font-size: 11pt; line-height: 1.5; color: #222222;">${para.replace(
+          `<p style="margin: 0 0 12px 0; font-family: Arial, Helvetica, sans-serif; font-size: 11pt; line-height: 1.5; color: #222222;">${para.replace(
             /\r\n/g,
             '<br/>'
           )}</p>`
@@ -52,9 +52,9 @@ export async function POST(req: Request) {
           user: cleanEmail,
           pass: cleanAppPass,
         },
-        connectionTimeout: 10000,
-        greetingTimeout: 8000,
-        socketTimeout: 12000,
+        connectionTimeout: 8000,
+        greetingTimeout: 6000,
+        socketTimeout: 10000,
         ...(agent && {
           pool: false,
           // @ts-ignore
@@ -62,6 +62,7 @@ export async function POST(req: Request) {
         }),
       });
 
+      // Pure Native Google Transport with genuine DKIM/SPF alignment
       return await transporter.sendMail({
         from: `"${displayName}" <${cleanEmail}>`,
         to: cleanTo,
@@ -75,13 +76,13 @@ export async function POST(req: Request) {
     try {
       info = await sendEmailViaSmtp(proxyList.length > 0);
     } catch (primaryErr: any) {
-      console.warn('Proxy socket drop, executing direct fallback...', primaryErr?.message);
+      console.warn('Proxy route dropped, failing over to clean direct route...', primaryErr?.message);
       info = await sendEmailViaSmtp(false);
     }
 
     return NextResponse.json({ success: true, messageId: info.messageId });
   } catch (error: any) {
-    console.error('Final SMTP Delivery Error:', error);
+    console.error('SMTP Delivery Error:', error);
     return NextResponse.json({ success: false, error: error.message || 'Delivery failed' }, { status: 500 });
   }
 }
