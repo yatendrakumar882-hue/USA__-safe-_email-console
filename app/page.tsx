@@ -18,7 +18,7 @@ export default function SecureMailConsole() {
 
   const [status, setStatus] = useState({ total: 0, sent: 0, failed: 0, remaining: 0 });
   const [isSending, setIsSending] = useState(false);
-  const [statusText, setStatusText] = useState('Ready (2-Mail Burst / ~8s for 25 Emails Active)');
+  const [statusText, setStatusText] = useState('Ready (1 Batch = 2 Emails | 12 Batches = 24 Emails)');
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -65,7 +65,7 @@ export default function SecureMailConsole() {
       .trim();
   };
 
-  // EXACT CONFIGURATION: 1 BURST = 2 EMAILS | 25 EMAILS = ~8 SECONDS
+  // 1 BATCH = 2 EMAILS | 12 BATCHES = 24 EMAILS ENGINE
   const handleSendEmails = async () => {
     if (recipientList.length === 0 || isSending) return;
     if (!formData.subject.trim() || !formData.body.trim()) {
@@ -78,61 +78,65 @@ export default function SecureMailConsole() {
     let failed = 0;
 
     setStatus({ total: recipientList.length, sent: 0, failed: 0, remaining: recipientList.length });
-    setStatusText('Running calibrated 2-lane burst...');
+    setStatusText('Batch sending started: 2 emails per batch...');
 
-    const CONCURRENCY = 2; // Line 83: Exact 2 Emails per burst
-    const INTER_MAIL_DELAY = 600; // Calibrated for ~8 seconds total completion time
+    const BATCH_SIZE = 2; // 1 Batch = Exactly 2 emails
+    const INTER_BATCH_PAUSE = 750; // Natural gap between batches for Primary Inbox protection
 
-    let currentIndex = 0;
+    for (let i = 0; i < recipientList.length; i += BATCH_SIZE) {
+      const batch = recipientList.slice(i, i + BATCH_SIZE);
+      const batchNumber = Math.floor(i / BATCH_SIZE) + 1;
+      const totalBatches = Math.ceil(recipientList.length / BATCH_SIZE);
 
-    const worker = async () => {
-      while (currentIndex < recipientList.length) {
-        const index = currentIndex++;
-        const toEmail = recipientList[index];
-        const personalizedBody = generateCleanBody(formData.body, toEmail);
-        const personalizedSubject = generateCleanSubject(formData.subject, toEmail);
+      setStatusText(`Dispatching Batch ${batchNumber} of ${totalBatches} (${batch.length} emails)...`);
 
-        try {
-          const res = await fetch('/api/send-email', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              senderName: formData.senderName,
-              email: formData.email,
-              appPassword: formData.appPassword,
-              subject: personalizedSubject,
-              body: personalizedBody,
-              to: toEmail,
-            }),
-          });
+      // 2 Emails parallel fire hongi (1 Batch)
+      await Promise.all(
+        batch.map(async (toEmail, batchIdx) => {
+          const actualIndex = i + batchIdx;
+          const personalizedBody = generateCleanBody(formData.body, toEmail);
+          const personalizedSubject = generateCleanSubject(formData.subject, toEmail);
 
-          const data = await res.json();
-          if (data.success) {
-            sent++;
-          } else {
+          try {
+            const res = await fetch('/api/send-email', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                senderName: formData.senderName,
+                email: formData.email,
+                appPassword: formData.appPassword,
+                subject: personalizedSubject,
+                body: personalizedBody,
+                to: toEmail,
+              }),
+            });
+
+            const data = await res.json();
+            if (data.success) {
+              sent++;
+            } else {
+              failed++;
+            }
+          } catch {
             failed++;
           }
-        } catch {
-          failed++;
-        }
 
-        setStatus({
-          total: recipientList.length,
-          sent,
-          failed,
-          remaining: recipientList.length - (sent + failed),
-        });
+          setStatus({
+            total: recipientList.length,
+            sent,
+            failed,
+            remaining: recipientList.length - (sent + failed),
+          });
+        })
+      );
 
-        if (INTER_MAIL_DELAY > 0) {
-          await new Promise((resolve) => setTimeout(resolve, INTER_MAIL_DELAY));
-        }
+      // Har 2 emails ke batch ke baad natural pause
+      if (i + BATCH_SIZE < recipientList.length) {
+        await new Promise((resolve) => setTimeout(resolve, INTER_BATCH_PAUSE));
       }
-    };
+    }
 
-    const workers = Array.from({ length: Math.min(CONCURRENCY, recipientList.length) }, () => worker());
-    await Promise.all(workers);
-
-    setStatusText(`Completed! Delivered: ${sent}, Failed: ${failed}`);
+    setStatusText(`Completed! Total Delivered: ${sent}, Failed: ${failed}`);
     setIsSending(false);
   };
 
@@ -212,7 +216,7 @@ export default function SecureMailConsole() {
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <h1 style={{ fontSize: '20px', fontWeight: 'bold', color: '#2563eb', margin: 0 }}>Secure Mail Console</h1>
             <span style={{ fontSize: '11px', background: '#dcfce7', color: '#15803d', padding: '3px 8px', borderRadius: '12px', fontWeight: 600 }}>
-              ⚡ 2-Lane Burst Engine Active (~8s / 25 Mails)
+              🛡️ 1 Batch = 2 Emails | 12 Batches = 24 Emails Active
             </span>
           </div>
           
@@ -316,7 +320,7 @@ export default function SecureMailConsole() {
                 <span style={{ fontSize: '13px', fontWeight: 'bold' }}>Recipients</span>
                 <span style={{ fontSize: '12px', color: '#2563eb', fontWeight: 600 }}>{recipientList.length} Found</span>
               </div>
-              <p style={{ fontSize: '11px', color: '#94a3b8', margin: '0 0 10px 0' }}>Paste emails (comma separated or new lines)</p>
+              <p style={{ fontSize: '11px', color: '#94a3b8', margin: '0 0 10px 0' }}>Paste 24 emails (comma separated or new lines)</p>
               <textarea
                 rows={6}
                 placeholder="recipient1@example.com&#10;recipient2@example.com"
@@ -369,7 +373,7 @@ export default function SecureMailConsole() {
                   transition: 'background 0.2s'
                 }}
               >
-                {isSending ? 'Sending (2-Lane Burst)...' : 'Send All'}
+                {isSending ? 'Sending 12 Batches...' : 'Send All (2 per Batch)'}
               </button>
             </div>
 
