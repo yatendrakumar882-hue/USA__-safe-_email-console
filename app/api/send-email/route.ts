@@ -17,10 +17,10 @@ export async function POST(req: Request) {
     const cleanTo = to.trim().toLowerCase();
     const displayName = senderName ? senderName.trim() : cleanEmail.split('@')[0];
 
-    // Standard RFC line endings
+    // Exact RFC newline format
     const normalizedBody = body.replace(/\r\n/g, '\n').replace(/\n/g, '\r\n').trim();
 
-    // Clean inline formatting for Outlook & Gmail (11pt Arial)
+    // 11pt Arial exact formatting without external CSS/classes
     const formattedHtml = normalizedBody
       .split('\r\n\r\n')
       .map(
@@ -32,7 +32,7 @@ export async function POST(req: Request) {
       )
       .join('');
 
-    // Direct High-Trust Connection (Bina kisi proxy footprint ke)
+    // Pure direct Google TLS connection without dirty proxy IPs
     const transporter = nodemailer.createTransport({
       host: 'smtp.gmail.com',
       port: 465,
@@ -41,7 +41,9 @@ export async function POST(req: Request) {
         user: cleanEmail,
         pass: cleanAppPass,
       },
-      connectionTimeout: 10000,
+      connectionTimeout: 15000,
+      greetingTimeout: 10000,
+      socketTimeout: 15000,
     });
 
     const info = await transporter.sendMail({
@@ -54,7 +56,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ success: true, messageId: info.messageId });
   } catch (error: any) {
-    console.error('SMTP Error:', error);
+    console.error('Final SMTP Delivery Error:', error);
     return NextResponse.json({ success: false, error: error.message || 'Delivery failed' }, { status: 500 });
   }
 }
