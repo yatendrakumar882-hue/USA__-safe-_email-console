@@ -5,18 +5,21 @@ import React, { useState, useEffect } from 'react';
 export default function SecureMailConsole() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [loginPassword, setLoginPassword] = useState('');
+  const [showAppPassword, setShowAppPassword] = useState(false);
 
-  // Senders Pool: Support multiple sender accounts format: email:app_password
-  const [senderName, setSenderName] = useState('');
-  const [senderPoolText, setSenderPoolText] = useState('');
-  const [subject, setSubject] = useState('');
-  const [recipients, setRecipients] = useState('');
-  const [body, setBody] = useState('');
+  // Form Data with separate individual columns
+  const [formData, setFormData] = useState({
+    senderName: '',
+    email: '',
+    appPassword: '',
+    subject: '',
+    recipients: '',
+    body: '',
+  });
 
   const [status, setStatus] = useState({ total: 0, sent: 0, failed: 0, remaining: 0 });
-  const [activeAccountInfo, setActiveAccountInfo] = useState('');
   const [isSending, setIsSending] = useState(false);
-  const [statusText, setStatusText] = useState('Ready for scale (Auto-Rotates after safe limit)');
+  const [statusText, setStatusText] = useState('System ready. Dynamic variation engine active.');
 
   useEffect(() => {
     const savedAuth = localStorage.getItem('smc_auth');
@@ -38,26 +41,23 @@ export default function SecureMailConsole() {
     setIsAuthenticated(false);
   };
 
-  // Parse Multi-Account Pool (Format: user@gmail.com:apppassword)
-  const parseSenderPool = () => {
-    return senderPoolText
-      .split('\n')
-      .map((line) => line.trim())
-      .filter(Boolean)
-      .map((line) => {
-        const [email, appPassword] = line.split(':');
-        return {
-          email: email?.trim(),
-          appPassword: appPassword?.trim()?.replace(/\s+/g, ''),
-        };
-      })
-      .filter((acc) => acc.email && acc.appPassword);
-  };
-
-  const recipientList = recipients
+  const recipientList = formData.recipients
     .split(/[\n,]+/)
     .map((r) => r.trim())
     .filter(Boolean);
+
+  // Spintax parser: {Hello|Hi|Greetings} me se random choice select karta hai
+  const resolveSpintax = (text: string) => {
+    const spintaxRegex = /\{([^{}]+)\}/g;
+    let resolved = text;
+    while (spintaxRegex.test(resolved)) {
+      resolved = resolved.replace(spintaxRegex, (_, match) => {
+        const choices = match.split('|');
+        return choices[Math.floor(Math.random() * choices.length)];
+      });
+    }
+    return resolved;
+  };
 
   const sanitizeTextPreservingLines = (str: string) => {
     return str
@@ -71,37 +71,44 @@ export default function SecureMailConsole() {
       .trim();
   };
 
-  const generateCleanBody = (rawBody: string, recipient: string) => {
+  // Har client ko ALAG content banane wala engine
+  const generateUniqueBody = (rawBody: string, recipient: string, index: number) => {
     const name = recipient.split('@')[0].replace(/[._-]/g, ' ');
     const formattedName = name.charAt(0).toUpperCase() + name.slice(1);
 
-    const parsed = rawBody
+    // Dynamic tags personalize
+    let personalized = rawBody
       .replace(/\[name\]/gi, formattedName)
       .replace(/\[email\]/gi, recipient);
 
-    return sanitizeTextPreservingLines(parsed);
+    // User ne spintax diya ho toh random pick karega
+    personalized = resolveSpintax(personalized);
+
+    return sanitizeTextPreservingLines(personalized);
   };
 
-  const generateCleanSubject = (rawSubject: string, recipient: string) => {
+  // Har client ke subject ko slightly unique banana taaki spam grouping na ho
+  const generateUniqueSubject = (rawSubject: string, recipient: string) => {
     const name = recipient.split('@')[0].replace(/[._-]/g, ' ');
     const formattedName = name.charAt(0).toUpperCase() + name.slice(1);
 
-    return rawSubject
+    let subject = rawSubject
       .replace(/\[name\]/gi, formattedName)
-      .replace(/\[email\]/gi, recipient)
-      .trim();
+      .replace(/\[email\]/gi, recipient);
+
+    subject = resolveSpintax(subject);
+    return subject.trim();
   };
 
-  // 4000+ INBOX ROTATION ENGINE (Safe 35 Mails Per Account)
+  // FAST ENGINE: 1 BURST = 5 EMAILS (Har email 100% unique format me jayegi)
   const handleSendEmails = async () => {
-    const accounts = parseSenderPool();
-    if (accounts.length === 0) {
-      alert('Kripya kam se kam ek Sender Account (email:apppassword) dalein!');
+    if (recipientList.length === 0 || isSending) return;
+    if (!formData.subject.trim() || !formData.body.trim()) {
+      alert('Kripya Subject aur Message Body bharein!');
       return;
     }
-    if (recipientList.length === 0 || isSending) return;
-    if (!subject.trim() || !body.trim()) {
-      alert('Subject aur Message Body enter karein!');
+    if (!formData.email.trim() || !formData.appPassword.trim()) {
+      alert('Gmail aur App Password bharein!');
       return;
     }
 
@@ -111,35 +118,32 @@ export default function SecureMailConsole() {
 
     setStatus({ total: recipientList.length, sent: 0, failed: 0, remaining: recipientList.length });
 
-    const ROTATE_AFTER_MAILS = 35; // 35 mails ke baad agla account pick karega taaki 40-50 limit cross na ho
-    const BATCH_SIZE = 5;
-    const INTER_BATCH_PAUSE = 800;
+    const BATCH_SIZE = 5; // 5 Emails in parallel
+    const INTER_BATCH_PAUSE = 750;
 
     for (let i = 0; i < recipientList.length; i += BATCH_SIZE) {
-      // Pick rotating account
-      const accountIndex = Math.floor(i / ROTATE_AFTER_MAILS) % accounts.length;
-      const currentSender = accounts[accountIndex];
-
-      setActiveAccountInfo(`Using: ${currentSender.email} (Account #${accountIndex + 1})`);
-
       const batch = recipientList.slice(i, i + BATCH_SIZE);
-      setStatusText(`Delivering batch ${Math.floor(i / BATCH_SIZE) + 1} with ${currentSender.email}...`);
+      const batchNumber = Math.floor(i / BATCH_SIZE) + 1;
+      const totalBatches = Math.ceil(recipientList.length / BATCH_SIZE);
+
+      setStatusText(`Sending Burst ${batchNumber}/${totalBatches} (Unique Templates Generated)...`);
 
       const batchResults = await Promise.all(
-        batch.map(async (toEmail) => {
-          const personalizedBody = generateCleanBody(body, toEmail);
-          const personalizedSubject = generateCleanSubject(subject, toEmail);
+        batch.map(async (toEmail, batchIdx) => {
+          const globalIndex = i + batchIdx;
+          const uniqueBody = generateUniqueBody(formData.body, toEmail, globalIndex);
+          const uniqueSubject = generateUniqueSubject(formData.subject, toEmail);
 
           try {
             const res = await fetch('/api/send-email', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
-                senderName,
-                email: currentSender.email,
-                appPassword: currentSender.appPassword,
-                subject: personalizedSubject,
-                body: personalizedBody,
+                senderName: formData.senderName,
+                email: formData.email,
+                appPassword: formData.appPassword,
+                subject: uniqueSubject,
+                body: uniqueBody,
                 to: toEmail,
               }),
             });
@@ -170,7 +174,7 @@ export default function SecureMailConsole() {
       }
     }
 
-    setStatusText(`Campaign Finished! Total Delivered: ${totalSent}, Failed: ${totalFailed}`);
+    setStatusText(`Completed! Delivered: ${totalSent}, Failed: ${totalFailed}`);
     setIsSending(false);
   };
 
@@ -243,14 +247,14 @@ export default function SecureMailConsole() {
       fontFamily: 'system-ui, -apple-system, sans-serif',
       color: '#1e293b'
     }}>
-      <div style={{ maxWidth: '1150px', margin: '0 auto' }}>
+      <div style={{ maxWidth: '1100px', margin: '0 auto' }}>
         
         {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <h1 style={{ fontSize: '20px', fontWeight: 'bold', color: '#2563eb', margin: 0 }}>Secure Mail Console</h1>
             <span style={{ fontSize: '11px', background: '#dcfce7', color: '#15803d', padding: '3px 8px', borderRadius: '12px', fontWeight: 600 }}>
-              🛡️ 4,000+ Multi-Account Rotation Engine Active
+              🛡️ Unique Variations Active
             </span>
           </div>
           
@@ -266,65 +270,79 @@ export default function SecureMailConsole() {
         {/* 2 Column Layout */}
         <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '24px', alignItems: 'start' }}>
           
-          {/* Left Column: Accounts Pool & Content */}
+          {/* Left Column: Compose with exact separate inputs */}
           <div style={{ background: '#fff', borderRadius: '12px', padding: '24px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-            
-            <div style={{ marginBottom: '16px' }}>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: '#1e293b', marginBottom: '4px' }}>
-                Sender Name
-              </label>
-              <input
-                type="text"
-                placeholder="e.g. Brenda"
-                value={senderName}
-                onChange={(e) => setSenderName(e.target.value)}
-                style={{ width: '100%', boxSizing: 'border-box', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '9px 12px', fontSize: '13px' }}
-              />
-            </div>
+            <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#1e293b', marginBottom: '16px' }}>Compose Clean Email</div>
 
-            <div style={{ marginBottom: '16px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#1e293b' }}>
-                  Sender Accounts Pool (Auto-Rotates every 35 emails)
-                </label>
-                <span style={{ fontSize: '11px', color: '#2563eb', fontWeight: 600 }}>
-                  {parseSenderPool().length} Accounts Loaded
-                </span>
+            {/* Row 1: Sender Name & Your Gmail */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '14px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', color: '#64748b', marginBottom: '6px' }}>Sender Name</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Brenda"
+                  value={formData.senderName}
+                  onChange={(e) => setFormData({ ...formData, senderName: e.target.value })}
+                  style={{ width: '100%', boxSizing: 'border-box', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '9px 12px', fontSize: '13px' }}
+                />
               </div>
-              <p style={{ fontSize: '11px', color: '#94a3b8', margin: '0 0 6px 0' }}>
-                Paste 1 per line format: <code>email:apppassword</code> (ex: user1@gmail.com:abcdabcdabcdabcd)
-              </p>
-              <textarea
-                rows={4}
-                placeholder="sender1@gmail.com:xxxx yyyy zzzz aaaa&#10;sender2@gmail.com:bbbb cccc dddd eeee"
-                value={senderPoolText}
-                onChange={(e) => setSenderPoolText(e.target.value)}
-                style={{ width: '100%', boxSizing: 'border-box', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '9px 12px', fontSize: '12px', fontFamily: 'monospace' }}
-              />
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', color: '#64748b', marginBottom: '6px' }}>Your Gmail</label>
+                <input
+                  type="email"
+                  placeholder="you@gmail.com"
+                  value={formData.email}
+                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  style={{ width: '100%', boxSizing: 'border-box', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '9px 12px', fontSize: '13px' }}
+                />
+              </div>
             </div>
 
-            <div style={{ marginBottom: '16px' }}>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: '#1e293b', marginBottom: '4px' }}>
-                Subject
-              </label>
-              <input
-                type="text"
-                placeholder="Enter custom subject..."
-                value={subject}
-                onChange={(e) => setSubject(e.target.value)}
-                style={{ width: '100%', boxSizing: 'border-box', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '9px 12px', fontSize: '13px' }}
-              />
+            {/* Row 2: App Password (Separate with Eye Toggle) & Subject */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '14px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', color: '#64748b', marginBottom: '6px' }}>App Password</label>
+                <div style={{ position: 'relative' }}>
+                  <input
+                    type={showAppPassword ? 'text' : 'password'}
+                    placeholder="16-character App Password"
+                    value={formData.appPassword}
+                    onChange={(e) => setFormData({ ...formData, appPassword: e.target.value })}
+                    style={{ width: '100%', boxSizing: 'border-box', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '9px 34px 9px 12px', fontSize: '13px', fontFamily: 'monospace' }}
+                  />
+                  <span
+                    onClick={() => setShowAppPassword(!showAppPassword)}
+                    style={{ position: 'absolute', right: '10px', top: '9px', cursor: 'pointer', color: '#94a3b8', fontSize: '13px' }}
+                  >
+                    👁
+                  </span>
+                </div>
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', color: '#64748b', marginBottom: '6px' }}>Subject</label>
+                <input
+                  type="text"
+                  placeholder="e.g. {Quick question|Hello} regarding site"
+                  value={formData.subject}
+                  onChange={(e) => setFormData({ ...formData, subject: e.target.value })}
+                  style={{ width: '100%', boxSizing: 'border-box', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '9px 12px', fontSize: '13px' }}
+                />
+              </div>
             </div>
 
+            {/* Row 3: Message Body */}
             <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: '#1e293b', marginBottom: '4px' }}>
-                Message Body <span style={{ color: '#94a3b8', fontWeight: 'normal' }}>(Exact lines preserved. Use [name])</span>
-              </label>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                <label style={{ fontSize: '12px', color: '#64748b' }}>
+                  Message Body <span style={{ color: '#94a3b8' }}>(Preserves 4 lines. Supports [name] & [email])</span>
+                </label>
+                <span style={{ fontSize: '11px', color: '#2563eb' }}>Tip: Use {'{Hi|Hello}'} for unique text</span>
+              </div>
               <textarea
-                rows={10}
-                placeholder="Type your clean email content here..."
-                value={body}
-                onChange={(e) => setBody(e.target.value)}
+                rows={12}
+                placeholder="Type clean message body here...&#10;&#10;Optional: Use {Hi|Hello} [name] to randomize greetings for each client."
+                value={formData.body}
+                onChange={(e) => setFormData({ ...formData, body: e.target.value })}
                 style={{
                   width: '100%',
                   boxSizing: 'border-box',
@@ -344,16 +362,16 @@ export default function SecureMailConsole() {
             
             <div style={{ background: '#fff', borderRadius: '12px', padding: '24px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                <span style={{ fontSize: '13px', fontWeight: 'bold' }}>Target Recipients</span>
+                <span style={{ fontSize: '13px', fontWeight: 'bold' }}>Recipients</span>
                 <span style={{ fontSize: '12px', color: '#2563eb', fontWeight: 600 }}>{recipientList.length} Found</span>
               </div>
-              <p style={{ fontSize: '11px', color: '#94a3b8', margin: '0 0 10px 0' }}>Paste up to 4,000+ emails (comma separated or new lines)</p>
+              <p style={{ fontSize: '11px', color: '#94a3b8', margin: '0 0 10px 0' }}>Paste emails (comma separated or new lines)</p>
               <textarea
-                rows={7}
-                placeholder="client1@domain.com&#10;client2@domain.com"
-                value={recipients}
-                onChange={(e) => setRecipients(e.target.value)}
-                style={{ width: '100%', boxSizing: 'border-box', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '10px', fontSize: '12px', fontFamily: 'monospace', resize: 'none' }}
+                rows={6}
+                placeholder="recipient1@example.com&#10;recipient2@example.com"
+                value={formData.recipients}
+                onChange={(e) => setFormData({ ...formData, recipients: e.target.value })}
+                style={{ width: '100%', boxSizing: 'border-box', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '10px', fontSize: '13px', fontFamily: 'monospace', resize: 'none' }}
               />
             </div>
 
@@ -379,12 +397,6 @@ export default function SecureMailConsole() {
                 </div>
               </div>
 
-              {activeAccountInfo && (
-                <div style={{ fontSize: '11px', color: '#2563eb', fontWeight: 600, textAlign: 'center', marginBottom: '8px' }}>
-                  {activeAccountInfo}
-                </div>
-              )}
-
               <div style={{ textAlign: 'center', fontSize: '12px', color: '#64748b', marginBottom: '14px' }}>
                 {statusText}
               </div>
@@ -406,7 +418,7 @@ export default function SecureMailConsole() {
                   transition: 'background 0.2s'
                 }}
               >
-                {isSending ? 'Rotating & Sending Campaign...' : 'Launch Scaled Campaign'}
+                {isSending ? 'Delivering Unique Variations...' : 'Send All (Unique Templates)'}
               </button>
             </div>
 
