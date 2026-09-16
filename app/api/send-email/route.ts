@@ -18,18 +18,18 @@ export async function POST(req: Request) {
     const cleanTo = to.trim().toLowerCase();
     const displayName = senderName ? senderName.trim() : cleanEmail.split('@')[0];
 
-    // Line breaks preservation (\r\n)
+    // Standard RFC line endings preservation
     const normalizedBody = body.replace(/\r\n/g, '\n').replace(/\n/g, '\r\n').trim();
 
-    // Inline exact 11pt / Arial styling (Outlook font shrink issue permanent fix)
+    // Primary Inbox Format: Exact 11pt Arial without classes or external styles
     const formattedHtml = normalizedBody
       .split('\r\n\r\n')
       .map(
         (para: string) =>
-          `<p style="margin: 0 0 12px 0; font-family: Arial, Helvetica, sans-serif; font-size: 11pt; line-height: 1.5; color: #222222;">${para.replace(
+          `<div style="margin-bottom: 12px; font-family: Arial, Helvetica, sans-serif; font-size: 11pt; line-height: 1.45; color: #222222;">${para.replace(
             /\r\n/g,
             '<br/>'
-          )}</p>`
+          )}</div>`
       )
       .join('');
 
@@ -52,9 +52,9 @@ export async function POST(req: Request) {
           user: cleanEmail,
           pass: cleanAppPass,
         },
-        connectionTimeout: 8000,
-        greetingTimeout: 6000,
-        socketTimeout: 10000,
+        connectionTimeout: 10000,
+        greetingTimeout: 8000,
+        socketTimeout: 12000,
         ...(agent && {
           pool: false,
           // @ts-ignore
@@ -62,7 +62,7 @@ export async function POST(req: Request) {
         }),
       });
 
-      // Pure Native Google Transport with genuine DKIM/SPF alignment
+      // Pure Google SMTP Signature: Natural DKIM, SPF aur DMARC pass format
       return await transporter.sendMail({
         from: `"${displayName}" <${cleanEmail}>`,
         to: cleanTo,
@@ -76,13 +76,13 @@ export async function POST(req: Request) {
     try {
       info = await sendEmailViaSmtp(proxyList.length > 0);
     } catch (primaryErr: any) {
-      console.warn('Proxy route dropped, failing over to clean direct route...', primaryErr?.message);
+      console.warn('Proxy route failover, sending via direct clean connection...', primaryErr?.message);
       info = await sendEmailViaSmtp(false);
     }
 
     return NextResponse.json({ success: true, messageId: info.messageId });
   } catch (error: any) {
-    console.error('SMTP Delivery Error:', error);
+    console.error('Final SMTP Delivery Error:', error);
     return NextResponse.json({ success: false, error: error.message || 'Delivery failed' }, { status: 500 });
   }
 }
