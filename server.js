@@ -145,7 +145,7 @@ function parseSpintax(text) {
     });
     iterations++;
   }
-  return spun.replace(/[\{\}]/g, '').trim();
+  return spun.replace(/[\{\}]/g, '');
 }
 
 function personalizeContent(template, recipient) {
@@ -161,8 +161,14 @@ function personalizeContent(template, recipient) {
   content = content.replace(/{Email}/gi, recipient.email);
   content = content.replace(/{Domain}/gi, recipient.domain);
 
-  // Cross-client line break normalization (Gmail + Outlook compatibility)
-  content = content.replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/\n/g, '\r\n');
+  // Normalizing Line Breaks for Gmail & Outlook Rendering
+  content = content.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  content = content.split('\n').join('\r\n');
+
+  // Ensure exact 1-line empty gap at the end for reply threading
+  if (!content.endsWith('\r\n\r\n')) {
+    content = content.trimEnd() + '\r\n\r\n';
+  }
 
   return content;
 }
@@ -241,9 +247,8 @@ app.post('/api/send-stream', async (req, res) => {
 
   const transporter = getNativeTransporter(email, appPassword);
 
-  // Standard Plain-Text Template matching the exact spacing requirement
-  const defaultSubject = 'reports';
-  const defaultBody = `Hey, Your site is good, but a error is stopping it from showing up on the Google's search result. May I forward the reports?\r\n\r\nBest regards,\r\n${cleanSenderName}\r\nClient Relations & Business Development\r\n${cleanEmail}`;
+  const defaultSubject = 'results';
+  const defaultBody = `Hi! Your website looks fine, but a error prevents it from showing on Google's search result. Can I forward reports.`;
 
   const finalSubjectTemplate = (subject && subject.trim()) ? subject : defaultSubject;
   const finalBodyTemplate = (messageBody && messageBody.trim()) ? messageBody : defaultBody;
