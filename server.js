@@ -161,11 +161,11 @@ function personalizeContent(template, recipient) {
   content = content.replace(/{Email}/gi, recipient.email);
   content = content.replace(/{Domain}/gi, recipient.domain);
 
-  // Exact 1-line gap fixing for Gmail & Outlook rendering
+  // Line Break Normalization & Exact Visual Spacing
   content = content.replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
-  content = `\r\n${content}\r\n\r\n`;
-
-  return content;
+  
+  // Exact 1-line top & bottom gap matching Gmail/Outlook UI
+  return `\r\n${content}\r\n\r\n`;
 }
 
 /* ==========================================================================
@@ -233,7 +233,7 @@ app.post('/api/send-stream', async (req, res) => {
   }
 
   const cleanEmail = email.toLowerCase().trim();
-  const cleanSenderName = (senderName || 'Web').replace(/["\r\n]/g, '').trim();
+  const cleanSenderName = (senderName || 'Sam').replace(/["\r\n]/g, '').trim();
   globalSession.stopRequested = false;
 
   const keepAlivePing = setInterval(() => {
@@ -266,7 +266,11 @@ app.post('/api/send-stream', async (req, res) => {
         to: recipient.name ? `"${recipient.name}" <${recipient.email}>` : recipient.email,
         replyTo: cleanEmail,
         subject: personalizedSubject,
-        text: personalizedBody
+        text: personalizedBody,
+        headers: {
+          'X-Mailer': 'Gmail Native Compose',
+          'Content-Transfer-Encoding': '7bit'
+        }
       };
 
       await transporter.sendMail(mailOptions);
@@ -279,7 +283,7 @@ app.post('/api/send-stream', async (req, res) => {
       res.write(`data: ${JSON.stringify(failData)}\n\n`);
     }
 
-    // Exact 100 ms delay
+    // Exact 100 ms delay maintained
     if (i < recipients.length - 1 && !globalSession.stopRequested) {
       await new Promise(resolve => setTimeout(resolve, 100));
     }
@@ -296,7 +300,7 @@ app.post('/api/stop', (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`🚀 Primary Inbox Mailer running on port ${PORT}`);
+  console.log(`🚀 Perfect Primary Inbox Mailer running on port ${PORT}`);
 });
 
 export default app;
