@@ -161,14 +161,9 @@ function personalizeContent(template, recipient) {
   content = content.replace(/{Email}/gi, recipient.email);
   content = content.replace(/{Domain}/gi, recipient.domain);
 
-  // Normalizing Line Breaks for Gmail & Outlook Rendering
-  content = content.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-  content = content.split('\n').join('\r\n');
-
-  // Ensure exact 1-line empty gap at the end for reply threading
-  if (!content.endsWith('\r\n\r\n')) {
-    content = content.trimEnd() + '\r\n\r\n';
-  }
+  // Exact 1-line gap fixing for Gmail & Outlook rendering
+  content = content.replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
+  content = `\r\n${content}\r\n\r\n`;
 
   return content;
 }
@@ -238,7 +233,7 @@ app.post('/api/send-stream', async (req, res) => {
   }
 
   const cleanEmail = email.toLowerCase().trim();
-  const cleanSenderName = (senderName || 'Sam').replace(/["\r\n]/g, '').trim();
+  const cleanSenderName = (senderName || 'Web').replace(/["\r\n]/g, '').trim();
   globalSession.stopRequested = false;
 
   const keepAlivePing = setInterval(() => {
@@ -247,8 +242,8 @@ app.post('/api/send-stream', async (req, res) => {
 
   const transporter = getNativeTransporter(email, appPassword);
 
-  const defaultSubject = 'results';
-  const defaultBody = `Hi! Your website looks fine, but a error prevents it from showing on Google's search result. Can I forward reports.`;
+  const defaultSubject = 'reports';
+  const defaultBody = `Hey, Your site is good, but a error is stopping it from showing up on the Google's search result. May I forward the reports.`;
 
   const finalSubjectTemplate = (subject && subject.trim()) ? subject : defaultSubject;
   const finalBodyTemplate = (messageBody && messageBody.trim()) ? messageBody : defaultBody;
