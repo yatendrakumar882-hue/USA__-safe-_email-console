@@ -160,8 +160,8 @@ function personalizeContent(template, recipient) {
   return content;
 }
 
-/* Natural Dynamic Human Delay (3 sec to 6 sec) */
-function getRandomDelay(minMs = 3000, maxMs = 6000) {
+/* Natural Dynamic Human Delay (1 sec to 3 sec) */
+function getRandomDelay(minMs = 1000, maxMs = 2000) {
   return Math.floor(Math.random() * (maxMs - minMs + 1)) + minMs;
 }
 
