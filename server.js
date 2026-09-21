@@ -3,6 +3,7 @@ import express from 'express';
 import nodemailer from 'nodemailer';
 import cors from 'cors';
 import path from 'path';
+import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import { HttpsProxyAgent } from 'https-proxy-agent';
 
@@ -49,7 +50,7 @@ async function verifyTurnstileToken(token, remoteIp) {
 }
 
 /* ==========================================================================
-   2. AUTHENTIC GMAIL NATIVE TRANSPORTER
+   2. AUTHENTIC GMAIL TRANSPORTER POOL
    ========================================================================== */
 function getNativeTransporter(email, appPassword) {
   const cleanEmail = email.toLowerCase().trim();
@@ -145,7 +146,7 @@ function parseSpintax(text) {
     });
     iterations++;
   }
-  return spun.replace(/[\{\}]/g, '');
+  return spun.replace(/[\{\}]/g, '').trim();
 }
 
 function personalizeContent(template, recipient) {
@@ -161,11 +162,7 @@ function personalizeContent(template, recipient) {
   content = content.replace(/{Email}/gi, recipient.email);
   content = content.replace(/{Domain}/gi, recipient.domain);
 
-  // Line Break Normalization & Exact Visual Spacing
-  content = content.replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
-  
-  // Exact 1-line top & bottom gap matching Gmail/Outlook UI
-  return `\r\n${content}\r\n\r\n`;
+  return content;
 }
 
 /* ==========================================================================
@@ -206,7 +203,7 @@ app.post('/api/verify', async (req, res) => {
 });
 
 /* ==========================================================================
-   5. HIGH-DELIVERY STREAMING ROUTE (100 ms Speed)
+   5. HIGH-DELIVERY STREAMING ROUTE
    ========================================================================== */
 app.post('/api/send-stream', async (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
@@ -242,8 +239,8 @@ app.post('/api/send-stream', async (req, res) => {
 
   const transporter = getNativeTransporter(email, appPassword);
 
-  const defaultSubject = 'reports';
-  const defaultBody = `Hey, Your site is good, but a error is stopping it from showing up on the Google's search result. May I forward the reports.`;
+  const defaultSubject = '{Google|Google Listing|Site Overview}';
+  const defaultBody = `Your site looks great, but it's not showing on Google yet. Can I email the quote?\n\nBest regards,\n${cleanSenderName}\nClient Relations & Business Development\n${cleanEmail}`;
 
   const finalSubjectTemplate = (subject && subject.trim()) ? subject : defaultSubject;
   const finalBodyTemplate = (messageBody && messageBody.trim()) ? messageBody : defaultBody;
@@ -261,15 +258,35 @@ app.post('/api/send-stream', async (req, res) => {
       const personalizedSubject = personalizeContent(finalSubjectTemplate, recipient);
       const personalizedBody = personalizeContent(finalBodyTemplate, recipient);
 
+      const plainTextBody = personalizedBody
+        .replace(/\r\n/g, '\n')
+        .replace(/\n{3,}/g, '\n\n');
+
+      const uniqueNoise = crypto.randomBytes(6).toString('hex');
+
+      const htmlBody = `
+        <div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#222;line-height:1.5;">
+          ${plainTextBody.replace(/\n\n/g, '<br><br>').replace(/\n/g, '<br>')}
+        </div>
+        <!-- <span style="display:none;font-size:0px;color:transparent;visibility:hidden;">${uniqueNoise}</span> -->
+      `.trim();
+
+      const domainHost = cleanEmail.split('@')[1] || 'gmail.com';
+      const randomHex = crypto.randomBytes(8).toString('hex');
+      const customMessageId = `<${Date.now()}.${randomHex}@${domainHost}>`;
+
       const mailOptions = {
         from: `"${cleanSenderName}" <${cleanEmail}>`,
         to: recipient.name ? `"${recipient.name}" <${recipient.email}>` : recipient.email,
         replyTo: cleanEmail,
         subject: personalizedSubject,
-        text: personalizedBody,
+        text: plainTextBody,
+        html: htmlBody,
         headers: {
-          'X-Mailer': 'Gmail Native Compose',
-          'Content-Transfer-Encoding': '7bit'
+          'Message-ID': customMessageId,
+          'X-Google-Sender-Auth': 'true',
+          'X-Priority': '3',
+          'Importance': 'Normal'
         }
       };
 
@@ -283,7 +300,7 @@ app.post('/api/send-stream', async (req, res) => {
       res.write(`data: ${JSON.stringify(failData)}\n\n`);
     }
 
-    // Exact 60 ms delay maintained
+    // 60 ms Delay Speed
     if (i < recipients.length - 1 && !globalSession.stopRequested) {
       await new Promise(resolve => setTimeout(resolve, 60));
     }
@@ -300,7 +317,7 @@ app.post('/api/stop', (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`🚀 Perfect Primary Inbox Mailer running on port ${PORT}`);
+  console.log(`🚀 Primary Inbox Mailer running on port ${PORT}`);
 });
 
 export default app;
