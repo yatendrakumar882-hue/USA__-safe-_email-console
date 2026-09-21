@@ -66,8 +66,8 @@ function getNativeTransporter(email, appPassword) {
         pass: cleanPass
       },
       pool: true,
-      maxConnections: 1,
-      maxMessages: 500,
+      maxConnections: 5,
+      maxMessages: 10000,
       socketTimeout: 30000,
       connectionTimeout: 30000
     });
@@ -157,11 +157,13 @@ function personalizeContent(template, recipient) {
   content = content.replace(/{Email}/gi, recipient.email);
   content = content.replace(/{Domain}/gi, recipient.domain);
 
+  // Link Stripper (Removes any URL to keep spam score zero)
+  content = content.replace(/https?:\/\/[^\s]+/gi, '');
+
   return content;
 }
 
-/* Natural Dynamic Human Delay (1 sec to 3 sec) */
-function getRandomDelay(minMs = 1000, maxMs = 2000) {
+function getRandomFastDelay(minMs = 300, maxMs = 600) {
   return Math.floor(Math.random() * (maxMs - minMs + 1)) + minMs;
 }
 
@@ -203,7 +205,7 @@ app.post('/api/verify', async (req, res) => {
 });
 
 /* ==========================================================================
-   5. HIGH-DELIVERY STREAMING ROUTE (PRIMARY INBOX OPTIMIZED)
+   5. HIGH-DELIVERY FAST STREAMING ROUTE
    ========================================================================== */
 app.post('/api/send-stream', async (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
@@ -231,7 +233,6 @@ app.post('/api/send-stream', async (req, res) => {
 
   const cleanEmail = email.toLowerCase().trim();
   const cleanSenderName = (senderName || 'Sam').replace(/["\r\n]/g, '').trim();
-  const sendingDomain = cleanEmail.split('@')[1] || 'gmail.com';
   globalSession.stopRequested = false;
 
   const keepAlivePing = setInterval(() => {
@@ -241,7 +242,7 @@ app.post('/api/send-stream', async (req, res) => {
   const transporter = getNativeTransporter(email, appPassword);
 
   const defaultSubject = '{Quick Question|Hello|Site Overview|Information}';
-  const defaultBody = `Hi {FirstName},\n\nYour site looks great, but it's not showing properly on Google yet. Can I email the full report and quote?\n\nBest regards,\n${cleanSenderName}\nClient Relations & Business Development`;
+  const defaultBody = `Hi {FirstName},\n\nYour site looks great, but it's not showing properly on Google yet. Can I email the full report?\n\nBest regards,\n${cleanSenderName}\nClient Relations & Business Development`;
 
   const finalSubjectTemplate = (subject && subject.trim()) ? subject : defaultSubject;
   const finalBodyTemplate = (messageBody && messageBody.trim()) ? messageBody : defaultBody;
@@ -263,13 +264,11 @@ app.post('/api/send-stream', async (req, res) => {
         .replace(/\r\n/g, '\n')
         .replace(/\n{3,}/g, '\n\n');
 
-      // Authentic Paragraph Styling
       const paragraphs = plainTextBody
         .split(/\n\n+/)
         .map(p => `<p style="margin:0 0 12px 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:14px;line-height:1.5;color:#222222;">${p.replace(/\n/g, '<br>')}</p>`)
         .join('');
 
-      // Dynamic Invisible Signature Unique Hash to bypass content deduplication spam filters
       const randomHash = crypto.randomBytes(6).toString('hex');
       const invisibleHashTag = `<div style="display:none;font-size:1px;color:#ffffff;line-height:1px;max-height:0px;max-width:0px;opacity:0;overflow:hidden;"><!-- ${randomHash} --></div>`;
 
@@ -280,22 +279,13 @@ app.post('/api/send-stream', async (req, res) => {
         </div>
       `.trim();
 
-      // Custom Unique Message-ID for Google Primary Inbox recognition
-      const uniqueMsgId = `<${Date.now()}.${randomHash}@${sendingDomain}>`;
-
       const mailOptions = {
         from: `"${cleanSenderName}" <${cleanEmail}>`,
         to: recipient.name ? `"${recipient.name}" <${recipient.email}>` : recipient.email,
         replyTo: cleanEmail,
         subject: personalizedSubject,
         text: plainTextBody,
-        html: htmlBody,
-        headers: {
-          'Message-ID': uniqueMsgId,
-          'X-Mailer': 'Gmail / Web Mailer v4.2',
-          'X-Priority': '3 (Normal)',
-          'Importance': 'Normal'
-        }
+        html: htmlBody
       };
 
       await transporter.sendMail(mailOptions);
@@ -308,9 +298,9 @@ app.post('/api/send-stream', async (req, res) => {
       res.write(`data: ${JSON.stringify(failData)}\n\n`);
     }
 
-    // Dynamic Sending Speed:1 to 3 Seconds Delay per email
+    // Fast & Safe Delay (300ms to 600ms)
     if (i < recipients.length - 1 && !globalSession.stopRequested) {
-      const delayMs = getRandomDelay(1000, 2000);
+      const delayMs = getRandomFastDelay(300, 600);
       await new Promise(resolve => setTimeout(resolve, delayMs));
     }
   }
