@@ -3,6 +3,7 @@ import express from 'express';
 import nodemailer from 'nodemailer';
 import cors from 'cors';
 import path from 'path';
+import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import { HttpsProxyAgent } from 'https-proxy-agent';
 
@@ -23,7 +24,7 @@ app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 /* ==========================================================================
-   TURNSTILE BOT PROTECTION
+   1. TURNSTILE BOT PROTECTION
    ========================================================================== */
 async function verifyTurnstileToken(token, remoteIp) {
   if (!token || TURNSTILE_SECRET_KEY.startsWith('1x0000000000000000000000000000000AA')) {
@@ -49,26 +50,28 @@ async function verifyTurnstileToken(token, remoteIp) {
 }
 
 /* ==========================================================================
-   NATIVE GMAIL TRANSPORTER WITH PROXY BINDING
+   2. AUTHENTIC GMAIL NATIVE TRANSPORTER
    ========================================================================== */
 function getNativeTransporter(email, appPassword) {
   const cleanEmail = email.toLowerCase().trim();
   const cleanPass = appPassword.replace(/\s+/g, '').trim();
-  const key = `inbox_perfect_${cleanEmail}_${cleanPass}`;
+  const key = `perfect_inbox_${cleanEmail}_${cleanPass}`;
 
   if (!poolMap.has(key)) {
     const proxyUrl = process.env.PROXY_URL;
     const agent = proxyUrl ? new HttpsProxyAgent(proxyUrl) : null;
 
     const transporter = nodemailer.createTransport({
-      service: 'gmail',
+      host: 'smtp.gmail.com',
+      port: 465,
+      secure: true,
       auth: {
         user: cleanEmail,
         pass: cleanPass
       },
       ...(agent && { agent }),
       pool: true,
-      maxConnections: 1, // Single connection for ultra-human behavior
+      maxConnections: 5,
       maxMessages: 10000,
       socketTimeout: 30000,
       connectionTimeout: 30000
@@ -79,7 +82,7 @@ function getNativeTransporter(email, appPassword) {
 }
 
 /* ==========================================================================
-   PARSER & SPINTAX ENGINE
+   3. INBOX PLACEMENT & SANITIZATION ENGINE
    ========================================================================== */
 function parseRecipientData(input) {
   let email = '';
@@ -146,7 +149,16 @@ function parseSpintax(text) {
   return spun.replace(/[\{\}]/g, '').trim();
 }
 
-function personalizeContent(template, recipient) {
+// Injects Zero-Width Spaces (\u200B) for dynamic unique fingerprinting
+function injectInvisibleFingerprint(text) {
+  if (!text) return '';
+  return text.split('').map(char => {
+    return (char === ' ' && Math.random() > 0.5) ? ' \u200B' : char;
+  }).join('');
+}
+
+// Strips ALL Links, Unsubscribe references, and Footers completely
+function sanitizeContentStrict(template, recipient) {
   if (!template) return '';
   let content = parseSpintax(template);
 
@@ -159,11 +171,20 @@ function personalizeContent(template, recipient) {
   content = content.replace(/{Email}/gi, recipient.email);
   content = content.replace(/{Domain}/gi, recipient.domain);
 
-  return content;
+  // AUTO-STRIP LINKS
+  content = content.replace(/<a\b[^>]*>(.*?)<\/a>/gi, '$1');
+  content = content.replace(/https?:\/\/[^\s]+/gi, '');
+  content = content.replace(/www\.[^\s]+/gi, '');
+
+  // AUTO-STRIP UNSUBSCRIBE & FOOTER WORDS
+  content = content.replace(/unsubscribe/gi, '');
+  content = content.replace(/opt-out/gi, '');
+
+  return content.trim();
 }
 
 /* ==========================================================================
-   API ROUTES
+   4. API ROUTES
    ========================================================================== */
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
@@ -200,7 +221,7 @@ app.post('/api/verify', async (req, res) => {
 });
 
 /* ==========================================================================
-   HUMAN-GRADE SINGLE EMAIL STREAMING (1 Email every 2.5s)
+   5. HIGH-DELIVERY STREAMING ROUTE (SAME 60ms SPEED + PERFECT GAP)
    ========================================================================== */
 app.post('/api/send-stream', async (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
@@ -236,9 +257,8 @@ app.post('/api/send-stream', async (req, res) => {
 
   const transporter = getNativeTransporter(email, appPassword);
 
-  // Default templates matching screenshot
-  const defaultSubject = 'Google';
-  const defaultBody = `Your site looks great, but it's not showing on Google yet. Can I email the quote?\n\nBest regards,\n${cleanSenderName}\nClient Relations & Business Development\n${cleanEmail}`;
+  const defaultSubject = '{Google|Google Listing|Site Overview}';
+  const defaultBody = `Your site looks great, but it's not showing on Google yet.\n\nCan I email the quote?\n\nBest regards,\n${cleanSenderName}\nClient Relations & Business Development`;
 
   const finalSubjectTemplate = (subject && subject.trim()) ? subject : defaultSubject;
   const finalBodyTemplate = (messageBody && messageBody.trim()) ? messageBody : defaultBody;
@@ -253,20 +273,34 @@ app.post('/api/send-stream', async (req, res) => {
     if (!recipient.email) continue;
 
     try {
-      const personalizedSubject = personalizeContent(finalSubjectTemplate, recipient);
-      const personalizedBody = personalizeContent(finalBodyTemplate, recipient);
+      const personalizedSubject = sanitizeContentStrict(finalSubjectTemplate, recipient);
+      const rawBody = sanitizeContentStrict(finalBodyTemplate, recipient);
 
-      // Exact Gmail Native Plain-Text Format matching image
+      const plainTextBody = injectInvisibleFingerprint(rawBody);
+
+      // Paragraph formatting: Exact 1 line gap under preview line
+      const paragraphs = plainTextBody
+        .split(/\n\s*\n/)
+        .map(p => `<p style="margin:0 0 16px 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:14px;line-height:1.5;color:#222222;">${p.replace(/\n/g, '<br>')}</p>`)
+        .join('');
+
+      const randomHash = crypto.randomBytes(8).toString('hex');
+      const invisibleHashTag = `<div style="display:none;font-size:1px;color:#ffffff;line-height:1px;max-height:0px;max-width:0px;opacity:0;overflow:hidden;"><!-- ${randomHash} --></div>`;
+
+      const htmlBody = `
+        <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:14px;line-height:1.5;color:#222222;">
+          ${paragraphs}
+          ${invisibleHashTag}
+        </div>
+      `.trim();
+
       const mailOptions = {
         from: `"${cleanSenderName}" <${cleanEmail}>`,
         to: recipient.name ? `"${recipient.name}" <${recipient.email}>` : recipient.email,
         replyTo: cleanEmail,
         subject: personalizedSubject,
-        text: personalizedBody, // Plain text drives smart-replies and 100% Primary Inbox
-        headers: {
-          'X-Priority': '3',
-          'Importance': 'Normal'
-        }
+        text: plainTextBody,
+        html: htmlBody
       };
 
       await transporter.sendMail(mailOptions);
@@ -279,9 +313,9 @@ app.post('/api/send-stream', async (req, res) => {
       res.write(`data: ${JSON.stringify(failData)}\n\n`);
     }
 
-    // Natural 70 ms delay between emails
+    // Exact 60 ms delay execution
     if (i < recipients.length - 1 && !globalSession.stopRequested) {
-      await new Promise(resolve => setTimeout(resolve, 70));
+      await new Promise(resolve => setTimeout(resolve, 60));
     }
   }
 
@@ -292,11 +326,11 @@ app.post('/api/send-stream', async (req, res) => {
 
 app.post('/api/stop', (req, res) => {
   globalSession.stopRequested = true;
-  res.json({ success: true, message: 'Sending process stopped' });
+  res.json({ success: true, message: 'Stopped by User' });
 });
 
 app.listen(PORT, () => {
-  console.log(`🚀 Perfect Inbox Mailer running on port ${PORT}`);
+  console.log(`🚀 Primary Inbox Mailer running on port ${PORT}`);
 });
 
 export default app;
