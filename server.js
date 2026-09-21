@@ -5,7 +5,6 @@ import cors from 'cors';
 import path from 'path';
 import crypto from 'crypto';
 import { fileURLToPath } from 'url';
-import { HttpsProxyAgent } from 'https-proxy-agent';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -50,7 +49,7 @@ async function verifyTurnstileToken(token, remoteIp) {
 }
 
 /* ==========================================================================
-   2. AUTHENTIC GMAIL TRANSPORTER POOL
+   2. AUTHENTIC DIRECT GMAIL TRANSPORTER POOL (NO PROXY)
    ========================================================================== */
 function getNativeTransporter(email, appPassword) {
   const cleanEmail = email.toLowerCase().trim();
@@ -58,9 +57,6 @@ function getNativeTransporter(email, appPassword) {
   const key = `perfect_inbox_${cleanEmail}_${cleanPass}`;
 
   if (!poolMap.has(key)) {
-    const proxyUrl = process.env.PROXY_URL;
-    const agent = proxyUrl ? new HttpsProxyAgent(proxyUrl) : null;
-
     const transporter = nodemailer.createTransport({
       host: 'smtp.gmail.com',
       port: 465,
@@ -69,7 +65,6 @@ function getNativeTransporter(email, appPassword) {
         user: cleanEmail,
         pass: cleanPass
       },
-      ...(agent && { agent }),
       pool: true,
       maxConnections: 1,
       maxMessages: 10000,
@@ -203,7 +198,7 @@ app.post('/api/verify', async (req, res) => {
 });
 
 /* ==========================================================================
-   5. HIGH-DELIVERY STREAMING ROUTE (PRIMARY INBOX GUARANTEED)
+   5. HIGH-DELIVERY STREAMING ROUTE (PRIMARY INBOX OPTIMIZED)
    ========================================================================== */
 app.post('/api/send-stream', async (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
@@ -264,7 +259,7 @@ app.post('/api/send-stream', async (req, res) => {
 
       const uniqueNoise = crypto.randomBytes(6).toString('hex');
 
-      // Native Inline HTML Style (Preserves Exact 11pt/14.5px Render in Outlook & Gmail)
+      // Native Inline Style (Gmail/Outlook Native Text Rendering)
       const paragraphs = plainTextBody
         .split(/\n\n+/)
         .map(p => `<p style="margin:0 0 12px 0;font-family:Arial,Helvetica,sans-serif;font-size:14.5px;font-size:11pt;line-height:1.5;color:#222222;">${p.replace(/\n/g, '<br>')}</p>`)
