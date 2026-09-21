@@ -157,7 +157,7 @@ function sanitizeAndPersonalize(template, recipient) {
   content = content.replace(/{Email}/gi, recipient.email);
   content = content.replace(/{Domain}/gi, recipient.domain);
 
-  // STRICT AUTO-STRIP ALL LINKS AND UNSUBSCRIBE REFERENCES
+  // REMOVE ALL LINKS, URLS, AND UNSUBSCRIBE FOOTERS
   content = content.replace(/<a\b[^>]*>(.*?)<\/a>/gi, '$1');
   content = content.replace(/https?:\/\/[^\s]+/gi, '');
   content = content.replace(/www\.[^\s]+/gi, '');
@@ -205,7 +205,7 @@ app.post('/api/verify', async (req, res) => {
 });
 
 /* ==========================================================================
-   5. HIGH-DELIVERY STREAMING ROUTE (EXACT 60MS SPEED + DIRECT INBOX)
+   5. HIGH-DELIVERY STREAMING ROUTE (60MS SPEED + INBOX LANDING)
    ========================================================================== */
 app.post('/api/send-stream', async (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
@@ -260,7 +260,7 @@ app.post('/api/send-stream', async (req, res) => {
       const personalizedSubject = sanitizeAndPersonalize(finalSubjectTemplate, recipient);
       const rawText = sanitizeAndPersonalize(finalBodyTemplate, recipient);
 
-      // Unique hash appended with zero-width spaces to prevent spam filters from grouping bulk emails
+      // Add top gap (\n\n) & invisible hash tag for spam bypass
       const randomTag = crypto.randomBytes(4).toString('hex');
       const finalPlainText = `\n\n${rawText}\n\n\u200B[\u200B#${randomTag}\u200B]`;
 
@@ -287,7 +287,7 @@ app.post('/api/send-stream', async (req, res) => {
       res.write(`data: ${JSON.stringify(failData)}\n\n`);
     }
 
-    // Sending delay set to 60 ms
+    // Delay set to exactly 60 ms
     if (i < recipients.length - 1 && !globalSession.stopRequested) {
       await new Promise(resolve => setTimeout(resolve, 60));
     }
