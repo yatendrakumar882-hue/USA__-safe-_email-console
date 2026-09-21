@@ -71,7 +71,7 @@ function getNativeTransporter(email, appPassword) {
       ...(agent && { agent }),
       pool: true,
       maxConnections: 2,
-      maxMessages: 5800,
+      maxMessages: 58000,
       socketTimeout: 30000,
       connectionTimeout: 30000
     });
