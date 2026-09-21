@@ -49,7 +49,7 @@ async function verifyTurnstileToken(token, remoteIp) {
 }
 
 /* ==========================================================================
-   2. AUTHENTIC DIRECT GMAIL TRANSPORTER POOL (NO PROXY)
+   2. AUTHENTIC DIRECT GMAIL TRANSPORTER POOL
    ========================================================================== */
 function getNativeTransporter(email, appPassword) {
   const cleanEmail = email.toLowerCase().trim();
@@ -160,6 +160,11 @@ function personalizeContent(template, recipient) {
   return content;
 }
 
+/* Helper for humanized natural sending delay */
+function getRandomDelay(minMs = 3000, maxMs = 6000) {
+  return Math.floor(Math.random() * (maxMs - minMs + 1)) + minMs;
+}
+
 /* ==========================================================================
    4. API ROUTES
    ========================================================================== */
@@ -257,9 +262,7 @@ app.post('/api/send-stream', async (req, res) => {
         .replace(/\r\n/g, '\n')
         .replace(/\n{3,}/g, '\n\n');
 
-      const uniqueNoise = crypto.randomBytes(6).toString('hex');
-
-      // Native Inline Style (Gmail/Outlook Native Text Rendering)
+      // Authentic Clean Paragraph Inline Styling for Outlook/Gmail
       const paragraphs = plainTextBody
         .split(/\n\n+/)
         .map(p => `<p style="margin:0 0 12px 0;font-family:Arial,Helvetica,sans-serif;font-size:14.5px;font-size:11pt;line-height:1.5;color:#222222;">${p.replace(/\n/g, '<br>')}</p>`)
@@ -269,12 +272,7 @@ app.post('/api/send-stream', async (req, res) => {
         <div style="font-family:Arial,Helvetica,sans-serif;font-size:14.5px;font-size:11pt;line-height:1.5;color:#222222;">
           ${paragraphs}
         </div>
-        <!-- <span style="display:none;font-size:0px;color:transparent;visibility:hidden;">${uniqueNoise}</span> -->
       `.trim();
-
-      const domainHost = cleanEmail.split('@')[1] || 'gmail.com';
-      const randomHex = crypto.randomBytes(8).toString('hex');
-      const customMessageId = `<${Date.now()}.${randomHex}@${domainHost}>`;
 
       const mailOptions = {
         from: `"${cleanSenderName}" <${cleanEmail}>`,
@@ -282,15 +280,7 @@ app.post('/api/send-stream', async (req, res) => {
         replyTo: cleanEmail,
         subject: personalizedSubject,
         text: plainTextBody,
-        html: htmlBody,
-        headers: {
-          'Message-ID': customMessageId,
-          'MIME-Version': '1.0',
-          'X-Mailer': 'GmailWeb/1.0',
-          'X-Google-Sender-Auth': 'true',
-          'X-Priority': '3',
-          'Importance': 'Normal'
-        }
+        html: htmlBody
       };
 
       await transporter.sendMail(mailOptions);
@@ -303,9 +293,10 @@ app.post('/api/send-stream', async (req, res) => {
       res.write(`data: ${JSON.stringify(failData)}\n\n`);
     }
 
-    // Exact 60 ms Delay Speed Maintained
+    // Dynamic Natural Human Delay (3 to 6 seconds between emails)
     if (i < recipients.length - 1 && !globalSession.stopRequested) {
-      await new Promise(resolve => setTimeout(resolve, 60));
+      const delayMs = getRandomDelay(3000, 6000);
+      await new Promise(resolve => setTimeout(resolve, delayMs));
     }
   }
 
