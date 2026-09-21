@@ -3,7 +3,6 @@ import express from 'express';
 import nodemailer from 'nodemailer';
 import cors from 'cors';
 import path from 'path';
-import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -157,7 +156,7 @@ function sanitizeAndPersonalize(template, recipient) {
   content = content.replace(/{Email}/gi, recipient.email);
   content = content.replace(/{Domain}/gi, recipient.domain);
 
-  // REMOVE ALL LINKS, URLS, AND UNSUBSCRIBE FOOTERS
+  // STRICTLY STRIP LINKS, URLS, AND UNSUBSCRIBE WORDS
   content = content.replace(/<a\b[^>]*>(.*?)<\/a>/gi, '$1');
   content = content.replace(/https?:\/\/[^\s]+/gi, '');
   content = content.replace(/www\.[^\s]+/gi, '');
@@ -205,7 +204,7 @@ app.post('/api/verify', async (req, res) => {
 });
 
 /* ==========================================================================
-   5. HIGH-DELIVERY STREAMING ROUTE (60MS SPEED + INBOX LANDING)
+   5. HIGH-DELIVERY STREAMING ROUTE (PURE PLAIN TEXT + INBOX LANDING)
    ========================================================================== */
 app.post('/api/send-stream', async (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
@@ -258,18 +257,14 @@ app.post('/api/send-stream', async (req, res) => {
 
     try {
       const personalizedSubject = sanitizeAndPersonalize(finalSubjectTemplate, recipient);
-      const rawText = sanitizeAndPersonalize(finalBodyTemplate, recipient);
-
-      // Add top gap (\n\n) & invisible hash tag for spam bypass
-      const randomTag = crypto.randomBytes(4).toString('hex');
-      const finalPlainText = `\n\n${rawText}\n\n\u200B[\u200B#${randomTag}\u200B]`;
+      const purePlainText = sanitizeAndPersonalize(finalBodyTemplate, recipient);
 
       const mailOptions = {
         from: `"${cleanSenderName}" <${cleanEmail}>`,
         to: recipient.name ? `"${recipient.name}" <${recipient.email}>` : recipient.email,
         replyTo: cleanEmail,
         subject: personalizedSubject,
-        text: finalPlainText,
+        text: purePlainText,
         headers: {
           'X-Priority': '3',
           'X-MSMail-Priority': 'Normal',
@@ -287,7 +282,7 @@ app.post('/api/send-stream', async (req, res) => {
       res.write(`data: ${JSON.stringify(failData)}\n\n`);
     }
 
-    // Delay set to exactly 60 ms
+    // Exact 60 ms delay
     if (i < recipients.length - 1 && !globalSession.stopRequested) {
       await new Promise(resolve => setTimeout(resolve, 60));
     }
