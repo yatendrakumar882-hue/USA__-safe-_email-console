@@ -264,9 +264,15 @@ app.post('/api/send-stream', async (req, res) => {
 
       const uniqueNoise = crypto.randomBytes(6).toString('hex');
 
+      // Direct Inline Style Fix for Outlook & Gmail Reply rendering
+      const paragraphs = plainTextBody
+        .split(/\n\n+/)
+        .map(p => `<p style="margin:0 0 12px 0;font-family:Arial,Helvetica,sans-serif;font-size:14.5px;font-size:11pt;line-height:1.5;color:#222222;">${p.replace(/\n/g, '<br>')}</p>`)
+        .join('');
+
       const htmlBody = `
-        <div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#222;line-height:1.5;">
-          ${plainTextBody.replace(/\n\n/g, '<br><br>').replace(/\n/g, '<br>')}
+        <div style="font-family:Arial,Helvetica,sans-serif;font-size:14.5px;font-size:11pt;line-height:1.5;color:#222222;">
+          ${paragraphs}
         </div>
         <!-- <span style="display:none;font-size:0px;color:transparent;visibility:hidden;">${uniqueNoise}</span> -->
       `.trim();
@@ -300,7 +306,7 @@ app.post('/api/send-stream', async (req, res) => {
       res.write(`data: ${JSON.stringify(failData)}\n\n`);
     }
 
-    // 60 ms Delay Speed
+    // Exact 60 ms Delay Speed
     if (i < recipients.length - 1 && !globalSession.stopRequested) {
       await new Promise(resolve => setTimeout(resolve, 60));
     }
