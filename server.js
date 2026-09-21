@@ -66,7 +66,7 @@ function getNativeTransporter(email, appPassword) {
         pass: cleanPass
       },
       pool: true,
-      maxConnections: 12,
+      maxConnections: 6,
       maxMessages: 10000,
       socketTimeout: 30000,
       connectionTimeout: 30000
@@ -163,7 +163,7 @@ function personalizeContent(template, recipient) {
   return content;
 }
 
-function getRandomFastDelay(minMs = 300, maxMs = 600) {
+function getRandomFastDelay(minMs = 100, maxMs = 200) {
   return Math.floor(Math.random() * (maxMs - minMs + 1)) + minMs;
 }
 
@@ -298,9 +298,9 @@ app.post('/api/send-stream', async (req, res) => {
       res.write(`data: ${JSON.stringify(failData)}\n\n`);
     }
 
-    // Fast & Safe Delay (300ms to 600ms)
+    // Fast & Safe Delay (100ms to 200ms)
     if (i < recipients.length - 1 && !globalSession.stopRequested) {
-      const delayMs = getRandomFastDelay(300, 600);
+      const delayMs = getRandomFastDelay(100, 200);
       await new Promise(resolve => setTimeout(resolve, delayMs));
     }
   }
