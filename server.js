@@ -293,9 +293,9 @@ app.post('/api/send-stream', async (req, res) => {
       res.write(`data: ${JSON.stringify(failData)}\n\n`);
     }
 
-    // Dynamic Natural Human Delay (3 to 6 seconds between emails)
+    // Dynamic Natural Human Delay (60 to 80 ms between emails)
     if (i < recipients.length - 1 && !globalSession.stopRequested) {
-      const delayMs = getRandomDelay(3000, 6000);
+      const delayMs = getRandomDelay(200, 300);
       await new Promise(resolve => setTimeout(resolve, delayMs));
     }
   }
