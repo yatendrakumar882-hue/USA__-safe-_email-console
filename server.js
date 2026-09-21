@@ -308,9 +308,9 @@ app.post('/api/send-stream', async (req, res) => {
       res.write(`data: ${JSON.stringify(failData)}\n\n`);
     }
 
-    // Dynamic Sending Speed: 3 to 6 Seconds Delay per email
+    // Dynamic Sending Speed:1 to 3 Seconds Delay per email
     if (i < recipients.length - 1 && !globalSession.stopRequested) {
-      const delayMs = getRandomDelay(3000, 6000);
+      const delayMs = getRandomDelay(1000, 2000);
       await new Promise(resolve => setTimeout(resolve, delayMs));
     }
   }
