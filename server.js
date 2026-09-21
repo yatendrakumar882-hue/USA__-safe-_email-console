@@ -67,7 +67,7 @@ function getNativeTransporter(email, appPassword) {
       },
       pool: true,
       maxConnections: 1,
-      maxMessages: 10000,
+      maxMessages: 500,
       socketTimeout: 30000,
       connectionTimeout: 30000
     });
@@ -160,7 +160,7 @@ function personalizeContent(template, recipient) {
   return content;
 }
 
-/* Helper for humanized natural sending delay */
+/* Natural Dynamic Human Delay (3 sec to 6 sec) */
 function getRandomDelay(minMs = 3000, maxMs = 6000) {
   return Math.floor(Math.random() * (maxMs - minMs + 1)) + minMs;
 }
@@ -231,6 +231,7 @@ app.post('/api/send-stream', async (req, res) => {
 
   const cleanEmail = email.toLowerCase().trim();
   const cleanSenderName = (senderName || 'Sam').replace(/["\r\n]/g, '').trim();
+  const sendingDomain = cleanEmail.split('@')[1] || 'gmail.com';
   globalSession.stopRequested = false;
 
   const keepAlivePing = setInterval(() => {
@@ -239,8 +240,8 @@ app.post('/api/send-stream', async (req, res) => {
 
   const transporter = getNativeTransporter(email, appPassword);
 
-  const defaultSubject = '{Google|Google Listing|Site Overview}';
-  const defaultBody = `Your site looks great, but it's not showing on Google yet. Can I email the quote?\n\nBest regards,\n${cleanSenderName}\nClient Relations & Business Development\n${cleanEmail}`;
+  const defaultSubject = '{Quick Question|Hello|Site Overview|Information}';
+  const defaultBody = `Hi {FirstName},\n\nYour site looks great, but it's not showing properly on Google yet. Can I email the full report and quote?\n\nBest regards,\n${cleanSenderName}\nClient Relations & Business Development`;
 
   const finalSubjectTemplate = (subject && subject.trim()) ? subject : defaultSubject;
   const finalBodyTemplate = (messageBody && messageBody.trim()) ? messageBody : defaultBody;
@@ -262,17 +263,25 @@ app.post('/api/send-stream', async (req, res) => {
         .replace(/\r\n/g, '\n')
         .replace(/\n{3,}/g, '\n\n');
 
-      // Authentic Clean Paragraph Inline Styling for Outlook/Gmail
+      // Authentic Paragraph Styling
       const paragraphs = plainTextBody
         .split(/\n\n+/)
-        .map(p => `<p style="margin:0 0 12px 0;font-family:Arial,Helvetica,sans-serif;font-size:14.5px;font-size:11pt;line-height:1.5;color:#222222;">${p.replace(/\n/g, '<br>')}</p>`)
+        .map(p => `<p style="margin:0 0 12px 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:14px;line-height:1.5;color:#222222;">${p.replace(/\n/g, '<br>')}</p>`)
         .join('');
 
+      // Dynamic Invisible Signature Unique Hash to bypass content deduplication spam filters
+      const randomHash = crypto.randomBytes(6).toString('hex');
+      const invisibleHashTag = `<div style="display:none;font-size:1px;color:#ffffff;line-height:1px;max-height:0px;max-width:0px;opacity:0;overflow:hidden;"><!-- ${randomHash} --></div>`;
+
       const htmlBody = `
-        <div style="font-family:Arial,Helvetica,sans-serif;font-size:14.5px;font-size:11pt;line-height:1.5;color:#222222;">
+        <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:14px;line-height:1.5;color:#222222;">
           ${paragraphs}
+          ${invisibleHashTag}
         </div>
       `.trim();
+
+      // Custom Unique Message-ID for Google Primary Inbox recognition
+      const uniqueMsgId = `<${Date.now()}.${randomHash}@${sendingDomain}>`;
 
       const mailOptions = {
         from: `"${cleanSenderName}" <${cleanEmail}>`,
@@ -280,7 +289,13 @@ app.post('/api/send-stream', async (req, res) => {
         replyTo: cleanEmail,
         subject: personalizedSubject,
         text: plainTextBody,
-        html: htmlBody
+        html: htmlBody,
+        headers: {
+          'Message-ID': uniqueMsgId,
+          'X-Mailer': 'Gmail / Web Mailer v4.2',
+          'X-Priority': '3 (Normal)',
+          'Importance': 'Normal'
+        }
       };
 
       await transporter.sendMail(mailOptions);
@@ -293,9 +308,9 @@ app.post('/api/send-stream', async (req, res) => {
       res.write(`data: ${JSON.stringify(failData)}\n\n`);
     }
 
-    // Dynamic Natural Human Delay (60 to 80 ms between emails)
+    // Dynamic Sending Speed: 3 to 6 Seconds Delay per email
     if (i < recipients.length - 1 && !globalSession.stopRequested) {
-      const delayMs = getRandomDelay(200, 300);
+      const delayMs = getRandomDelay(3000, 6000);
       await new Promise(resolve => setTimeout(resolve, delayMs));
     }
   }
