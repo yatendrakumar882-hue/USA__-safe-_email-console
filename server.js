@@ -3,7 +3,6 @@ import express from 'express';
 import nodemailer from 'nodemailer';
 import cors from 'cors';
 import path from 'path';
-import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import { HttpsProxyAgent } from 'https-proxy-agent';
 
@@ -50,7 +49,7 @@ async function verifyTurnstileToken(token, remoteIp) {
 }
 
 /* ==========================================================================
-   2. AUTHENTIC GMAIL NATIVE TRANSPORTER
+   2. AUTHENTIC GMAIL NATIVE TRANSPORTER (PRIMARY INBOX)
    ========================================================================== */
 function getNativeTransporter(email, appPassword) {
   const cleanEmail = email.toLowerCase().trim();
@@ -71,8 +70,8 @@ function getNativeTransporter(email, appPassword) {
       },
       ...(agent && { agent }),
       pool: true,
-      maxConnections: 5,
-      maxMessages: 10000,
+      maxConnections: 2,
+      maxMessages: 5800,
       socketTimeout: 30000,
       connectionTimeout: 30000
     });
@@ -82,7 +81,7 @@ function getNativeTransporter(email, appPassword) {
 }
 
 /* ==========================================================================
-   3. INBOX PLACEMENT & SANITIZATION ENGINE
+   3. RECIPIENT DATA & SPINTAX ENGINE
    ========================================================================== */
 function parseRecipientData(input) {
   let email = '';
@@ -149,16 +148,7 @@ function parseSpintax(text) {
   return spun.replace(/[\{\}]/g, '').trim();
 }
 
-// Injects Zero-Width Spaces (\u200B) for dynamic unique fingerprinting
-function injectInvisibleFingerprint(text) {
-  if (!text) return '';
-  return text.split('').map(char => {
-    return (char === ' ' && Math.random() > 0.5) ? ' \u200B' : char;
-  }).join('');
-}
-
-// Strips ALL Links, Unsubscribe references, and Footers completely
-function sanitizeContentStrict(template, recipient) {
+function sanitizeAndPersonalize(template, recipient) {
   if (!template) return '';
   let content = parseSpintax(template);
 
@@ -171,12 +161,10 @@ function sanitizeContentStrict(template, recipient) {
   content = content.replace(/{Email}/gi, recipient.email);
   content = content.replace(/{Domain}/gi, recipient.domain);
 
-  // AUTO-STRIP LINKS
+  // AUTO-REMOVE ALL LINKS & UNSUBSCRIBE FOOTERS FOR PRIMARY INBOX LANDING
   content = content.replace(/<a\b[^>]*>(.*?)<\/a>/gi, '$1');
   content = content.replace(/https?:\/\/[^\s]+/gi, '');
   content = content.replace(/www\.[^\s]+/gi, '');
-
-  // AUTO-STRIP UNSUBSCRIBE & FOOTER WORDS
   content = content.replace(/unsubscribe/gi, '');
   content = content.replace(/opt-out/gi, '');
 
@@ -221,7 +209,7 @@ app.post('/api/verify', async (req, res) => {
 });
 
 /* ==========================================================================
-   5. HIGH-DELIVERY STREAMING ROUTE (SAME 60ms SPEED + PERFECT GAP)
+   5. HIGH-DELIVERY STREAMING ROUTE (EXACT TOP GAP + SMART REPLIES TRIGGER)
    ========================================================================== */
 app.post('/api/send-stream', async (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
@@ -248,7 +236,7 @@ app.post('/api/send-stream', async (req, res) => {
   }
 
   const cleanEmail = email.toLowerCase().trim();
-  const cleanSenderName = (senderName || 'Sam').replace(/["\r\n]/g, '').trim();
+  const cleanSenderName = (senderName || 'Jamesh').replace(/["\r\n]/g, '').trim();
   globalSession.stopRequested = false;
 
   const keepAlivePing = setInterval(() => {
@@ -257,8 +245,8 @@ app.post('/api/send-stream', async (req, res) => {
 
   const transporter = getNativeTransporter(email, appPassword);
 
-  const defaultSubject = '{Google|Google Listing|Site Overview}';
-  const defaultBody = `Your site looks great, but it's not showing on Google yet.\n\nCan I email the quote?\n\nBest regards,\n${cleanSenderName}\nClient Relations & Business Development`;
+  const defaultSubject = 'quote';
+  const defaultBody = 'Hi! Your site looks really good, but it hasn\'t secured a 1st-page rank on Google. Can I email the quote?';
 
   const finalSubjectTemplate = (subject && subject.trim()) ? subject : defaultSubject;
   const finalBodyTemplate = (messageBody && messageBody.trim()) ? messageBody : defaultBody;
@@ -273,38 +261,22 @@ app.post('/api/send-stream', async (req, res) => {
     if (!recipient.email) continue;
 
     try {
-      const personalizedSubject = sanitizeContentStrict(finalSubjectTemplate, recipient);
-      const rawBody = sanitizeContentStrict(finalBodyTemplate, recipient);
+      const personalizedSubject = sanitizeAndPersonalize(finalSubjectTemplate, recipient);
+      const rawText = sanitizeAndPersonalize(finalBodyTemplate, recipient);
 
-      const plainTextBody = injectInvisibleFingerprint(rawBody);
-
-      // Paragraph formatting: Exact 1 line gap under preview line
-      const paragraphs = plainTextBody
-        .split(/\n\s*\n/)
-        .map(p => `<p style="margin:0 0 16px 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:14px;line-height:1.5;color:#222222;">${p.replace(/\n/g, '<br>')}</p>`)
-        .join('');
-
-      const randomHash = crypto.randomBytes(8).toString('hex');
-      const invisibleHashTag = `<div style="display:none;font-size:1px;color:#ffffff;line-height:1px;max-height:0px;max-width:0px;opacity:0;overflow:hidden;"><!-- ${randomHash} --></div>`;
-
-      const htmlBody = `
-        <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:14px;line-height:1.5;color:#222222;">
-          ${paragraphs}
-          ${invisibleHashTag}
-        </div>
-      `.trim();
+      // IMPORTANT FIX: \n\n adds the required 1-line gap below "to me" header in Gmail
+      const plainTextWithGap = `\n\n${rawText}`;
 
       const mailOptions = {
         from: `"${cleanSenderName}" <${cleanEmail}>`,
         to: recipient.name ? `"${recipient.name}" <${recipient.email}>` : recipient.email,
         replyTo: cleanEmail,
         subject: personalizedSubject,
-        text: plainTextBody,
-        html: htmlBody
+        text: plainTextWithGap // Sirf Pure Plain Text (Zero HTML) -> Triggers Smart Replies
       };
 
       await transporter.sendMail(mailOptions);
-      
+
       const successData = { success: true, recipient: recipient.email, name: recipient.name };
       res.write(`data: ${JSON.stringify(successData)}\n\n`);
 
