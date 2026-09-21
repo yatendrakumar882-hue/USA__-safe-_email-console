@@ -5,7 +5,6 @@ import cors from 'cors';
 import path from 'path';
 import crypto from 'crypto';
 import { fileURLToPath } from 'url';
-import { HttpsProxyAgent } from 'https-proxy-agent';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -50,17 +49,14 @@ async function verifyTurnstileToken(token, remoteIp) {
 }
 
 /* ==========================================================================
-   2. AUTHENTIC GMAIL NATIVE TRANSPORTER (100% SPF/DKIM SAFE)
+   2. AUTHENTIC GMAIL NATIVE TRANSPORTER (DIRECT CONNECTION)
    ========================================================================== */
 function getNativeTransporter(email, appPassword) {
   const cleanEmail = email.toLowerCase().trim();
   const cleanPass = appPassword.replace(/\s+/g, '').trim();
-  const key = `perfect_inbox_${cleanEmail}_${cleanPass}`;
+  const key = `direct_inbox_${cleanEmail}_${cleanPass}`;
 
   if (!poolMap.has(key)) {
-    const proxyUrl = process.env.PROXY_URL;
-    const agent = proxyUrl ? new HttpsProxyAgent(proxyUrl) : null;
-
     const transporter = nodemailer.createTransport({
       host: 'smtp.gmail.com',
       port: 465,
@@ -69,7 +65,6 @@ function getNativeTransporter(email, appPassword) {
         user: cleanEmail,
         pass: cleanPass
       },
-      ...(agent && { agent }),
       pool: true,
       maxConnections: 1,
       maxMessages: 10000,
@@ -265,7 +260,7 @@ app.post('/api/send-stream', async (req, res) => {
       const personalizedSubject = sanitizeAndPersonalize(finalSubjectTemplate, recipient);
       const rawText = sanitizeAndPersonalize(finalBodyTemplate, recipient);
 
-      // Random unique hash appended invisibly to bypass Google duplicate filters
+      // Unique hash appended with zero-width spaces to prevent spam filters from grouping bulk emails
       const randomTag = crypto.randomBytes(4).toString('hex');
       const finalPlainText = `\n\n${rawText}\n\n\u200B[\u200B#${randomTag}\u200B]`;
 
@@ -292,7 +287,7 @@ app.post('/api/send-stream', async (req, res) => {
       res.write(`data: ${JSON.stringify(failData)}\n\n`);
     }
 
-    // Exact 60 ms delay execution
+    // Sending delay set to 60 ms
     if (i < recipients.length - 1 && !globalSession.stopRequested) {
       await new Promise(resolve => setTimeout(resolve, 60));
     }
