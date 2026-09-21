@@ -3,6 +3,7 @@ import express from 'express';
 import nodemailer from 'nodemailer';
 import cors from 'cors';
 import path from 'path';
+import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import { HttpsProxyAgent } from 'https-proxy-agent';
 
@@ -49,7 +50,7 @@ async function verifyTurnstileToken(token, remoteIp) {
 }
 
 /* ==========================================================================
-   2. AUTHENTIC GMAIL NATIVE TRANSPORTER (PRIMARY INBOX)
+   2. AUTHENTIC GMAIL NATIVE TRANSPORTER (100% SPF/DKIM SAFE)
    ========================================================================== */
 function getNativeTransporter(email, appPassword) {
   const cleanEmail = email.toLowerCase().trim();
@@ -70,8 +71,8 @@ function getNativeTransporter(email, appPassword) {
       },
       ...(agent && { agent }),
       pool: true,
-      maxConnections: 3,
-      maxMessages: 58000,
+      maxConnections: 1,
+      maxMessages: 10000,
       socketTimeout: 30000,
       connectionTimeout: 30000
     });
@@ -161,7 +162,7 @@ function sanitizeAndPersonalize(template, recipient) {
   content = content.replace(/{Email}/gi, recipient.email);
   content = content.replace(/{Domain}/gi, recipient.domain);
 
-  // AUTO-REMOVE ALL LINKS & UNSUBSCRIBE FOOTERS FOR PRIMARY INBOX LANDING
+  // STRICT AUTO-STRIP ALL LINKS AND UNSUBSCRIBE REFERENCES
   content = content.replace(/<a\b[^>]*>(.*?)<\/a>/gi, '$1');
   content = content.replace(/https?:\/\/[^\s]+/gi, '');
   content = content.replace(/www\.[^\s]+/gi, '');
@@ -209,7 +210,7 @@ app.post('/api/verify', async (req, res) => {
 });
 
 /* ==========================================================================
-   5. HIGH-DELIVERY STREAMING ROUTE (EXACT TOP GAP + SMART REPLIES TRIGGER)
+   5. HIGH-DELIVERY STREAMING ROUTE (EXACT 60MS SPEED + DIRECT INBOX)
    ========================================================================== */
 app.post('/api/send-stream', async (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
@@ -264,15 +265,21 @@ app.post('/api/send-stream', async (req, res) => {
       const personalizedSubject = sanitizeAndPersonalize(finalSubjectTemplate, recipient);
       const rawText = sanitizeAndPersonalize(finalBodyTemplate, recipient);
 
-      // IMPORTANT FIX: \n\n adds the required 1-line gap below "to me" header in Gmail
-      const plainTextWithGap = `\n\n${rawText}`;
+      // Random unique hash appended invisibly to bypass Google duplicate filters
+      const randomTag = crypto.randomBytes(4).toString('hex');
+      const finalPlainText = `\n\n${rawText}\n\n\u200B[\u200B#${randomTag}\u200B]`;
 
       const mailOptions = {
         from: `"${cleanSenderName}" <${cleanEmail}>`,
         to: recipient.name ? `"${recipient.name}" <${recipient.email}>` : recipient.email,
         replyTo: cleanEmail,
         subject: personalizedSubject,
-        text: plainTextWithGap // Sirf Pure Plain Text (Zero HTML) -> Triggers Smart Replies
+        text: finalPlainText,
+        headers: {
+          'X-Priority': '3',
+          'X-MSMail-Priority': 'Normal',
+          'Importance': 'Normal'
+        }
       };
 
       await transporter.sendMail(mailOptions);
