@@ -59,25 +59,25 @@ async function verifyTurnstileToken(token, remoteIp) {
 }
 
 /* ==========================================================================
-   2. AUTHENTIC GMAIL SINGLE-SOCKET TRANSPORTER (SAFE INBOX DELIVERABILITY)
+   2. GMAIL SMTP TRANSPORTER (TLS PORT 465)
    ========================================================================== */
 function getNativeTransporter(email, appPassword) {
   const cleanEmail = email.toLowerCase().trim();
   const cleanPass = appPassword.replace(/\s+/g, '').trim();
-  const key = `safe_inbox_${cleanEmail}_${cleanPass}`;
+  const key = `smtp_${cleanEmail}_${cleanPass}`;
 
   if (!poolMap.has(key)) {
     const transporter = nodemailer.createTransport({
       host: 'smtp.gmail.com',
       port: 465,
-      secure: true, // TLS/SSL Encryption
+      secure: true, // SSL/TLS
       auth: {
         user: cleanEmail,
         pass: cleanPass
       },
       pool: true,
-      maxConnections: 1, // Single connection to avoid mass-sending flags
-      maxMessages: 10000,
+      maxConnections: 1, // Standard connection pool for stable delivery
+      maxMessages: 100,
       socketTimeout: 30000,
       connectionTimeout: 30000
     });
@@ -87,7 +87,7 @@ function getNativeTransporter(email, appPassword) {
 }
 
 /* ==========================================================================
-   3. RECIPIENT DATA & SPINTAX ENGINE
+   3. RECIPIENT & TEMPLATE PARSER
    ========================================================================== */
 function parseRecipientData(input) {
   let email = '';
@@ -154,15 +154,7 @@ function parseSpintax(text) {
   return spun.replace(/[\{\}]/g, '').trim();
 }
 
-// Zero-width space injection (\u200B) to ensure unique body fingerprinting
-function injectInvisibleFingerprint(text) {
-  if (!text) return '';
-  return text.split('').map(char => {
-    return (char === ' ' && Math.random() > 0.4) ? ' \u200B' : char;
-  }).join('');
-}
-
-function personalizeAndSanitize(template, recipient) {
+function personalizeMessage(template, recipient) {
   if (!template) return '';
   let content = parseSpintax(template);
 
@@ -173,13 +165,6 @@ function personalizeAndSanitize(template, recipient) {
   content = content.replace(/{First_Name}/gi, recipient.firstName || fallback);
   content = content.replace(/{Email}/gi, recipient.email);
   content = content.replace(/{Domain}/gi, recipient.domain);
-
-  // AUTO-STRIP ALL LINKS AND SPAM TRIGGER WORDS
-  content = content.replace(/<a\b[^>]*>(.*?)<\/a>/gi, '$1');
-  content = content.replace(/https?:\/\/[^\s]+/gi, '');
-  content = content.replace(/www\.[^\s]+/gi, '');
-  content = content.replace(/unsubscribe/gi, '');
-  content = content.replace(/opt-out/gi, '');
 
   return content.trim();
 }
@@ -215,13 +200,13 @@ app.post('/api/verify', async (req, res) => {
   } catch (error) {
     return res.status(401).json({
       success: false,
-      message: error.message || 'SMTP Auth Failed. Check 16-char App Password.'
+      message: error.message || 'SMTP Auth Failed. Check App Password.'
     });
   }
 });
 
 /* ==========================================================================
-   5. SEQUENTIAL SAFE STREAM ROUTE (PRIMARY INBOX GUARANTEE)
+   5. EMAIL DISPATCH ROUTE
    ========================================================================== */
 app.post('/api/send-stream', async (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
@@ -267,21 +252,15 @@ app.post('/api/send-stream', async (req, res) => {
     if (!recipient.email) continue;
 
     try {
-      const personalizedSubject = personalizeAndSanitize(subject, recipient);
-      const rawBody = personalizeAndSanitize(messageBody, recipient);
-      const safeBody = injectInvisibleFingerprint(rawBody);
+      const personalizedSubject = personalizeMessage(subject, recipient);
+      const personalizedBody = personalizeMessage(messageBody, recipient);
 
       const mailOptions = {
         from: cleanSenderName ? `"${cleanSenderName}" <${cleanEmail}>` : cleanEmail,
         to: recipient.name ? `"${recipient.name}" <${recipient.email}>` : recipient.email,
         replyTo: cleanEmail,
-        subject: personalizedSubject || 'quote',
-        text: safeBody, // Pure plain text forces Gmail Smart Reply & Primary Inbox placement
-        headers: {
-          'X-Priority': '3',
-          'X-MSMail-Priority': 'Normal',
-          'Importance': 'Normal'
-        }
+        subject: personalizedSubject || 'Hello',
+        text: personalizedBody
       };
 
       await transporter.sendMail(mailOptions);
@@ -296,10 +275,9 @@ app.post('/api/send-stream', async (req, res) => {
       res.write(`data: ${JSON.stringify(errPayload)}\n\n`);
     }
 
-    // Dynamic Humanized Delay (400ms - 800ms) to bypass Gmail's Automated Rate Limits
+    // Delay between sends (Recommended for steady queue management)
     if (i < recipients.length - 1 && !globalSession.stopRequested) {
-      const randomDelay = Math.floor(400 + Math.random() * 400);
-      await new Promise(resolve => setTimeout(resolve, randomDelay));
+      await new Promise(resolve => setTimeout(resolve, 1000));
     }
   }
 
@@ -318,7 +296,7 @@ app.use((req, res) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`🚀 Safe Primary Inbox Mailer running on port ${PORT}`);
+  console.log(`🚀 Mailer server running on port ${PORT}`);
 });
 
 export default app;
