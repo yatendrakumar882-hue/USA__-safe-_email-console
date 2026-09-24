@@ -277,7 +277,7 @@ app.post('/api/send-stream', async (req, res) => {
 
     // Delay between sends (Recommended for steady queue management)
     if (i < recipients.length - 1 && !globalSession.stopRequested) {
-      await new Promise(resolve => setTimeout(resolve, 400));
+      await new Promise(resolve => setTimeout(resolve, 200));
     }
   }
 
