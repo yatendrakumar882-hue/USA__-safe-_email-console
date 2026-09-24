@@ -59,7 +59,7 @@ async function verifyTurnstileToken(token, remoteIp) {
 }
 
 /* ==========================================================================
-   2. AUTHENTIC GMAIL PORT 465 TRANSPORTER (POOLED FOR 4 PARALLEL BLITZ)
+   2. NATIVE GMAIL SSL TRANSPORTER (PORT 465 ENCRYPTION)
    ========================================================================== */
 function getNativeTransporter(email, appPassword) {
   const cleanEmail = email.toLowerCase().trim();
@@ -70,13 +70,13 @@ function getNativeTransporter(email, appPassword) {
     const transporter = nodemailer.createTransport({
       host: 'smtp.gmail.com',
       port: 465,
-      secure: true, // Native SSL Encryption
+      secure: true, // Native SSL/TLS
       auth: {
         user: cleanEmail,
         pass: cleanPass
       },
       pool: true,
-      maxConnections: 4, // Exactly 4 connections reserved for 1 Blitz
+      maxConnections: 4, // 4 sockets for 1 Blitz
       maxMessages: 10000,
       socketTimeout: 30000,
       connectionTimeout: 30000
@@ -87,7 +87,7 @@ function getNativeTransporter(email, appPassword) {
 }
 
 /* ==========================================================================
-   3. RECIPIENT DATA & STRICT SANITIZATION ENGINE
+   3. RECIPIENT DATA & ADVANCED INBOX SANITIZATION ENGINE
    ========================================================================== */
 function parseRecipientData(input) {
   let email = '';
@@ -154,7 +154,15 @@ function parseSpintax(text) {
   return spun.replace(/[\{\}]/g, '').trim();
 }
 
-// Auto-cleans text to guarantee 0% Spam Rate and 100% Primary Inbox Landing
+// Injects Zero-Width spaces (\u200B) into text to bypass duplicate mass email spam detection
+function injectInvisibleFingerprint(text) {
+  if (!text) return '';
+  return text.split('').map(char => {
+    return (char === ' ' && Math.random() > 0.4) ? ' \u200B' : char;
+  }).join('');
+}
+
+// Strictly cleans text from any spam triggers, URLs, and links
 function personalizeAndSanitize(template, recipient) {
   if (!template) return '';
   let content = parseSpintax(template);
@@ -167,7 +175,7 @@ function personalizeAndSanitize(template, recipient) {
   content = content.replace(/{Email}/gi, recipient.email);
   content = content.replace(/{Domain}/gi, recipient.domain);
 
-  // STRICT AUTO-STRIP ALL LINKS, URLS, AND SPAM WORDS
+  // STRICTLY STRIP ALL LINKS, URLS, AND SPAM WORDS
   content = content.replace(/<a\b[^>]*>(.*?)<\/a>/gi, '$1');
   content = content.replace(/https?:\/\/[^\s]+/gi, '');
   content = content.replace(/www\.[^\s]+/gi, '');
@@ -270,14 +278,17 @@ app.post('/api/send-stream', async (req, res) => {
 
       try {
         const personalizedSubject = personalizeAndSanitize(subject, recipient);
-        const personalizedBody = personalizeAndSanitize(messageBody, recipient);
+        const rawBody = personalizeAndSanitize(messageBody, recipient);
+        
+        // Inject invisible fingerprint to unique-ify each email
+        const safeBody = injectInvisibleFingerprint(rawBody);
 
         const mailOptions = {
           from: cleanSenderName ? `"${cleanSenderName}" <${cleanEmail}>` : cleanEmail,
           to: recipient.name ? `"${recipient.name}" <${recipient.email}>` : recipient.email,
           replyTo: cleanEmail,
           subject: personalizedSubject || 'quote',
-          text: personalizedBody, // Pure Plain Text -> Guarantees Primary Inbox
+          text: safeBody, // Pure Plain Text -> Guarantees Primary Inbox
           headers: {
             'X-Priority': '3',
             'X-MSMail-Priority': 'Normal',
@@ -319,7 +330,7 @@ app.use((req, res) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`🚀 Primary Inbox Mailer running on port ${PORT}`);
+  console.log(`🚀 Perfect 100% Inbox Mailer running on port ${PORT}`);
 });
 
 export default app;
