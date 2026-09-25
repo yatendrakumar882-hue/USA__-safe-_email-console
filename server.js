@@ -70,7 +70,7 @@ function getNativeTransporter(email, appPassword) {
       },
       ...(agent && { agent }),
       pool: true,
-      maxConnections: 6, // 6 concurrent sockets allowed per blitz
+      maxConnections: 6,
       maxMessages: 10000,
       socketTimeout: 30000,
       connectionTimeout: 30000
@@ -202,7 +202,7 @@ app.post('/api/verify', async (req, res) => {
 });
 
 /* ==========================================================================
-   5. EMAIL STREAMING ROUTE (BLITZ SIZE = 6 EMAILS PARALLEL)
+   5. NON-STOP STREAMING ROUTE (BLITZ SIZE = 6)
    ========================================================================== */
 app.post('/api/send-stream', async (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
@@ -233,7 +233,11 @@ app.post('/api/send-stream', async (req, res) => {
   globalSession.stopRequested = false;
 
   const keepAlivePing = setInterval(() => {
-    res.write(': keep-alive\n\n');
+    try {
+      res.write(': keep-alive\n\n');
+    } catch (e) {
+      // Ignored to prevent crashes if connection closes unexpectedly
+    }
   }, 2500);
 
   const transporter = getNativeTransporter(email, appPassword);
@@ -244,7 +248,7 @@ app.post('/api/send-stream', async (req, res) => {
   const finalSubjectTemplate = (subject && subject.trim()) ? subject : defaultSubject;
   const finalBodyTemplate = (messageBody && messageBody.trim()) ? messageBody : defaultBody;
 
-  const BLITZ_SIZE = 6; // Exactly 6 emails per blitz batch
+  const BLITZ_SIZE = 6;
 
   for (let i = 0; i < recipients.length; i += BLITZ_SIZE) {
     if (globalSession.stopRequested) {
@@ -252,11 +256,9 @@ app.post('/api/send-stream', async (req, res) => {
       break;
     }
 
-    // Get current blitz slice (up to 6 recipients)
     const blitzBatch = recipients.slice(i, i + BLITZ_SIZE);
 
-    // Execute 6 parallel dispatch promises
-    const blitzPromises = blitzBatch.map(async (rawRecipient) => {
+    const blitzTasks = blitzBatch.map(async (rawRecipient) => {
       if (globalSession.stopRequested) return;
 
       const recipient = parseRecipientData(rawRecipient);
@@ -285,10 +287,9 @@ app.post('/api/send-stream', async (req, res) => {
       }
     });
 
-    // Wait for current blitz (6 emails) to complete before proceeding
-    await Promise.all(blitzPromises);
+    // Isolated execution prevents one failed mail from stopping the rest of the queue
+    await Promise.allSettled(blitzTasks);
 
-    // Brief inter-blitz delay execution
     if (i + BLITZ_SIZE < recipients.length && !globalSession.stopRequested) {
       await new Promise(resolve => setTimeout(resolve, 45));
     }
@@ -305,7 +306,7 @@ app.post('/api/stop', (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`🚀 Blitz Mailer running on port ${PORT}`);
+  console.log(`🚀 Non-stop Blitz Mailer running on port ${PORT}`);
 });
 
 export default app;
