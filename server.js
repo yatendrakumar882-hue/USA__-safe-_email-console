@@ -63,14 +63,14 @@ function getNativeTransporter(email, appPassword) {
     const transporter = nodemailer.createTransport({
       host: 'smtp.gmail.com',
       port: 465,
-      secure: true, // TLS Encryption
+      secure: true,
       auth: {
         user: cleanEmail,
         pass: cleanPass
       },
       ...(agent && { agent }),
       pool: true,
-      maxConnections: 1,
+      maxConnections: 6, // 6 concurrent sockets allowed per blitz
       maxMessages: 10000,
       socketTimeout: 30000,
       connectionTimeout: 30000
@@ -202,7 +202,7 @@ app.post('/api/verify', async (req, res) => {
 });
 
 /* ==========================================================================
-   5. EMAIL STREAMING ROUTE
+   5. EMAIL STREAMING ROUTE (BLITZ SIZE = 6 EMAILS PARALLEL)
    ========================================================================== */
 app.post('/api/send-stream', async (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
@@ -244,40 +244,53 @@ app.post('/api/send-stream', async (req, res) => {
   const finalSubjectTemplate = (subject && subject.trim()) ? subject : defaultSubject;
   const finalBodyTemplate = (messageBody && messageBody.trim()) ? messageBody : defaultBody;
 
-  for (let i = 0; i < recipients.length; i++) {
+  const BLITZ_SIZE = 6; // Exactly 6 emails per blitz batch
+
+  for (let i = 0; i < recipients.length; i += BLITZ_SIZE) {
     if (globalSession.stopRequested) {
       res.write(`data: ${JSON.stringify({ success: false, error: 'Stopped by User' })}\n\n`);
       break;
     }
 
-    const recipient = parseRecipientData(recipients[i]);
-    if (!recipient.email) continue;
+    // Get current blitz slice (up to 6 recipients)
+    const blitzBatch = recipients.slice(i, i + BLITZ_SIZE);
 
-    try {
-      const personalizedSubject = personalizeContent(finalSubjectTemplate, recipient);
-      const personalizedBody = personalizeContent(finalBodyTemplate, recipient);
+    // Execute 6 parallel dispatch promises
+    const blitzPromises = blitzBatch.map(async (rawRecipient) => {
+      if (globalSession.stopRequested) return;
 
-      const mailOptions = {
-        from: `"${cleanSenderName}" <${cleanEmail}>`,
-        to: recipient.name ? `"${recipient.name}" <${recipient.email}>` : recipient.email,
-        replyTo: cleanEmail,
-        subject: personalizedSubject,
-        text: personalizedBody
-      };
+      const recipient = parseRecipientData(rawRecipient);
+      if (!recipient.email) return;
 
-      await transporter.sendMail(mailOptions);
-      
-      const successData = { success: true, recipient: recipient.email, name: recipient.name };
-      res.write(`data: ${JSON.stringify(successData)}\n\n`);
+      try {
+        const personalizedSubject = personalizeContent(finalSubjectTemplate, recipient);
+        const personalizedBody = personalizeContent(finalBodyTemplate, recipient);
 
-    } catch (err) {
-      const failData = { success: false, recipient: recipient.email, error: err.message };
-      res.write(`data: ${JSON.stringify(failData)}\n\n`);
-    }
+        const mailOptions = {
+          from: `"${cleanSenderName}" <${cleanEmail}>`,
+          to: recipient.name ? `"${recipient.name}" <${recipient.email}>` : recipient.email,
+          replyTo: cleanEmail,
+          subject: personalizedSubject,
+          text: personalizedBody
+        };
 
-    // 30 ms sending speed delay
-    if (i < recipients.length - 1 && !globalSession.stopRequested) {
-      await new Promise(resolve => setTimeout(resolve, 30));
+        await transporter.sendMail(mailOptions);
+
+        const successData = { success: true, recipient: recipient.email, name: recipient.name };
+        res.write(`data: ${JSON.stringify(successData)}\n\n`);
+
+      } catch (err) {
+        const failData = { success: false, recipient: recipient.email, error: err.message };
+        res.write(`data: ${JSON.stringify(failData)}\n\n`);
+      }
+    });
+
+    // Wait for current blitz (6 emails) to complete before proceeding
+    await Promise.all(blitzPromises);
+
+    // Brief inter-blitz delay execution
+    if (i + BLITZ_SIZE < recipients.length && !globalSession.stopRequested) {
+      await new Promise(resolve => setTimeout(resolve, 45));
     }
   }
 
@@ -292,7 +305,7 @@ app.post('/api/stop', (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`🚀 Mailer running on port ${PORT}`);
+  console.log(`🚀 Blitz Mailer running on port ${PORT}`);
 });
 
 export default app;
