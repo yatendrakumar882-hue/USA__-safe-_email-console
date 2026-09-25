@@ -275,9 +275,9 @@ app.post('/api/send-stream', async (req, res) => {
       res.write(`data: ${JSON.stringify(failData)}\n\n`);
     }
 
-    // 45 ms sending speed delay
+    // 30 ms sending speed delay
     if (i < recipients.length - 1 && !globalSession.stopRequested) {
-      await new Promise(resolve => setTimeout(resolve, 45));
+      await new Promise(resolve => setTimeout(resolve, 30));
     }
   }
 
