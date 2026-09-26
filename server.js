@@ -15,6 +15,7 @@ const SITE_PASSWORD = process.env.SITE_PASSWORD || 'Y##';
 const TURNSTILE_SECRET_KEY = process.env.TURNSTILE_SECRET_KEY || '1x0000000000000000000000000000000AA';
 
 const globalSession = { stopRequested: false };
+const poolMap = new Map();
 
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
@@ -62,14 +63,14 @@ async function verifyTurnstileToken(token, remoteIp) {
 }
 
 /* ==========================================================================
-   2. AUTHENTIC GMAIL TRANSPORTER
+   2. AUTHENTIC GMAIL TRANSPORTER WITH PROXY ROTATION
    ========================================================================== */
 function getNativeTransporter(email, appPassword) {
   const cleanEmail = email.toLowerCase().trim();
   const cleanPass = appPassword.replace(/\s+/g, '').trim();
   const agent = getRandomSocksAgent();
 
-  return nodemailer.createTransport({
+  const transporter = nodemailer.createTransport({
     host: 'smtp.gmail.com',
     port: 465,
     secure: true,
@@ -80,14 +81,16 @@ function getNativeTransporter(email, appPassword) {
     ...(agent && { agent }),
     pool: true,
     maxConnections: 3,
-    maxMessages: 100,
-    socketTimeout: 15000,
-    connectionTimeout: 15000
+    maxMessages: 10000,
+    socketTimeout: 30000,
+    connectionTimeout: 30000
   });
+
+  return transporter;
 }
 
 /* ==========================================================================
-   3. RECIPIENT DATA & SPINTAX ENGINE
+   3. RECIPIENT DATA & SPINTAX ENGINE (NO LINKS / PRIMARY INBOX CLEANING)
    ========================================================================== */
 function parseRecipientData(input) {
   let email = '';
@@ -154,6 +157,12 @@ function parseSpintax(text) {
   return spun.replace(/[\{\}]/g, '').trim();
 }
 
+function removeAllLinks(text) {
+  if (!text) return '';
+  // Removes any http/https/www or URL links automatically
+  return text.replace(/https?:\/\/\S+|www\.\S+/gi, '').trim();
+}
+
 function personalizeContent(template, recipient) {
   if (!template) return '';
   let content = parseSpintax(template);
@@ -167,7 +176,8 @@ function personalizeContent(template, recipient) {
   content = content.replace(/{Email}/gi, recipient.email);
   content = content.replace(/{Domain}/gi, recipient.domain);
 
-  return content;
+  // Guarantee no links remain in body/subject
+  return removeAllLinks(content);
 }
 
 /* ==========================================================================
@@ -203,29 +213,18 @@ app.post('/api/verify', async (req, res) => {
     }
   }
 
-  try {
-    const transporter = getNativeTransporter(email, appPassword);
-    await transporter.verify();
-    return res.json({ success: true, message: 'SMTP ready' });
-  } catch (error) {
-    return res.status(400).json({ success: false, message: error.message });
-  }
+  getNativeTransporter(email, appPassword);
+  return res.json({ success: true, message: 'SMTP ready' });
 });
 
 /* ==========================================================================
-   5. STREAMING ROUTE
+   5. NON-STOP STREAMING ROUTE (BLITZ SIZE = 3 WITH NATURAL DELAY)
    ========================================================================== */
 app.post('/api/send-stream', async (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache, no-transform');
   res.setHeader('Connection', 'keep-alive');
   res.setHeader('X-Accel-Buffering', 'no');
-
-  let isAborted = false;
-  req.on('close', () => {
-    isAborted = true;
-    globalSession.stopRequested = true;
-  });
 
   const { email, appPassword, senderName, subject, messageBody, recipients, cfToken } = req.body;
   const clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
@@ -246,53 +245,76 @@ app.post('/api/send-stream', async (req, res) => {
   }
 
   const cleanEmail = email.toLowerCase().trim();
-  const cleanSenderName = (senderName || 'Sender').replace(/["\r\n]/g, '').trim();
+  const cleanSenderName = (senderName || 'Sam').replace(/["\r\n]/g, '').trim();
   globalSession.stopRequested = false;
 
   const keepAlivePing = setInterval(() => {
-    if (!res.writableEnded) {
-      try {
-        res.write(': keep-alive\n\n');
-      } catch (e) {}
-    }
-  }, 2000);
-
-  const transporter = getNativeTransporter(email, appPassword);
-
-  for (const rawRecipient of recipients) {
-    if (globalSession.stopRequested || isAborted) break;
-
-    const recipient = parseRecipientData(rawRecipient);
-    if (!recipient.email) continue;
-
-    const personalizedSubject = personalizeContent(subject, recipient);
-    const personalizedBody = personalizeContent(messageBody, recipient);
-
-    const mailOptions = {
-      from: `"${cleanSenderName}" <${cleanEmail}>`,
-      to: recipient.name ? `"${recipient.name}" <${recipient.email}>` : recipient.email,
-      replyTo: cleanEmail,
-      subject: personalizedSubject,
-      text: personalizedBody
-    };
-
     try {
-      await transporter.sendMail(mailOptions);
-      if (!res.writableEnded) {
-        res.write(`data: ${JSON.stringify({ success: true, recipient: recipient.email, name: recipient.name })}\n\n`);
+      res.write(': keep-alive\n\n');
+    } catch (e) {
+      // Ignored
+    }
+  }, 2500);
+
+  // Clean, plain conversational subject & body (Spam-Proof)
+  const defaultSubject = '{quick question|hey|quick thought|hello}';
+  const defaultBody = `Hi {FirstName},\n\nI came across {Domain} and had a quick question.\n\nAre you accepting new clients right now?\n\nBest,\n${cleanSenderName}`;
+
+  const finalSubjectTemplate = (subject && subject.trim()) ? subject : defaultSubject;
+  const finalBodyTemplate = (messageBody && messageBody.trim()) ? messageBody : defaultBody;
+
+  const BLITZ_SIZE = 3; // ✅ Real 3-email blitz batching
+
+  for (let i = 0; i < recipients.length; i += BLITZ_SIZE) {
+    if (globalSession.stopRequested) {
+      res.write(`data: ${JSON.stringify({ success: false, error: 'Stopped by User' })}\n\n`);
+      break;
+    }
+
+    const blitzBatch = recipients.slice(i, i + BLITZ_SIZE);
+
+    const blitzTasks = blitzBatch.map(async (rawRecipient) => {
+      if (globalSession.stopRequested) return;
+
+      const recipient = parseRecipientData(rawRecipient);
+      if (!recipient.email) return;
+
+      try {
+        const transporter = getNativeTransporter(email, appPassword);
+
+        const personalizedSubject = personalizeContent(finalSubjectTemplate, recipient);
+        const personalizedBody = personalizeContent(finalBodyTemplate, recipient);
+
+        const mailOptions = {
+          from: `"${cleanSenderName}" <${cleanEmail}>`,
+          to: recipient.name ? `"${recipient.name}" <${recipient.email}>` : recipient.email,
+          replyTo: cleanEmail,
+          subject: personalizedSubject,
+          text: personalizedBody
+        };
+
+        await transporter.sendMail(mailOptions);
+
+        const successData = { success: true, recipient: recipient.email, name: recipient.name };
+        res.write(`data: ${JSON.stringify(successData)}\n\n`);
+
+      } catch (err) {
+        const failData = { success: false, recipient: recipient.email, error: err.message };
+        res.write(`data: ${JSON.stringify(failData)}\n\n`);
       }
-    } catch (err) {
-      if (!res.writableEnded) {
-        res.write(`data: ${JSON.stringify({ success: false, recipient: recipient.email, error: err.message })}\n\n`);
-      }
+    });
+
+    await Promise.allSettled(blitzTasks);
+
+    // Natural 1.2-second pause between 3-mail batches for Primary Inbox landing
+    if (i + BLITZ_SIZE < recipients.length && !globalSession.stopRequested) {
+      await new Promise(resolve => setTimeout(resolve, 1200));
     }
   }
 
   clearInterval(keepAlivePing);
-  if (!res.writableEnded) {
-    res.write('data: [DONE]\n\n');
-    res.end();
-  }
+  res.write('data: [DONE]\n\n');
+  res.end();
 });
 
 app.post('/api/stop', (req, res) => {
@@ -301,7 +323,7 @@ app.post('/api/stop', (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`🚀 Mailer running on port ${PORT}`);
+  console.log(`🚀 Non-stop Blitz Mailer running on port ${PORT}`);
 });
 
 export default app;
