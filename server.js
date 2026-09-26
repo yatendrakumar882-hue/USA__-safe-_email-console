@@ -81,7 +81,7 @@ function getNativeTransporter(email, appPassword) {
     },
     ...(agent && { agent }),
     pool: true,
-    maxConnections: 6,
+    maxConnections: 4,
     maxMessages: 10000,
     socketTimeout: 30000,
     connectionTimeout: 30000
@@ -212,7 +212,7 @@ app.post('/api/verify', async (req, res) => {
 });
 
 /* ==========================================================================
-   5. NON-STOP STREAMING ROUTE (BLITZ SIZE = 6)
+   5. NON-STOP STREAMING ROUTE (BLITZ SIZE = 4)
    ========================================================================== */
 app.post('/api/send-stream', async (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
