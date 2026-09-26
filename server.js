@@ -4,7 +4,7 @@ import nodemailer from 'nodemailer';
 import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { SocksProxyAgent } from 'socks-proxy-agent'; // ✅ Fixed: SOCKS5 Agent Added
+import { SocksProxyAgent } from 'socks-proxy-agent';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -26,13 +26,12 @@ app.use(express.static(path.join(__dirname, 'public')));
    PROXY ROTATOR ENGINE (SOCKS5 SUPPORT)
    ========================================================================== */
 function getRandomSocksAgent() {
-  const proxyListStr = process.env.SOCKS5_PROXY_URLS || ''; // ✅ Reads Vercel Proxy List
+  const proxyListStr = process.env.SOCKS5_PROXY_URLS || '';
   if (!proxyListStr.trim()) return null;
 
   const proxies = proxyListStr.split(',').map(p => p.trim()).filter(Boolean);
   if (proxies.length === 0) return null;
 
-  // Pick random proxy from 20 Dedicated IPs
   const randomProxy = proxies[Math.floor(Math.random() * proxies.length)];
   return new SocksProxyAgent(randomProxy);
 }
@@ -69,7 +68,7 @@ async function verifyTurnstileToken(token, remoteIp) {
 function getNativeTransporter(email, appPassword) {
   const cleanEmail = email.toLowerCase().trim();
   const cleanPass = appPassword.replace(/\s+/g, '').trim();
-  const agent = getRandomSocksAgent(); // ✅ Gets fresh SOCKS5 Proxy Agent on each transporter creation
+  const agent = getRandomSocksAgent();
 
   const transporter = nodemailer.createTransport({
     host: 'smtp.gmail.com',
@@ -81,7 +80,7 @@ function getNativeTransporter(email, appPassword) {
     },
     ...(agent && { agent }),
     pool: true,
-    maxConnections: 4,
+    maxConnections: 3,
     maxMessages: 10000,
     socketTimeout: 30000,
     connectionTimeout: 30000
@@ -91,7 +90,7 @@ function getNativeTransporter(email, appPassword) {
 }
 
 /* ==========================================================================
-   3. RECIPIENT DATA & SPINTAX ENGINE
+   3. RECIPIENT DATA & SPINTAX ENGINE (NO LINKS / PRIMARY INBOX CLEANING)
    ========================================================================== */
 function parseRecipientData(input) {
   let email = '';
@@ -158,6 +157,12 @@ function parseSpintax(text) {
   return spun.replace(/[\{\}]/g, '').trim();
 }
 
+function removeAllLinks(text) {
+  if (!text) return '';
+  // Removes any http/https/www or URL links automatically
+  return text.replace(/https?:\/\/\S+|www\.\S+/gi, '').trim();
+}
+
 function personalizeContent(template, recipient) {
   if (!template) return '';
   let content = parseSpintax(template);
@@ -171,7 +176,8 @@ function personalizeContent(template, recipient) {
   content = content.replace(/{Email}/gi, recipient.email);
   content = content.replace(/{Domain}/gi, recipient.domain);
 
-  return content;
+  // Guarantee no links remain in body/subject
+  return removeAllLinks(content);
 }
 
 /* ==========================================================================
@@ -212,7 +218,7 @@ app.post('/api/verify', async (req, res) => {
 });
 
 /* ==========================================================================
-   5. NON-STOP STREAMING ROUTE (BLITZ SIZE = 4)
+   5. NON-STOP STREAMING ROUTE (BLITZ SIZE = 3 WITH NATURAL DELAY)
    ========================================================================== */
 app.post('/api/send-stream', async (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
@@ -250,13 +256,14 @@ app.post('/api/send-stream', async (req, res) => {
     }
   }, 2500);
 
-  const defaultSubject = '{Google|Google Listing|Site Overview}';
-  const defaultBody = `Your site looks great, but it's not showing on Google yet. Can I email the quote?\n\nBest regards,\n${cleanSenderName}\nClient Relations & Business Development\n${cleanEmail}`;
+  // Clean, plain conversational subject & body (Spam-Proof)
+  const defaultSubject = '{quick question|hey|quick thought|hello}';
+  const defaultBody = `Hi {FirstName},\n\nI came across {Domain} and had a quick question.\n\nAre you accepting new clients right now?\n\nBest,\n${cleanSenderName}`;
 
   const finalSubjectTemplate = (subject && subject.trim()) ? subject : defaultSubject;
   const finalBodyTemplate = (messageBody && messageBody.trim()) ? messageBody : defaultBody;
 
-  const BLITZ_SIZE = 4;
+  const BLITZ_SIZE = 3; // ✅ Real 3-email blitz batching
 
   for (let i = 0; i < recipients.length; i += BLITZ_SIZE) {
     if (globalSession.stopRequested) {
@@ -273,7 +280,6 @@ app.post('/api/send-stream', async (req, res) => {
       if (!recipient.email) return;
 
       try {
-        // Dynamic proxy transporter creation per mail for complete IP rotation
         const transporter = getNativeTransporter(email, appPassword);
 
         const personalizedSubject = personalizeContent(finalSubjectTemplate, recipient);
@@ -300,8 +306,9 @@ app.post('/api/send-stream', async (req, res) => {
 
     await Promise.allSettled(blitzTasks);
 
+    // Natural 1.2-second pause between 3-mail batches for Primary Inbox landing
     if (i + BLITZ_SIZE < recipients.length && !globalSession.stopRequested) {
-      await new Promise(resolve => setTimeout(resolve, 45));
+      await new Promise(resolve => setTimeout(resolve, 1200));
     }
   }
 
