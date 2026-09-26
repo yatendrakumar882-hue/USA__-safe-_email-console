@@ -15,7 +15,6 @@ const SITE_PASSWORD = process.env.SITE_PASSWORD || 'Y##';
 const TURNSTILE_SECRET_KEY = process.env.TURNSTILE_SECRET_KEY || '1x0000000000000000000000000000000AA';
 
 const globalSession = { stopRequested: false };
-const poolMap = new Map();
 
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
@@ -70,7 +69,7 @@ function getNativeTransporter(email, appPassword) {
   const cleanPass = appPassword.replace(/\s+/g, '').trim();
   const agent = getRandomSocksAgent();
 
-  const transporter = nodemailer.createTransport({
+  return nodemailer.createTransport({
     host: 'smtp.gmail.com',
     port: 465,
     secure: true,
@@ -85,12 +84,10 @@ function getNativeTransporter(email, appPassword) {
     socketTimeout: 30000,
     connectionTimeout: 30000
   });
-
-  return transporter;
 }
 
 /* ==========================================================================
-   3. RECIPIENT DATA & SPINTAX ENGINE (NO LINKS / PRIMARY INBOX CLEANING)
+   3. RECIPIENT DATA & SPINTAX ENGINE
    ========================================================================== */
 function parseRecipientData(input) {
   let email = '';
@@ -157,12 +154,6 @@ function parseSpintax(text) {
   return spun.replace(/[\{\}]/g, '').trim();
 }
 
-function removeAllLinks(text) {
-  if (!text) return '';
-  // Removes any http/https/www or URL links automatically
-  return text.replace(/https?:\/\/\S+|www\.\S+/gi, '').trim();
-}
-
 function personalizeContent(template, recipient) {
   if (!template) return '';
   let content = parseSpintax(template);
@@ -176,8 +167,7 @@ function personalizeContent(template, recipient) {
   content = content.replace(/{Email}/gi, recipient.email);
   content = content.replace(/{Domain}/gi, recipient.domain);
 
-  // Guarantee no links remain in body/subject
-  return removeAllLinks(content);
+  return content;
 }
 
 /* ==========================================================================
@@ -218,7 +208,7 @@ app.post('/api/verify', async (req, res) => {
 });
 
 /* ==========================================================================
-   5. NON-STOP STREAMING ROUTE (BLITZ SIZE = 4 WITH NATURAL DELAY)
+   5. NON-STOP STREAMING ROUTE (BLITZ SIZE = 4)
    ========================================================================== */
 app.post('/api/send-stream', async (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
@@ -256,14 +246,19 @@ app.post('/api/send-stream', async (req, res) => {
     }
   }, 2500);
 
-  // Clean, plain conversational subject & body (Spam-Proof)
-  const defaultSubject = '{quick question|hey|quick thought|hello}';
-  const defaultBody = `Hi {FirstName},\n\nI came across {Domain} and had a quick question.\n\nAre you accepting new clients right now?\n\nBest,\n${cleanSenderName}`;
+  // Client disconnect handling to prevent memory leaks
+  req.on('close', () => {
+    globalSession.stopRequested = true;
+    clearInterval(keepAlivePing);
+  });
+
+  const defaultSubject = '{Google|Google Listing|Site Overview}';
+  const defaultBody = `Your site looks great, but it's not showing on Google yet. Can I email the quote?\n\nBest regards,\n${cleanSenderName}\nClient Relations & Business Development\n${cleanEmail}`;
 
   const finalSubjectTemplate = (subject && subject.trim()) ? subject : defaultSubject;
   const finalBodyTemplate = (messageBody && messageBody.trim()) ? messageBody : defaultBody;
 
-  const BLITZ_SIZE = 4; // ✅ Real 3-email blitz batching
+  const BLITZ_SIZE = 4;
 
   for (let i = 0; i < recipients.length; i += BLITZ_SIZE) {
     if (globalSession.stopRequested) {
@@ -306,9 +301,8 @@ app.post('/api/send-stream', async (req, res) => {
 
     await Promise.allSettled(blitzTasks);
 
-    // Natural 1.2-second pause between 4-mail batches for Primary Inbox landing
     if (i + BLITZ_SIZE < recipients.length && !globalSession.stopRequested) {
-      await new Promise(resolve => setTimeout(resolve, 1200));
+      await new Promise(resolve => setTimeout(resolve, 45));
     }
   }
 
