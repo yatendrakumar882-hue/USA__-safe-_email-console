@@ -4,7 +4,7 @@ import nodemailer from 'nodemailer';
 import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { HttpsProxyAgent } from 'https-proxy-agent';
+import { SocksProxyAgent } from 'socks-proxy-agent'; // ✅ Fixed: SOCKS5 Agent Added
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -21,6 +21,21 @@ app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
+
+/* ==========================================================================
+   PROXY ROTATOR ENGINE (SOCKS5 SUPPORT)
+   ========================================================================== */
+function getRandomSocksAgent() {
+  const proxyListStr = process.env.SOCKS5_PROXY_URLS || ''; // ✅ Reads Vercel Proxy List
+  if (!proxyListStr.trim()) return null;
+
+  const proxies = proxyListStr.split(',').map(p => p.trim()).filter(Boolean);
+  if (proxies.length === 0) return null;
+
+  // Pick random proxy from 20 Dedicated IPs
+  const randomProxy = proxies[Math.floor(Math.random() * proxies.length)];
+  return new SocksProxyAgent(randomProxy);
+}
 
 /* ==========================================================================
    1. TURNSTILE BOT PROTECTION
@@ -49,35 +64,30 @@ async function verifyTurnstileToken(token, remoteIp) {
 }
 
 /* ==========================================================================
-   2. AUTHENTIC GMAIL TRANSPORTER
+   2. AUTHENTIC GMAIL TRANSPORTER WITH PROXY ROTATION
    ========================================================================== */
 function getNativeTransporter(email, appPassword) {
   const cleanEmail = email.toLowerCase().trim();
   const cleanPass = appPassword.replace(/\s+/g, '').trim();
-  const key = `smtp_transporter_${cleanEmail}_${cleanPass}`;
+  const agent = getRandomSocksAgent(); // ✅ Gets fresh SOCKS5 Proxy Agent on each transporter creation
 
-  if (!poolMap.has(key)) {
-    const proxyUrl = process.env.PROXY_URL;
-    const agent = proxyUrl ? new HttpsProxyAgent(proxyUrl) : null;
+  const transporter = nodemailer.createTransport({
+    host: 'smtp.gmail.com',
+    port: 465,
+    secure: true,
+    auth: {
+      user: cleanEmail,
+      pass: cleanPass
+    },
+    ...(agent && { agent }),
+    pool: true,
+    maxConnections: 6,
+    maxMessages: 10000,
+    socketTimeout: 30000,
+    connectionTimeout: 30000
+  });
 
-    const transporter = nodemailer.createTransport({
-      host: 'smtp.gmail.com',
-      port: 465,
-      secure: true,
-      auth: {
-        user: cleanEmail,
-        pass: cleanPass
-      },
-      ...(agent && { agent }),
-      pool: true,
-      maxConnections: 6,
-      maxMessages: 10000,
-      socketTimeout: 30000,
-      connectionTimeout: 30000
-    });
-    poolMap.set(key, transporter);
-  }
-  return poolMap.get(key);
+  return transporter;
 }
 
 /* ==========================================================================
@@ -236,11 +246,9 @@ app.post('/api/send-stream', async (req, res) => {
     try {
       res.write(': keep-alive\n\n');
     } catch (e) {
-      // Ignored to prevent crashes if connection closes unexpectedly
+      // Ignored
     }
   }, 2500);
-
-  const transporter = getNativeTransporter(email, appPassword);
 
   const defaultSubject = '{Google|Google Listing|Site Overview}';
   const defaultBody = `Your site looks great, but it's not showing on Google yet. Can I email the quote?\n\nBest regards,\n${cleanSenderName}\nClient Relations & Business Development\n${cleanEmail}`;
@@ -265,6 +273,9 @@ app.post('/api/send-stream', async (req, res) => {
       if (!recipient.email) return;
 
       try {
+        // Dynamic proxy transporter creation per mail for complete IP rotation
+        const transporter = getNativeTransporter(email, appPassword);
+
         const personalizedSubject = personalizeContent(finalSubjectTemplate, recipient);
         const personalizedBody = personalizeContent(finalBodyTemplate, recipient);
 
@@ -287,7 +298,6 @@ app.post('/api/send-stream', async (req, res) => {
       }
     });
 
-    // Isolated execution prevents one failed mail from stopping the rest of the queue
     await Promise.allSettled(blitzTasks);
 
     if (i + BLITZ_SIZE < recipients.length && !globalSession.stopRequested) {
