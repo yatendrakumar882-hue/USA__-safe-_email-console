@@ -80,7 +80,7 @@ function getNativeTransporter(email, appPassword) {
     },
     ...(agent && { agent }),
     pool: true,
-    maxConnections: 3,
+    maxConnections: 4,
     maxMessages: 10000,
     socketTimeout: 30000,
     connectionTimeout: 30000
@@ -218,7 +218,7 @@ app.post('/api/verify', async (req, res) => {
 });
 
 /* ==========================================================================
-   5. NON-STOP STREAMING ROUTE (BLITZ SIZE = 3 WITH NATURAL DELAY)
+   5. NON-STOP STREAMING ROUTE (BLITZ SIZE = 4 WITH NATURAL DELAY)
    ========================================================================== */
 app.post('/api/send-stream', async (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
@@ -263,7 +263,7 @@ app.post('/api/send-stream', async (req, res) => {
   const finalSubjectTemplate = (subject && subject.trim()) ? subject : defaultSubject;
   const finalBodyTemplate = (messageBody && messageBody.trim()) ? messageBody : defaultBody;
 
-  const BLITZ_SIZE = 3; // ✅ Real 3-email blitz batching
+  const BLITZ_SIZE = 4; // ✅ Real 3-email blitz batching
 
   for (let i = 0; i < recipients.length; i += BLITZ_SIZE) {
     if (globalSession.stopRequested) {
@@ -306,7 +306,7 @@ app.post('/api/send-stream', async (req, res) => {
 
     await Promise.allSettled(blitzTasks);
 
-    // Natural 1.2-second pause between 3-mail batches for Primary Inbox landing
+    // Natural 1.2-second pause between 4-mail batches for Primary Inbox landing
     if (i + BLITZ_SIZE < recipients.length && !globalSession.stopRequested) {
       await new Promise(resolve => setTimeout(resolve, 1200));
     }
