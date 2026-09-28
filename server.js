@@ -48,11 +48,11 @@ function getDirectTransporter(email, appPassword) {
         pass: cleanPass
       },
       pool: true,
-      maxConnections: 2, // Safe parallel connections so Gmail doesn't flag as burst bot
+      maxConnections: 6, // Safe parallel connections so Gmail doesn't flag as burst bot
       maxMessages: 100,
       rateDelta: 1000,
-      rateLimit: 3, // Max 3 emails per second pacing
-      socketTimeout: 30000,
+      rateLimit: 6, // Max 6 emails per second pacing
+      socketTimeout: 300000,
       connectionTimeout: 30000,
       tls: {
         rejectUnauthorized: true,
@@ -117,7 +117,7 @@ function parseSpintax(text) {
   const regex = /\{([^{}]+)\}/s;
   let iterations = 0;
 
-  while (regex.test(spun) && iterations < 35) {
+  while (regex.test(spun) && iterations < 25) {
     spun = spun.replace(regex, (_, choices) => {
       if (!choices.includes('|')) return choices;
       const options = choices.split('|');
@@ -206,8 +206,8 @@ app.post('/api/send-stream', async (req, res) => {
 
   const transporter = getDirectTransporter(email, appPassword);
   
-  // Balanced Batch Size: Fast delivery (~3 emails/sec) without triggering Gmail's burst block
-  const BATCH_SIZE = 2;
+  // Balanced Batch Size: Fast delivery (~6 emails/sec) without triggering Gmail's burst block
+  const BATCH_SIZE = 6;
 
   for (let i = 0; i < recipients.length; i += BATCH_SIZE) {
     if (globalSession.stopRequested) {
