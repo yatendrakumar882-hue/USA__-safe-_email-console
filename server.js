@@ -46,15 +46,15 @@ function getFastCleanTransporter(email, appPassword) {
     const transporter = nodemailer.createTransport({
       host: 'smtp.gmail.com',
       port: 587,
-      secure: false, // Direct STARTTLS on 587 (No Proxy)
+      secure: false, // Direct STARTTLS on Port 587 (No Proxy)
       name: senderDomain,
       auth: {
         user: cleanEmail,
         pass: cleanPass
       },
       pool: true,
-      maxConnections: 6, // Fast parallel connections
-      maxMessages: 98000,
+      maxConnections: 5, // Fast parallel connections
+      maxMessages: 500,
       socketTimeout: 30000,
       connectionTimeout: 30000,
       tls: {
@@ -120,7 +120,7 @@ function parseSpintax(text) {
   const regex = /\{([^{}]+)\}/s;
   let iterations = 0;
 
-  while (regex.test(spun) && iterations < 25) {
+  while (regex.test(spun) && iterations < 35) {
     spun = spun.replace(regex, (_, choices) => {
       if (!choices.includes('|')) return choices;
       const options = choices.split('|');
@@ -132,16 +132,39 @@ function parseSpintax(text) {
   return spun.replace(/[\{\}]/g, '').trim();
 }
 
-// Keeps the EXACT SEO meaning:
-// "Your site looks great, but due to an error it is not on Google's top page. Can I send a screenshot?"
-// while varying sentence structure so every single email lands in Primary Inbox
+// Clean Inbox-Boosting Footer (No links, no unsubscribe, no hello/thanks)
+function buildInboxTrustFooter(senderName, recipient) {
+  const refCode = crypto.randomBytes(3).toString('hex').toUpperCase();
+  const timeStr = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+  const signPart = senderName ? `${senderName} | ` : '';
+
+  const deviceLine = pickRandom([
+    'Sent from my iPhone',
+    'Sent from my iPad',
+    'Sent from my Galaxy',
+    'Sent via Workspace Mail',
+    'Sent from Outlook Mobile',
+    'Sent from Mail for Windows'
+  ]);
+
+  const noteLine = pickRandom([
+    `${signPart}Direct Note • Ref #${refCode}`,
+    `${signPart}Client Desk • ID #${refCode} (${timeStr})`,
+    `${signPart}Web Review Note • #${refCode}`,
+    `${signPart}Outreach Desk • Ref ${refCode}`
+  ]);
+
+  return `\n\n--\n${deviceLine}\n${noteLine}`;
+}
+
+// Modifies a few key words/phrases from the template without adding extra Hello or Thanks
 function buildUniqueHumanMessage(rawTemplate, recipient, senderName) {
   if (!rawTemplate) return '';
 
   const isHtml = /<[a-z][\s\S]*>/i.test(rawTemplate);
   let selectedTemplate = String(rawTemplate).trim();
 
-  // If multiple lines of templates are pasted, pick 1 random line per email
+  // If multiple template lines are pasted, pick ONE random line per recipient
   if (!isHtml) {
     const lines = selectedTemplate
       .split(/\r?\n/)
@@ -159,87 +182,87 @@ function buildUniqueHumanMessage(rawTemplate, recipient, senderName) {
 
   let content = parseSpintax(selectedTemplate);
 
+  // Replace standard tags only if used in template
   const fallbackName = recipient.firstName || recipient.name || '';
-  content = content.replace(/{Name}/gi, recipient.name || fallbackName || 'there');
-  content = content.replace(/{FirstName}/gi, recipient.firstName || fallbackName || 'there');
-  content = content.replace(/{First_Name}/gi, recipient.firstName || fallbackName || 'there');
+  content = content.replace(/{Name}/gi, recipient.name || fallbackName || '');
+  content = content.replace(/{FirstName}/gi, recipient.firstName || fallbackName || '');
+  content = content.replace(/{First_Name}/gi, recipient.firstName || fallbackName || '');
   content = content.replace(/{Email}/gi, recipient.email);
   content = content.replace(/{Domain}/gi, recipient.domain);
 
-  // 1. Exact meaning variations for "not showing on page one / Google's top results"
+  // Subtle word-level rotation inside the template (keeps exact template flow)
   content = content.replace(
-    /(yet it is not showing on page one|yet it does not showing on page one|keeping it out of Google's top results|stopping it from showing up on the top results)/gi,
+    /\b(Your website|Your site)\b/gi,
+    () => pickRandom(['Your website', 'Your site', 'Your web page', 'Your business site'])
+  );
+
+  content = content.replace(
+    /\b(looks|appears|seems)\s+(great|good|solid|impressive|appealing|attractive|polished|refined|modern|clean|organized|excellent|well built|engaging|balanced|structured|neat)\b/gi,
+    () => {
+      const v1 = pickRandom(['looks', 'appears', 'seems']);
+      const v2 = pickRandom([
+        'great', 'impressive', 'well built', 'clean', 'modern',
+        'polished', 'solid', 'organized', 'appealing', 'excellent'
+      ]);
+      return `${v1} ${v2}`;
+    }
+  );
+
+  // Phrase variations (combines the working de-fingerprinting + exact SEO meaning)
+  content = content.replace(
+    /(not showing on page one|does not showing on page one|keeping it out of Google's top results|stopping it from showing up on the top results)/gi,
     () => pickRandom([
-      'but a small error is keeping it off Google’s top page',
-      'yet an SEO error is stopping it from ranking on Google’s first page',
-      'but a minor error is preventing it from showing on Google’s top page',
-      'yet a technical error is keeping it off the first page of Google',
-      'but an indexing error is stopping it from appearing on Google’s top page',
-      'yet a small site error is holding it back from Google’s first page',
-      'but an error is keeping it from showing up on Google’s top page',
-      'yet a minor SEO issue is stopping it from reaching Google’s first page'
+      'not appearing on the top page of results',
+      'missing from the first page of search results',
+      'held back from showing on Google’s top page',
+      'not coming up on page one right now',
+      'sitting just outside the first page results',
+      'not surfacing on the top page where it should be',
+      'kept off the first page due to a small issue'
     ])
   );
 
-  // 2. Exact meaning variations for "Can I send a screenshot?"
   content = content.replace(
     /(Can|May) I (send|email)( you)? (a |the )?screen\s*shot\??/gi,
     () => pickRandom([
-      'Can I send you the screenshot?',
-      'May I email you a screenshot of the error?',
-      'Can I share the screenshot with you?',
-      'Mind if I send over the screenshot?',
-      'Can I email you a quick screenshot?',
-      'May I send over the screenshot I took?',
-      'Can I send you a screenshot showing the error?',
-      'Would it be okay if I sent you the screenshot?'
+      'Can I send over the screenshot I took?',
+      'May I email you a quick screenshot of what I noticed?',
+      'Mind if I share the screenshot with you?',
+      'Should I send over the screenshot I captured?',
+      'Can I forward you the screenshot showing this?',
+      'Would it be okay if I sent over a quick screenshot?'
     ])
   );
 
-  // 3. Exact meaning variations for "Can I sent quote"
   content = content.replace(
     /Can I sent quote\.?/gi,
     () => pickRandom([
-      'Can I send you a screenshot and a quick quote?',
-      'May I email you the screenshot and details?',
-      'Can I share the screenshot with you?'
+      'Can I send over a quick note on this?',
+      'May I share the screenshot and details?',
+      'Should I send over what I spotted?'
     ])
   );
 
-  // Personalize greeting with recipient's FirstName naturally
-  if (fallbackName && !content.toLowerCase().includes(fallbackName.toLowerCase())) {
-    content = content.replace(/^(Hello!|Hi!|Hey,|Hello,|Hi,)/i, (match) => {
-      const cleanGreet = match.replace(/[!.,]/g, '');
-      return `${cleanGreet} ${fallbackName},\n\n`;
-    });
+  // Append the Inbox-Boosting Footer (No Hello/Thanks added!)
+  const footer = buildInboxTrustFooter(senderName, recipient);
+
+  if (isHtml) {
+    return `${content.trim()}<br><br><small style="color:#666666;">${footer.trim().replace(/\n/g, '<br>')}</small>`;
   }
 
-  // Clean sign-off
-  if (!isHtml && !/(regards|thanks|best|sincerely|cheers)/i.test(content)) {
-    const signOff = pickRandom([
-      'Best regards,',
-      'Thanks,',
-      'Kind regards,',
-      'Best,',
-      'Warm regards,'
-    ]);
-    const signName = senderName || '';
-    content = `${content}\n\n${signOff}${signName ? `\n${signName}` : ''}`;
-  }
-
-  return content.trim();
+  return `${content.trim()}${footer}`;
 }
 
 function buildUniqueSubject(rawSubject, recipient) {
   let subj = personalizeContentBasic(rawSubject, recipient);
   if (!subj) {
-    const namePart = recipient.firstName ? `${recipient.firstName} - ` : '';
+    const ref = recipient.domain || recipient.firstName || 'your site';
     subj = pickRandom([
-      `${namePart}Small error on your website`,
-      `Quick question about your site's Google ranking`,
-      `Spotted a small SEO error on your site`,
-      `${namePart}Your website on Google's top page`,
-      `Screenshot of a small error on your site`
+      `Quick note regarding ${ref}`,
+      `Small issue spotted on ${ref}`,
+      `Question about ${ref}`,
+      `Observation on ${ref}`,
+      `Quick check on ${ref}`
     ]);
   }
   return subj;
@@ -249,9 +272,9 @@ function personalizeContentBasic(template, recipient) {
   if (!template) return '';
   let content = parseSpintax(template);
   const fallback = recipient.firstName || recipient.name || '';
-  content = content.replace(/{Name}/gi, recipient.name || fallback || 'there');
-  content = content.replace(/{FirstName}/gi, recipient.firstName || fallback || 'there');
-  content = content.replace(/{First_Name}/gi, recipient.firstName || fallback || 'there');
+  content = content.replace(/{Name}/gi, recipient.name || fallback || '');
+  content = content.replace(/{FirstName}/gi, recipient.firstName || fallback || '');
+  content = content.replace(/{First_Name}/gi, recipient.firstName || fallback || '');
   content = content.replace(/{Email}/gi, recipient.email);
   content = content.replace(/{Domain}/gi, recipient.domain);
   return content.trim();
@@ -320,7 +343,7 @@ app.post('/api/send-stream', async (req, res) => {
   }, 4000);
 
   const transporter = getFastCleanTransporter(email, appPassword);
-  const BATCH_SIZE = 6;
+  const BATCH_SIZE = 5;
 
   for (let i = 0; i < recipients.length; i += BATCH_SIZE) {
     if (globalSession.stopRequested) {
