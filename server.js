@@ -62,7 +62,7 @@ function getDirectTransporter(email, appPassword, forceRefresh = false) {
         pass: cleanPass
       },
       pool: true,
-      maxConnections: 4, // 4 parallel connections for 4-email batch
+      maxConnections: 5, // 5 parallel connections for 5-email batch
       maxMessages: 16,   // Refreshes socket every 16 emails (4 batches) to prevent 50+ session flagging
       socketTimeout: 30000,
       connectionTimeout: 30000,
@@ -365,8 +365,8 @@ app.post('/api/send-stream', async (req, res) => {
 
   let transporter = getDirectTransporter(email, appPassword, true);
 
-  // 1 Batch = 4 Emails
-  const BATCH_SIZE = 4;
+  // 1 Batch = 5 Emails
+  const BATCH_SIZE = 5;
 
   for (let i = 0; i < recipients.length; i += BATCH_SIZE) {
     if (globalSession.stopRequested) {
@@ -374,7 +374,7 @@ app.post('/api/send-stream', async (req, res) => {
       break;
     }
 
-    // Refresh SMTP pool every 24 emails (6 batches) so Gmail never flags long sessions after 50 emails
+    // Refresh SMTP pool every 24 emails (5 batches) so Gmail never flags long sessions after 50 emails
     if (i > 0 && i % 24 === 0) {
       transporter = getDirectTransporter(email, appPassword, true);
       await new Promise(resolve => setTimeout(resolve, 900));
@@ -433,7 +433,7 @@ app.post('/api/send-stream', async (req, res) => {
       }
     }
 
-    // Smooth pause after every 4-email batch (600ms - 900ms)
+    // Smooth pause after every 5-email batch (600ms - 900ms)
     if (i + BATCH_SIZE < recipients.length) {
       const batchDelay = Math.floor(600 + Math.random() * 300);
       await new Promise(resolve => setTimeout(resolve, batchDelay));
