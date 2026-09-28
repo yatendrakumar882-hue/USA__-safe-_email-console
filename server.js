@@ -53,8 +53,8 @@ function getFastCleanTransporter(email, appPassword) {
         pass: cleanPass
       },
       pool: true,
-      maxConnections: 5, // Fast parallel connections
-      maxMessages: 500,
+      maxConnections: 6, // Fast parallel connections
+      maxMessages: 98000,
       socketTimeout: 30000,
       connectionTimeout: 30000,
       tls: {
@@ -120,7 +120,7 @@ function parseSpintax(text) {
   const regex = /\{([^{}]+)\}/s;
   let iterations = 0;
 
-  while (regex.test(spun) && iterations < 35) {
+  while (regex.test(spun) && iterations < 25) {
     spun = spun.replace(regex, (_, choices) => {
       if (!choices.includes('|')) return choices;
       const options = choices.split('|');
@@ -132,23 +132,22 @@ function parseSpintax(text) {
   return spun.replace(/[\{\}]/g, '').trim();
 }
 
-// Automatically picks 1 template if user pastes multiple template lines,
-// and naturalizes repetitive spam-flagged phrases so every single email is unique
+// Keeps the EXACT SEO meaning:
+// "Your site looks great, but due to an error it is not on Google's top page. Can I send a screenshot?"
+// while varying sentence structure so every single email lands in Primary Inbox
 function buildUniqueHumanMessage(rawTemplate, recipient, senderName) {
   if (!rawTemplate) return '';
 
   const isHtml = /<[a-z][\s\S]*>/i.test(rawTemplate);
   let selectedTemplate = String(rawTemplate).trim();
 
-  // If user pasted multiple separate lines of templates (like 20 variations),
-  // automatically pick ONE random line per email instead of sending all 20 lines together!
+  // If multiple lines of templates are pasted, pick 1 random line per email
   if (!isHtml) {
     const lines = selectedTemplate
       .split(/\r?\n/)
       .map(l => l.trim())
       .filter(l => l.length > 15);
 
-    // Check if lines look like separate standalone variations (most start with Hi/Hello/Hey/Your)
     const looksLikeVariationList =
       lines.length >= 2 &&
       lines.filter(l => /^(hi|hello|hey|your|good\s)/i.test(l)).length >= Math.ceil(lines.length * 0.6);
@@ -160,7 +159,6 @@ function buildUniqueHumanMessage(rawTemplate, recipient, senderName) {
 
   let content = parseSpintax(selectedTemplate);
 
-  // Replace standard tags
   const fallbackName = recipient.firstName || recipient.name || '';
   content = content.replace(/{Name}/gi, recipient.name || fallbackName || 'there');
   content = content.replace(/{FirstName}/gi, recipient.firstName || fallbackName || 'there');
@@ -168,61 +166,47 @@ function buildUniqueHumanMessage(rawTemplate, recipient, senderName) {
   content = content.replace(/{Email}/gi, recipient.email);
   content = content.replace(/{Domain}/gi, recipient.domain);
 
-  // De-fingerprint common SEO outreach trigger phrases so Gmail doesn't match bulk signature
+  // 1. Exact meaning variations for "not showing on page one / Google's top results"
   content = content.replace(
-    /not showing on page one/gi,
+    /(yet it is not showing on page one|yet it does not showing on page one|keeping it out of Google's top results|stopping it from showing up on the top results)/gi,
     () => pickRandom([
-      'not appearing in the initial search view',
-      'missing from the top organic spots',
-      'held back from the primary search results',
-      'not coming up in the main results yet',
-      'sitting just outside the top search view',
-      'not surfacing where it should be'
+      'but a small error is keeping it off Google’s top page',
+      'yet an SEO error is stopping it from ranking on Google’s first page',
+      'but a minor error is preventing it from showing on Google’s top page',
+      'yet a technical error is keeping it off the first page of Google',
+      'but an indexing error is stopping it from appearing on Google’s top page',
+      'yet a small site error is holding it back from Google’s first page',
+      'but an error is keeping it from showing up on Google’s top page',
+      'yet a minor SEO issue is stopping it from reaching Google’s first page'
     ])
   );
 
-  content = content.replace(
-    /keeping it out of Google's top results/gi,
-    () => pickRandom([
-      'holding it back from the main search view',
-      'preventing it from appearing higher up',
-      'limiting its visibility in search',
-      'keeping it from surfacing properly'
-    ])
-  );
-
-  content = content.replace(
-    /stopping it from showing up on the top results/gi,
-    () => pickRandom([
-      'holding it back from appearing higher',
-      'keeping it from showing up properly',
-      'affecting how it appears in search',
-      'limiting its placement right now'
-    ])
-  );
-
+  // 2. Exact meaning variations for "Can I send a screenshot?"
   content = content.replace(
     /(Can|May) I (send|email)( you)? (a |the )?screen\s*shot\??/gi,
     () => pickRandom([
-      'Would you mind if I shared a quick note on what I noticed?',
-      'Let me know if I can send over the details I found.',
-      'Happy to share a quick breakdown if you are open to it.',
-      'Should I send over what I spotted on my end?',
-      'Mind if I forward the details over to you?',
-      'Let me know if you would like me to share what I found.'
+      'Can I send you the screenshot?',
+      'May I email you a screenshot of the error?',
+      'Can I share the screenshot with you?',
+      'Mind if I send over the screenshot?',
+      'Can I email you a quick screenshot?',
+      'May I send over the screenshot I took?',
+      'Can I send you a screenshot showing the error?',
+      'Would it be okay if I sent you the screenshot?'
     ])
   );
 
+  // 3. Exact meaning variations for "Can I sent quote"
   content = content.replace(
     /Can I sent quote\.?/gi,
     () => pickRandom([
-      'Let me know if I can share a few details.',
-      'Happy to send over more info if helpful.',
-      'Would you be open to seeing what I found?'
+      'Can I send you a screenshot and a quick quote?',
+      'May I email you the screenshot and details?',
+      'Can I share the screenshot with you?'
     ])
   );
 
-  // Personalize greeting naturally with recipient FirstName if greeting has no name
+  // Personalize greeting with recipient's FirstName naturally
   if (fallbackName && !content.toLowerCase().includes(fallbackName.toLowerCase())) {
     content = content.replace(/^(Hello!|Hi!|Hey,|Hello,|Hi,)/i, (match) => {
       const cleanGreet = match.replace(/[!.,]/g, '');
@@ -230,7 +214,7 @@ function buildUniqueHumanMessage(rawTemplate, recipient, senderName) {
     });
   }
 
-  // Add natural conversational sign-off if not already present so every email has unique structure
+  // Clean sign-off
   if (!isHtml && !/(regards|thanks|best|sincerely|cheers)/i.test(content)) {
     const signOff = pickRandom([
       'Best regards,',
@@ -249,13 +233,13 @@ function buildUniqueHumanMessage(rawTemplate, recipient, senderName) {
 function buildUniqueSubject(rawSubject, recipient) {
   let subj = personalizeContentBasic(rawSubject, recipient);
   if (!subj) {
-    const namePart = recipient.firstName ? `for ${recipient.firstName}` : '';
+    const namePart = recipient.firstName ? `${recipient.firstName} - ` : '';
     subj = pickRandom([
-      `Quick question ${namePart}`.trim(),
-      `Note regarding your site`,
-      `Quick observation ${namePart}`.trim(),
-      `Checking in ${namePart}`.trim(),
-      `Small detail I noticed`
+      `${namePart}Small error on your website`,
+      `Quick question about your site's Google ranking`,
+      `Spotted a small SEO error on your site`,
+      `${namePart}Your website on Google's top page`,
+      `Screenshot of a small error on your site`
     ]);
   }
   return subj;
@@ -336,7 +320,7 @@ app.post('/api/send-stream', async (req, res) => {
   }, 4000);
 
   const transporter = getFastCleanTransporter(email, appPassword);
-  const BATCH_SIZE = 5; // Fast parallel sending
+  const BATCH_SIZE = 6;
 
   for (let i = 0; i < recipients.length; i += BATCH_SIZE) {
     if (globalSession.stopRequested) {
@@ -372,7 +356,6 @@ app.post('/api/send-stream', async (req, res) => {
           mailOptions.html = `<div dir="ltr">${finalBody}</div>`;
           mailOptions.text = stripHtmlTags(finalBody);
         } else {
-          // Send both clean plain-text and clean native HTML paragraph structure
           mailOptions.text = finalBody;
           mailOptions.html = `<div dir="ltr">${finalBody.replace(/\n/g, '<br>')}</div>`;
         }
