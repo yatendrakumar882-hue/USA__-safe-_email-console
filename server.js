@@ -31,23 +31,27 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => {});
 });
 
-function getPort587Transporter(email, appPassword) {
+function getDirectTransporter(email, appPassword) {
   const cleanEmail = email.toLowerCase().trim();
   const cleanPass = appPassword.replace(/\s+/g, '').trim();
-  const key = `native_${cleanEmail}_${cleanPass}`;
+  const senderDomain = cleanEmail.includes('@') ? cleanEmail.split('@')[1] : 'gmail.com';
+  const key = `direct_${cleanEmail}_${cleanPass}`;
 
   if (!poolMap.has(key)) {
     const transporter = nodemailer.createTransport({
       host: 'smtp.gmail.com',
-      port: 587,
-      secure: false, // Standard STARTTLS on Port 587 (Direct Connection)
+      port: 465,
+      secure: true, // Implicit TLS on Port 465 for clean direct handshake
+      name: senderDomain, // Prevents [127.0.0.1] localhost leak in Received header
       auth: {
         user: cleanEmail,
         pass: cleanPass
       },
       pool: true,
-      maxConnections: 6,
-      maxMessages: 500,
+      maxConnections: 2, // Safe parallel connections so Gmail doesn't flag as burst bot
+      maxMessages: 100,
+      rateDelta: 1000,
+      rateLimit: 3, // Max 3 emails per second pacing
       socketTimeout: 30000,
       connectionTimeout: 30000,
       tls: {
@@ -168,7 +172,7 @@ app.post('/api/verify', async (req, res) => {
   }
 
   try {
-    const transporter = getPort587Transporter(email, appPassword);
+    const transporter = getDirectTransporter(email, appPassword);
     await transporter.verify();
     return res.json({ success: true, message: 'SMTP verified successfully' });
   } catch (error) {
@@ -200,8 +204,10 @@ app.post('/api/send-stream', async (req, res) => {
     try { res.write(': keep-alive\n\n'); } catch {}
   }, 4000);
 
-  const transporter = getPort587Transporter(email, appPassword);
-  const BATCH_SIZE = 6;
+  const transporter = getDirectTransporter(email, appPassword);
+  
+  // Balanced Batch Size: Fast delivery (~3 emails/sec) without triggering Gmail's burst block
+  const BATCH_SIZE = 2;
 
   for (let i = 0; i < recipients.length; i += BATCH_SIZE) {
     if (globalSession.stopRequested) {
@@ -216,32 +222,29 @@ app.post('/api/send-stream', async (req, res) => {
       if (!recipient.email) return { success: false, recipient: '', error: 'Invalid Email' };
 
       try {
-        // Same intra-batch sending speed (150ms - 250ms)
         if (idx > 0) {
-          await new Promise(resolve => setTimeout(resolve, Math.floor(150 + Math.random() * 100)));
+          await new Promise(resolve => setTimeout(resolve, Math.floor(180 + Math.random() * 120)));
         }
 
         const personalizedSubject = personalizeContent(subject, recipient);
         const personalizedBody = personalizeContent(messageBody, recipient);
-        const isHtml = /<[a-z][\s\S]*>/i.test(personalizedBody);
-
-        const cleanBodyHtml = isHtml
-          ? personalizedBody
-          : personalizedBody.replace(/\n/g, '<br>');
-
-        // Pure 1-to-1 native webmail structure without any links or extra headers
-        const formattedHtml = `<div dir="ltr">${cleanBodyHtml}</div>`;
-        const plainTextBody = htmlToPlainText(cleanBodyHtml);
+        const hasHtmlTags = /<[a-z][\s\S]*>/i.test(personalizedBody);
 
         const mailOptions = {
           from: cleanSenderName ? `"${cleanSenderName}" <${cleanEmail}>` : cleanEmail,
           to: recipient.name ? `"${recipient.name}" <${recipient.email}>` : recipient.email,
-          replyTo: cleanEmail,
-          subject: personalizedSubject || 'Hello',
-          text: plainTextBody,
-          html: formattedHtml,
+          subject: personalizedSubject || 'Quick question',
           encoding: 'utf-8'
         };
+
+        // If plain text is provided, send pure text/plain (highest inbox rate)
+        // Only attach HTML if user actually wrote HTML tags
+        if (hasHtmlTags) {
+          mailOptions.html = `<div dir="ltr">${personalizedBody}</div>`;
+          mailOptions.text = htmlToPlainText(personalizedBody);
+        } else {
+          mailOptions.text = personalizedBody.trim();
+        }
 
         await transporter.sendMail(mailOptions);
 
@@ -264,9 +267,9 @@ app.post('/api/send-stream', async (req, res) => {
       }
     }
 
-    // Same inter-batch sending speed (800ms - 1200ms)
+    // Smooth pacing between pairs (450ms - 700ms)
     if (i + BATCH_SIZE < recipients.length) {
-      const batchDelay = Math.floor(800 + Math.random() * 400);
+      const batchDelay = Math.floor(450 + Math.random() * 250);
       await new Promise(resolve => setTimeout(resolve, batchDelay));
     }
   }
