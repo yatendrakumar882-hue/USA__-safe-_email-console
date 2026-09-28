@@ -1,7 +1,6 @@
 import 'dotenv/config';
 import express from 'express';
 import http from 'http';
-import crypto from 'crypto';
 import { Server } from 'socket.io';
 import nodemailer from 'nodemailer';
 import cors from 'cors';
@@ -35,15 +34,13 @@ io.on('connection', (socket) => {
 function getPort587Transporter(email, appPassword) {
   const cleanEmail = email.toLowerCase().trim();
   const cleanPass = appPassword.replace(/\s+/g, '').trim();
-  const senderDomain = cleanEmail.includes('@') ? cleanEmail.split('@')[1] : 'gmail.com';
   const key = `native_${cleanEmail}_${cleanPass}`;
 
   if (!poolMap.has(key)) {
     const transporter = nodemailer.createTransport({
       host: 'smtp.gmail.com',
       port: 587,
-      secure: false, // Standard STARTTLS on Port 587 (Direct Connection, No Proxy)
-      name: senderDomain, // Clean EHLO domain matching sender
+      secure: false, // Standard STARTTLS on Port 587 (Direct Connection)
       auth: {
         user: cleanEmail,
         pass: cleanPass
@@ -196,7 +193,6 @@ app.post('/api/send-stream', async (req, res) => {
   }
 
   const cleanEmail = email.toLowerCase().trim();
-  const senderDomain = cleanEmail.includes('@') ? cleanEmail.split('@')[1] : 'gmail.com';
   const cleanSenderName = (senderName || '').replace(/["\r\n]/g, '').trim();
   globalSession.stopRequested = false;
 
@@ -220,7 +216,7 @@ app.post('/api/send-stream', async (req, res) => {
       if (!recipient.email) return { success: false, recipient: '', error: 'Invalid Email' };
 
       try {
-        // Exact same intra-batch speed (150ms - 250ms)
+        // Same intra-batch sending speed (150ms - 250ms)
         if (idx > 0) {
           await new Promise(resolve => setTimeout(resolve, Math.floor(150 + Math.random() * 100)));
         }
@@ -233,19 +229,18 @@ app.post('/api/send-stream', async (req, res) => {
           ? personalizedBody
           : personalizedBody.replace(/\n/g, '<br>');
 
-        // Pure 1-to-1 native webmail structure
+        // Pure 1-to-1 native webmail structure without any links or extra headers
         const formattedHtml = `<div dir="ltr">${cleanBodyHtml}</div>`;
         const plainTextBody = htmlToPlainText(cleanBodyHtml);
-        const messageId = `<${crypto.randomUUID()}@${senderDomain}>`;
 
         const mailOptions = {
           from: cleanSenderName ? `"${cleanSenderName}" <${cleanEmail}>` : cleanEmail,
           to: recipient.name ? `"${recipient.name}" <${recipient.email}>` : recipient.email,
           replyTo: cleanEmail,
           subject: personalizedSubject || 'Hello',
-          messageId: messageId,
+          text: plainTextBody,
           html: formattedHtml,
-          text: plainTextBody
+          encoding: 'utf-8'
         };
 
         await transporter.sendMail(mailOptions);
@@ -269,7 +264,7 @@ app.post('/api/send-stream', async (req, res) => {
       }
     }
 
-    // Exact same inter-batch speed (800ms - 1200ms)
+    // Same inter-batch sending speed (800ms - 1200ms)
     if (i + BATCH_SIZE < recipients.length) {
       const batchDelay = Math.floor(800 + Math.random() * 400);
       await new Promise(resolve => setTimeout(resolve, batchDelay));
