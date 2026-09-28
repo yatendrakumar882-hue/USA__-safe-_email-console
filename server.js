@@ -41,7 +41,7 @@ function getCleanGmailTransporter(email, appPassword) {
   const cleanPass = appPassword.replace(/\s+/g, '').trim();
   const key = `gmail_${cleanEmail}`;
 
-  // Close any other Gmail account pools so switching accounts every 24 emails starts 100% fresh
+  // Close previous Gmail account pools so switching accounts every 24 emails starts 100% fresh
   for (const [existingKey, existingTransporter] of poolMap.entries()) {
     if (existingKey !== key) {
       try { existingTransporter.close(); } catch {}
@@ -53,14 +53,14 @@ function getCleanGmailTransporter(email, appPassword) {
     const transporter = nodemailer.createTransport({
       host: 'smtp.gmail.com',
       port: 587,
-      secure: false, // Direct STARTTLS on Port 587
+      secure: false, // Direct STARTTLS on Port 587 (No Proxy)
       auth: {
         user: cleanEmail,
         pass: cleanPass
       },
       pool: true,
       maxConnections: 4, // 1 Batch = 4 Emails
-      maxMessages: 24,   // Matches your 24 emails per Gmail account workflow
+      maxMessages: 24,   // Fresh socket lifecycle for 24-email batches
       socketTimeout: 30000,
       connectionTimeout: 30000
     });
@@ -134,16 +134,14 @@ function parseSpintax(text) {
   return spun.replace(/[\{\}]/g, '').trim();
 }
 
-// Uses the exact working logic that landed in Inbox:
-// Same meaning ("Site looks great, error keeping it from top search results, can I send the capture/image?"),
-// No footer, no extra Hello/Thanks, and avoids the blacklisted "page one / screenshot" spam trigger pair.
+// Keeps the exact meaning and tone while avoiding spam-blacklisted phrase fingerprints
 function buildInboxMessage(rawTemplate, recipient) {
   if (!rawTemplate) return '';
 
   const isHtml = /<[a-z][\s\S]*>/i.test(rawTemplate);
   let selectedTemplate = String(rawTemplate).trim();
 
-  // If multiple lines are pasted, pick 1 random line per email
+  // If multiple template lines are pasted, pick 1 random line per email
   if (!isHtml) {
     const lines = selectedTemplate
       .split(/\r?\n/)
@@ -168,7 +166,7 @@ function buildInboxMessage(rawTemplate, recipient) {
   content = content.replace(/{Email}/gi, recipient.email);
   content = content.replace(/{Domain}/gi, recipient.domain);
 
-  // 1. Vary the opening compliment so every email in the 24-mail run looks fresh
+  // 1. Vary opening compliment naturally
   content = content.replace(
     /\b(Your website|Your site)\s+(looks|appears|seems|is)\s+(great|good|solid|impressive|appealing|attractive|polished|refined|modern|clean|organized|excellent|well built|engaging|balanced|structured|neat)\b/gi,
     () => {
@@ -183,8 +181,7 @@ function buildInboxMessage(rawTemplate, recipient) {
     }
   );
 
-  // 2. Replace the exact spam-blacklisted phrase ("not showing on page one" / "Google's top results")
-  // with safe, high-inbox phrases that mean the EXACT same thing
+  // 2. Safe inbox-friendly phrasing with exact same meaning
   content = content.replace(
     /(,?\s*(yet|but)\s+(it is not showing on page one|it does not showing on page one|an? error is keeping it out of Google's top results|an? error is stopping it from showing up on the top results))/gi,
     () => {
@@ -205,7 +202,6 @@ function buildInboxMessage(rawTemplate, recipient) {
     }
   );
 
-  // Fallback for standalone phrase
   content = content.replace(
     /(not showing on page one|does not showing on page one|keeping it out of Google's top results|stopping it from showing up on the top results)/gi,
     () => pickRandom([
@@ -217,8 +213,7 @@ function buildInboxMessage(rawTemplate, recipient) {
     ])
   );
 
-  // 3. Replace "Can I send a screen shot?" (which triggers bulk filters when repeated)
-  // with safe equivalents ("screen capture", "image of the error", "snapshot")
+  // 3. Safe variations for the screenshot question
   content = content.replace(
     /(Can|May) I (send|email)( you)? (a |the )?screen\s*shot\??\.?/gi,
     () => pickRandom([
@@ -245,30 +240,17 @@ function buildInboxMessage(rawTemplate, recipient) {
   return content.trim();
 }
 
-function buildInboxSubject(rawSubject, recipient) {
-  if (rawSubject && rawSubject.includes('{')) {
-    let content = parseSpintax(rawSubject);
-    const fallback = recipient.firstName || recipient.name || '';
-    content = content.replace(/{Name}/gi, recipient.name || fallback || '');
-    content = content.replace(/{FirstName}/gi, recipient.firstName || fallback || '');
-    content = content.replace(/{First_Name}/gi, recipient.firstName || fallback || '');
-    content = content.replace(/{Email}/gi, recipient.email);
-    content = content.replace(/{Domain}/gi, recipient.domain);
-    return content.trim();
-  }
-
-  // Automatic high-inbox subject rotation so 24 emails don't share 1 identical subject hash
-  const namePrefix = recipient.firstName ? `${recipient.firstName}, ` : '';
-  return pickRandom([
-    `${namePrefix}quick question about your website`,
-    `Small issue noticed on your site`,
-    `Quick note regarding your website`,
-    `Spotted a small error on your site`,
-    `Question about your website`,
-    `Quick check on your site`,
-    `Noticed a small detail on your site`,
-    `Quick observation on your website`
-  ]);
+// Keeps the EXACT Subject Line entered by the user (NO auto-change)
+function buildExactSubject(rawSubject, recipient) {
+  if (!rawSubject) return '';
+  let content = parseSpintax(rawSubject);
+  const fallback = recipient.firstName || recipient.name || '';
+  content = content.replace(/{Name}/gi, recipient.name || fallback || '');
+  content = content.replace(/{FirstName}/gi, recipient.firstName || fallback || '');
+  content = content.replace(/{First_Name}/gi, recipient.firstName || fallback || '');
+  content = content.replace(/{Email}/gi, recipient.email);
+  content = content.replace(/{Domain}/gi, recipient.domain);
+  return content.trim();
 }
 
 function stripHtmlTags(htmlString) {
@@ -354,14 +336,14 @@ app.post('/api/send-stream', async (req, res) => {
           await new Promise(resolve => setTimeout(resolve, Math.floor(150 + Math.random() * 120)));
         }
 
-        const finalSubject = buildInboxSubject(subject, recipient);
+        const finalSubject = buildExactSubject(subject, recipient);
         const finalBody = buildInboxMessage(messageBody, recipient);
         const isHtml = /<[a-z][\s\S]*>/i.test(finalBody);
 
-        // No fake Message-ID or custom headers—let smtp.gmail.com assign native @mail.gmail.com headers
         const mailOptions = {
           from: cleanSenderName ? `"${cleanSenderName}" <${cleanEmail}>` : cleanEmail,
           to: recipient.name ? `"${recipient.name}" <${recipient.email}>` : recipient.email,
+          replyTo: cleanEmail,
           subject: finalSubject
         };
 
@@ -369,7 +351,6 @@ app.post('/api/send-stream', async (req, res) => {
           mailOptions.html = `<div dir="ltr">${finalBody}</div>`;
           mailOptions.text = stripHtmlTags(finalBody);
         } else {
-          // Pure plain text + clean native div without artificial attributes
           mailOptions.text = finalBody;
           mailOptions.html = `<div dir="ltr">${finalBody.replace(/\n/g, '<br>')}</div>`;
         }
@@ -396,7 +377,7 @@ app.post('/api/send-stream', async (req, res) => {
     }
 
     if (i + BATCH_SIZE < recipients.length) {
-      const batchDelay = Math.floor(650 + Math.random() * 300);
+      const batchDelay = Math.floor(350 + Math.random() * 100);
       await new Promise(resolve => setTimeout(resolve, batchDelay));
     }
   }
