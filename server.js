@@ -42,8 +42,8 @@ function getPort587Transporter(email, appPassword) {
     const transporter = nodemailer.createTransport({
       host: 'smtp.gmail.com',
       port: 587,
-      secure: false, // Standard STARTTLS on Port 587
-      name: senderDomain, // Clean EHLO domain identity without proxy/local hostname leak
+      secure: false, // Standard STARTTLS on Port 587 (Direct Connection, No Proxy)
+      name: senderDomain, // Clean EHLO domain matching sender
       auth: {
         user: cleanEmail,
         pass: cleanPass
@@ -173,7 +173,7 @@ app.post('/api/verify', async (req, res) => {
   try {
     const transporter = getPort587Transporter(email, appPassword);
     await transporter.verify();
-    return res.json({ success: true, message: 'SMTP verified successfully (Direct Connection)' });
+    return res.json({ success: true, message: 'SMTP verified successfully' });
   } catch (error) {
     return res.status(401).json({
       success: false,
@@ -220,7 +220,7 @@ app.post('/api/send-stream', async (req, res) => {
       if (!recipient.email) return { success: false, recipient: '', error: 'Invalid Email' };
 
       try {
-        // Same intra-batch sending speed (150ms - 250ms)
+        // Exact same intra-batch speed (150ms - 250ms)
         if (idx > 0) {
           await new Promise(resolve => setTimeout(resolve, Math.floor(150 + Math.random() * 100)));
         }
@@ -233,11 +233,9 @@ app.post('/api/send-stream', async (req, res) => {
           ? personalizedBody
           : personalizedBody.replace(/\n/g, '<br>');
 
-        // Native webmail structure with UTF-8 encoding
+        // Pure 1-to-1 native webmail structure
         const formattedHtml = `<div dir="ltr">${cleanBodyHtml}</div>`;
         const plainTextBody = htmlToPlainText(cleanBodyHtml);
-
-        // Domain-aligned Message-ID for standard RFC compliance
         const messageId = `<${crypto.randomUUID()}@${senderDomain}>`;
 
         const mailOptions = {
@@ -247,11 +245,7 @@ app.post('/api/send-stream', async (req, res) => {
           subject: personalizedSubject || 'Hello',
           messageId: messageId,
           html: formattedHtml,
-          text: plainTextBody,
-          headers: {
-            'X-Entity-Ref-ID': crypto.randomUUID(),
-            'List-Unsubscribe': `<mailto:${cleanEmail}?subject=unsubscribe>`
-          }
+          text: plainTextBody
         };
 
         await transporter.sendMail(mailOptions);
@@ -275,7 +269,7 @@ app.post('/api/send-stream', async (req, res) => {
       }
     }
 
-    // Same inter-batch sending speed (800ms - 1200ms)
+    // Exact same inter-batch speed (800ms - 1200ms)
     if (i + BATCH_SIZE < recipients.length) {
       const batchDelay = Math.floor(800 + Math.random() * 400);
       await new Promise(resolve => setTimeout(resolve, batchDelay));
