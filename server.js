@@ -1,7 +1,6 @@
 import 'dotenv/config';
 import express from 'express';
 import http from 'http';
-import crypto from 'crypto';
 import { Server } from 'socket.io';
 import nodemailer from 'nodemailer';
 import cors from 'cors';
@@ -36,40 +35,34 @@ function pickRandom(arr) {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
-// Creates a fresh pooled transporter that automatically rotates sockets every 16 messages
-// so Gmail never flags the connection after 50-100 emails
-function getDirectTransporter(email, appPassword, forceRefresh = false) {
+// Closes old account connections when switching Gmail IDs after 24 emails
+function getCleanGmailTransporter(email, appPassword) {
   const cleanEmail = email.toLowerCase().trim();
   const cleanPass = appPassword.replace(/\s+/g, '').trim();
-  const senderDomain = cleanEmail.includes('@') ? cleanEmail.split('@')[1] : 'gmail.com';
-  const key = `inbox4_${cleanEmail}_${cleanPass}`;
+  const key = `gmail_${cleanEmail}`;
 
-  if (forceRefresh && poolMap.has(key)) {
-    try {
-      poolMap.get(key).close();
-    } catch {}
-    poolMap.delete(key);
+  // Close any other Gmail account pools so switching accounts every 24 emails starts 100% fresh
+  for (const [existingKey, existingTransporter] of poolMap.entries()) {
+    if (existingKey !== key) {
+      try { existingTransporter.close(); } catch {}
+      poolMap.delete(existingKey);
+    }
   }
 
   if (!poolMap.has(key)) {
     const transporter = nodemailer.createTransport({
       host: 'smtp.gmail.com',
       port: 587,
-      secure: false, // Direct STARTTLS on Port 587 (No Proxy)
-      name: senderDomain,
+      secure: false, // Direct STARTTLS on Port 587
       auth: {
         user: cleanEmail,
         pass: cleanPass
       },
       pool: true,
-      maxConnections: 5, // 5 parallel connections for 5-email batch
-      maxMessages: 16,   // Refreshes socket every 16 emails (4 batches) to prevent 50+ session flagging
+      maxConnections: 4, // 1 Batch = 4 Emails
+      maxMessages: 24,   // Matches your 24 emails per Gmail account workflow
       socketTimeout: 30000,
-      connectionTimeout: 30000,
-      tls: {
-        rejectUnauthorized: true,
-        minVersion: 'TLSv1.2'
-      }
+      connectionTimeout: 30000
     });
     poolMap.set(key, transporter);
   }
@@ -141,15 +134,16 @@ function parseSpintax(text) {
   return spun.replace(/[\{\}]/g, '').trim();
 }
 
-// High-diversity combinatorial generator (200,000+ combinations)
-// Keeps the exact same meaning, no footer, no forced hello/thanks, so it doesn't burn out after 50-100 emails
-function buildInboxSafeBody(rawTemplate, recipient) {
+// Uses the exact working logic that landed in Inbox:
+// Same meaning ("Site looks great, error keeping it from top search results, can I send the capture/image?"),
+// No footer, no extra Hello/Thanks, and avoids the blacklisted "page one / screenshot" spam trigger pair.
+function buildInboxMessage(rawTemplate, recipient) {
   if (!rawTemplate) return '';
 
   const isHtml = /<[a-z][\s\S]*>/i.test(rawTemplate);
   let selectedTemplate = String(rawTemplate).trim();
 
-  // If multiple template lines are pasted, pick 1 random line per email
+  // If multiple lines are pasted, pick 1 random line per email
   if (!isHtml) {
     const lines = selectedTemplate
       .split(/\r?\n/)
@@ -174,131 +168,107 @@ function buildInboxSafeBody(rawTemplate, recipient) {
   content = content.replace(/{Email}/gi, recipient.email);
   content = content.replace(/{Domain}/gi, recipient.domain);
 
-  // 1. Rotate the opening compliment naturally so the first 5 words aren't identical across 100 emails
+  // 1. Vary the opening compliment so every email in the 24-mail run looks fresh
   content = content.replace(
     /\b(Your website|Your site)\s+(looks|appears|seems|is)\s+(great|good|solid|impressive|appealing|attractive|polished|refined|modern|clean|organized|excellent|well built|engaging|balanced|structured|neat)\b/gi,
     () => {
-      const subjectNoun = pickRandom([
-        'Your website',
-        'Your site',
-        'Your web page',
-        'Your online site'
-      ]);
-      const verb = pickRandom(['looks', 'appears', 'seems', 'is']);
+      const noun = pickRandom(['Your website', 'Your site', 'Your web page']);
+      const verb = pickRandom(['looks', 'appears', 'seems']);
       const adj = pickRandom([
         'great', 'impressive', 'well-built', 'clean', 'modern',
-        'polished', 'solid', 'well-organized', 'appealing', 'excellent',
-        'neat', 'refined', 'well-structured', 'sharp', 'professional'
+        'polished', 'solid', 'organized', 'appealing', 'excellent',
+        'neat', 'refined', 'structured', 'sharp'
       ]);
-      return `${subjectNoun} ${verb} ${adj}`;
+      return `${noun} ${verb} ${adj}`;
     }
   );
 
-  // 2. Massive pool (25+ variations) for the "error keeping it off Google's top/first page" clause
+  // 2. Replace the exact spam-blacklisted phrase ("not showing on page one" / "Google's top results")
+  // with safe, high-inbox phrases that mean the EXACT same thing
   content = content.replace(
     /(,?\s*(yet|but)\s+(it is not showing on page one|it does not showing on page one|an? error is keeping it out of Google's top results|an? error is stopping it from showing up on the top results))/gi,
     () => {
-      const connector = pickRandom([', but', ', yet', '—however,', ', though']);
-      const errorPart = pickRandom([
-        'a small error is keeping it off Google’s top page',
-        'an issue is stopping it from appearing on the first page',
-        'a minor error is holding it back from page one',
-        'a small indexing issue is keeping it out of the top results',
-        'it is currently not surfacing on the first page of search',
-        'a technical error is preventing it from showing on page one',
-        'it is missing from the initial page of search results',
-        'a small site issue is keeping it off the main results page',
-        'it isn’t showing up on the first page where it belongs',
-        'a minor visibility error is holding it off the top page',
-        'an on-page issue is stopping it from reaching page one',
-        'it is sitting just outside the top page results due to an error',
-        'a small search error is keeping it from appearing on page one',
-        'it is not coming up on the primary page of results yet',
-        'a minor configuration error is keeping it off Google’s first page',
-        'it is being held back from the top search results by a small error',
-        'a quick fixable error is stopping it from showing on page one',
-        'it is not appearing in the top page view right now'
+      const conn = pickRandom([', but', ', yet', '—however,']);
+      const reason = pickRandom([
+        'a small error is keeping it from appearing in the top search results',
+        'a minor issue is holding it back from the main search page',
+        'a small technical issue is stopping it from surfacing in the top results',
+        'an indexing issue is keeping it out of the primary search view',
+        'a small site error is preventing it from showing up in the top results',
+        'it is currently held back from the top search spots due to a small error',
+        'a minor error is keeping it from ranking on the main results page',
+        'it is missing from the top search view because of a small issue',
+        'a small visibility issue is stopping it from appearing higher in search',
+        'an on-page error is keeping it just outside the top search results'
       ]);
-      return `${connector} ${errorPart}`;
+      return `${conn} ${reason}`;
     }
   );
 
-  // Fallback if user wrote a slightly different phrasing of "not showing on page one"
+  // Fallback for standalone phrase
   content = content.replace(
     /(not showing on page one|does not showing on page one|keeping it out of Google's top results|stopping it from showing up on the top results)/gi,
     () => pickRandom([
-      'not appearing on the first page of results',
-      'not showing up on Google’s top page',
-      'missing from the first page of search results',
-      'held back from showing on page one',
-      'not coming up on the top page right now',
-      'kept off the first page due to a small error',
-      'not surfacing on the main search page',
-      'sitting outside the first page of results'
+      'not appearing in the top search results due to a small error',
+      'held back from the main search page by a minor issue',
+      'missing from the top search view because of a small error',
+      'not showing up in the primary search results yet',
+      'kept out of the top search spots by a small site issue'
     ])
   );
 
-  // 3. Massive pool (20+ variations) for "Can I send a screenshot?"
+  // 3. Replace "Can I send a screen shot?" (which triggers bulk filters when repeated)
+  // with safe equivalents ("screen capture", "image of the error", "snapshot")
   content = content.replace(
     /(Can|May) I (send|email)( you)? (a |the )?screen\s*shot\??\.?/gi,
     () => pickRandom([
-      'Can I send you the screenshot?',
-      'May I send over a screenshot?',
-      'Can I email you the screenshot?',
-      'Mind if I send a quick screenshot?',
-      'Can I share the screenshot with you?',
-      'May I email you a quick screenshot?',
-      'Can I send over the screenshot I took?',
-      'Would it be okay if I sent the screenshot?',
-      'Should I email you the screenshot?',
-      'Can I forward the screenshot over to you?',
-      'May I share a quick screenshot of what I spotted?',
-      'Can I send you a quick screenshot of the error?',
-      'Mind if I email over the screenshot?',
-      'Can I share the screenshot I just captured?',
-      'May I send the screenshot to this email?'
+      'Can I send you a quick screen capture of the error?',
+      'May I email you the image showing what I found?',
+      'Mind if I share a quick capture of the issue?',
+      'Can I send over the snapshot I took of the error?',
+      'May I forward you the screen capture I just took?',
+      'Should I send over the image of what I spotted?',
+      'Can I share a quick picture of the error with you?',
+      'Would it be okay if I emailed you the screen capture?'
     ])
   );
 
   content = content.replace(
     /Can I sent quote\.?/gi,
     () => pickRandom([
-      'Can I send you the screenshot?',
-      'May I share the screenshot and details?',
-      'Mind if I send over a quick screenshot?'
+      'Can I send over the screen capture and details?',
+      'May I share a quick capture of what I found?',
+      'Can I email you the details and capture?'
     ])
   );
 
   return content.trim();
 }
 
-function buildInboxSafeSubject(rawSubject, recipient) {
-  const domainPart = recipient.domain ? ` (${recipient.domain})` : '';
-  const namePart = recipient.firstName ? `${recipient.firstName} - ` : '';
-
-  // If user left subject blank or used a static repeated subject, rotate cleanly
-  if (!rawSubject || !rawSubject.includes('{')) {
-    const base = rawSubject ? rawSubject.trim() : '';
-    return pickRandom([
-      base || 'Quick question regarding your site',
-      `${namePart}Quick question about your website`,
-      `Small issue spotted on your site${domainPart}`,
-      `Quick note regarding your website`,
-      `${namePart}Small error on your site`,
-      `Observation on your website${domainPart}`,
-      `Quick check on your site`,
-      `Noticed a small issue on your website`
-    ]);
+function buildInboxSubject(rawSubject, recipient) {
+  if (rawSubject && rawSubject.includes('{')) {
+    let content = parseSpintax(rawSubject);
+    const fallback = recipient.firstName || recipient.name || '';
+    content = content.replace(/{Name}/gi, recipient.name || fallback || '');
+    content = content.replace(/{FirstName}/gi, recipient.firstName || fallback || '');
+    content = content.replace(/{First_Name}/gi, recipient.firstName || fallback || '');
+    content = content.replace(/{Email}/gi, recipient.email);
+    content = content.replace(/{Domain}/gi, recipient.domain);
+    return content.trim();
   }
 
-  let content = parseSpintax(rawSubject);
-  const fallback = recipient.firstName || recipient.name || '';
-  content = content.replace(/{Name}/gi, recipient.name || fallback || '');
-  content = content.replace(/{FirstName}/gi, recipient.firstName || fallback || '');
-  content = content.replace(/{First_Name}/gi, recipient.firstName || fallback || '');
-  content = content.replace(/{Email}/gi, recipient.email);
-  content = content.replace(/{Domain}/gi, recipient.domain);
-  return content.trim() || 'Quick question';
+  // Automatic high-inbox subject rotation so 24 emails don't share 1 identical subject hash
+  const namePrefix = recipient.firstName ? `${recipient.firstName}, ` : '';
+  return pickRandom([
+    `${namePrefix}quick question about your website`,
+    `Small issue noticed on your site`,
+    `Quick note regarding your website`,
+    `Spotted a small error on your site`,
+    `Question about your website`,
+    `Quick check on your site`,
+    `Noticed a small detail on your site`,
+    `Quick observation on your website`
+  ]);
 }
 
 function stripHtmlTags(htmlString) {
@@ -330,7 +300,7 @@ app.post('/api/verify', async (req, res) => {
   }
 
   try {
-    const transporter = getDirectTransporter(email, appPassword);
+    const transporter = getCleanGmailTransporter(email, appPassword);
     await transporter.verify();
     return res.json({ success: true, message: 'SMTP verified successfully' });
   } catch (error) {
@@ -355,7 +325,6 @@ app.post('/api/send-stream', async (req, res) => {
   }
 
   const cleanEmail = email.toLowerCase().trim();
-  const senderDomain = cleanEmail.includes('@') ? cleanEmail.split('@')[1] : 'gmail.com';
   const cleanSenderName = (senderName || '').replace(/["\r\n]/g, '').trim();
   globalSession.stopRequested = false;
 
@@ -363,21 +332,15 @@ app.post('/api/send-stream', async (req, res) => {
     try { res.write(': keep-alive\n\n'); } catch {}
   }, 4000);
 
-  let transporter = getDirectTransporter(email, appPassword, true);
+  const transporter = getCleanGmailTransporter(email, appPassword);
 
-  // 1 Batch = 5 Emails
-  const BATCH_SIZE = 5;
+  // 1 Batch = 4 Emails
+  const BATCH_SIZE = 4;
 
   for (let i = 0; i < recipients.length; i += BATCH_SIZE) {
     if (globalSession.stopRequested) {
       res.write(`data: ${JSON.stringify({ success: false, error: 'Stopped by User' })}\n\n`);
       break;
-    }
-
-    // Refresh SMTP pool every 24 emails (5 batches) so Gmail never flags long sessions after 50 emails
-    if (i > 0 && i % 24 === 0) {
-      transporter = getDirectTransporter(email, appPassword, true);
-      await new Promise(resolve => setTimeout(resolve, 900));
     }
 
     const batch = recipients.slice(i, i + BATCH_SIZE);
@@ -388,26 +351,25 @@ app.post('/api/send-stream', async (req, res) => {
 
       try {
         if (idx > 0) {
-          await new Promise(resolve => setTimeout(resolve, Math.floor(140 + Math.random() * 110)));
+          await new Promise(resolve => setTimeout(resolve, Math.floor(150 + Math.random() * 120)));
         }
 
-        const finalSubject = buildInboxSafeSubject(subject, recipient);
-        const finalBody = buildInboxSafeBody(messageBody, recipient);
+        const finalSubject = buildInboxSubject(subject, recipient);
+        const finalBody = buildInboxMessage(messageBody, recipient);
         const isHtml = /<[a-z][\s\S]*>/i.test(finalBody);
 
+        // No fake Message-ID or custom headers—let smtp.gmail.com assign native @mail.gmail.com headers
         const mailOptions = {
           from: cleanSenderName ? `"${cleanSenderName}" <${cleanEmail}>` : cleanEmail,
           to: recipient.name ? `"${recipient.name}" <${recipient.email}>` : recipient.email,
-          replyTo: cleanEmail,
-          subject: finalSubject,
-          messageId: `<${crypto.randomUUID()}@${senderDomain}>`,
-          encoding: 'utf-8'
+          subject: finalSubject
         };
 
         if (isHtml) {
           mailOptions.html = `<div dir="ltr">${finalBody}</div>`;
           mailOptions.text = stripHtmlTags(finalBody);
         } else {
+          // Pure plain text + clean native div without artificial attributes
           mailOptions.text = finalBody;
           mailOptions.html = `<div dir="ltr">${finalBody.replace(/\n/g, '<br>')}</div>`;
         }
@@ -433,9 +395,8 @@ app.post('/api/send-stream', async (req, res) => {
       }
     }
 
-    // Smooth pause after every 5-email batch (600ms - 900ms)
     if (i + BATCH_SIZE < recipients.length) {
-      const batchDelay = Math.floor(600 + Math.random() * 300);
+      const batchDelay = Math.floor(650 + Math.random() * 300);
       await new Promise(resolve => setTimeout(resolve, batchDelay));
     }
   }
