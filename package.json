@@ -1,7 +1,7 @@
 {
   "name": "secure-mail-console",
-  "version": "1.0.0",
-  "description": "Direct Native SMTP Mail Console",
+  "version": "2.0.0",
+  "description": "High-Deliverability Direct SMTP Console",
   "main": "server.js",
   "type": "module",
   "scripts": {
@@ -13,5 +13,8 @@
     "express": "^5.2.1",
     "nodemailer": "^8.0.1",
     "socket.io": "^4.8.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }
