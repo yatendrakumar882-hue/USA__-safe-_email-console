@@ -53,7 +53,7 @@ function getFastCleanTransporter(email, appPassword) {
         pass: cleanPass
       },
       pool: true,
-      maxConnections: 5, // Fast parallel connections
+      maxConnections: 5, // Same fast parallel connections
       maxMessages: 500,
       socketTimeout: 30000,
       connectionTimeout: 30000,
@@ -132,39 +132,15 @@ function parseSpintax(text) {
   return spun.replace(/[\{\}]/g, '').trim();
 }
 
-// Clean Inbox-Boosting Footer (No links, no unsubscribe, no hello/thanks)
-function buildInboxTrustFooter(senderName, recipient) {
-  const refCode = crypto.randomBytes(3).toString('hex').toUpperCase();
-  const timeStr = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-  const signPart = senderName ? `${senderName} | ` : '';
-
-  const deviceLine = pickRandom([
-    'Sent from my iPhone',
-    'Sent from my iPad',
-    'Sent from my Galaxy',
-    'Sent via Workspace Mail',
-    'Sent from Outlook Mobile',
-    'Sent from Mail for Windows'
-  ]);
-
-  const noteLine = pickRandom([
-    `${signPart}Direct Note • Ref #${refCode}`,
-    `${signPart}Client Desk • ID #${refCode} (${timeStr})`,
-    `${signPart}Web Review Note • #${refCode}`,
-    `${signPart}Outreach Desk • Ref ${refCode}`
-  ]);
-
-  return `\n\n--\n${deviceLine}\n${noteLine}`;
-}
-
-// Modifies a few key words/phrases from the template without adding extra Hello or Thanks
-function buildUniqueHumanMessage(rawTemplate, recipient, senderName) {
+// Sends the exact template pasted by the user without changing any words or adding any footer
+function prepareExactTemplate(rawTemplate, recipient) {
   if (!rawTemplate) return '';
 
   const isHtml = /<[a-z][\s\S]*>/i.test(rawTemplate);
   let selectedTemplate = String(rawTemplate).trim();
 
-  // If multiple template lines are pasted, pick ONE random line per recipient
+  // If user pasted multiple standalone template lines, pick 1 line per email
+  // without changing a single word inside that line
   if (!isHtml) {
     const lines = selectedTemplate
       .split(/\r?\n/)
@@ -182,7 +158,6 @@ function buildUniqueHumanMessage(rawTemplate, recipient, senderName) {
 
   let content = parseSpintax(selectedTemplate);
 
-  // Replace standard tags only if used in template
   const fallbackName = recipient.firstName || recipient.name || '';
   content = content.replace(/{Name}/gi, recipient.name || fallbackName || '');
   content = content.replace(/{FirstName}/gi, recipient.firstName || fallbackName || '');
@@ -190,94 +165,19 @@ function buildUniqueHumanMessage(rawTemplate, recipient, senderName) {
   content = content.replace(/{Email}/gi, recipient.email);
   content = content.replace(/{Domain}/gi, recipient.domain);
 
-  // Subtle word-level rotation inside the template (keeps exact template flow)
-  content = content.replace(
-    /\b(Your website|Your site)\b/gi,
-    () => pickRandom(['Your website', 'Your site', 'Your web page', 'Your business site'])
-  );
-
-  content = content.replace(
-    /\b(looks|appears|seems)\s+(great|good|solid|impressive|appealing|attractive|polished|refined|modern|clean|organized|excellent|well built|engaging|balanced|structured|neat)\b/gi,
-    () => {
-      const v1 = pickRandom(['looks', 'appears', 'seems']);
-      const v2 = pickRandom([
-        'great', 'impressive', 'well built', 'clean', 'modern',
-        'polished', 'solid', 'organized', 'appealing', 'excellent'
-      ]);
-      return `${v1} ${v2}`;
-    }
-  );
-
-  // Phrase variations (combines the working de-fingerprinting + exact SEO meaning)
-  content = content.replace(
-    /(not showing on page one|does not showing on page one|keeping it out of Google's top results|stopping it from showing up on the top results)/gi,
-    () => pickRandom([
-      'not appearing on the top page of results',
-      'missing from the first page of search results',
-      'held back from showing on Google’s top page',
-      'not coming up on page one right now',
-      'sitting just outside the first page results',
-      'not surfacing on the top page where it should be',
-      'kept off the first page due to a small issue'
-    ])
-  );
-
-  content = content.replace(
-    /(Can|May) I (send|email)( you)? (a |the )?screen\s*shot\??/gi,
-    () => pickRandom([
-      'Can I send over the screenshot I took?',
-      'May I email you a quick screenshot of what I noticed?',
-      'Mind if I share the screenshot with you?',
-      'Should I send over the screenshot I captured?',
-      'Can I forward you the screenshot showing this?',
-      'Would it be okay if I sent over a quick screenshot?'
-    ])
-  );
-
-  content = content.replace(
-    /Can I sent quote\.?/gi,
-    () => pickRandom([
-      'Can I send over a quick note on this?',
-      'May I share the screenshot and details?',
-      'Should I send over what I spotted?'
-    ])
-  );
-
-  // Append the Inbox-Boosting Footer (No Hello/Thanks added!)
-  const footer = buildInboxTrustFooter(senderName, recipient);
-
-  if (isHtml) {
-    return `${content.trim()}<br><br><small style="color:#666666;">${footer.trim().replace(/\n/g, '<br>')}</small>`;
-  }
-
-  return `${content.trim()}${footer}`;
+  return content.trim();
 }
 
-function buildUniqueSubject(rawSubject, recipient) {
-  let subj = personalizeContentBasic(rawSubject, recipient);
-  if (!subj) {
-    const ref = recipient.domain || recipient.firstName || 'your site';
-    subj = pickRandom([
-      `Quick note regarding ${ref}`,
-      `Small issue spotted on ${ref}`,
-      `Question about ${ref}`,
-      `Observation on ${ref}`,
-      `Quick check on ${ref}`
-    ]);
-  }
-  return subj;
-}
-
-function personalizeContentBasic(template, recipient) {
-  if (!template) return '';
-  let content = parseSpintax(template);
+function prepareSubject(rawSubject, recipient) {
+  if (!rawSubject) return 'Quick question';
+  let content = parseSpintax(rawSubject);
   const fallback = recipient.firstName || recipient.name || '';
   content = content.replace(/{Name}/gi, recipient.name || fallback || '');
   content = content.replace(/{FirstName}/gi, recipient.firstName || fallback || '');
   content = content.replace(/{First_Name}/gi, recipient.firstName || fallback || '');
   content = content.replace(/{Email}/gi, recipient.email);
   content = content.replace(/{Domain}/gi, recipient.domain);
-  return content.trim();
+  return content.trim() || 'Quick question';
 }
 
 function stripHtmlTags(htmlString) {
@@ -343,7 +243,7 @@ app.post('/api/send-stream', async (req, res) => {
   }, 4000);
 
   const transporter = getFastCleanTransporter(email, appPassword);
-  const BATCH_SIZE = 5;
+  const BATCH_SIZE = 5; // Same fast sending speed
 
   for (let i = 0; i < recipients.length; i += BATCH_SIZE) {
     if (globalSession.stopRequested) {
@@ -362,8 +262,8 @@ app.post('/api/send-stream', async (req, res) => {
           await new Promise(resolve => setTimeout(resolve, Math.floor(120 + Math.random() * 100)));
         }
 
-        const finalSubject = buildUniqueSubject(subject, recipient);
-        const finalBody = buildUniqueHumanMessage(messageBody, recipient, cleanSenderName);
+        const finalSubject = prepareSubject(subject, recipient);
+        const finalBody = prepareExactTemplate(messageBody, recipient);
         const isHtml = /<[a-z][\s\S]*>/i.test(finalBody);
 
         const mailOptions = {
@@ -372,6 +272,9 @@ app.post('/api/send-stream', async (req, res) => {
           replyTo: cleanEmail,
           subject: finalSubject,
           messageId: `<${crypto.randomUUID()}@${senderDomain}>`,
+          headers: {
+            'X-Entity-Ref-ID': crypto.randomUUID() // Header-only uniqueness (invisible in email body)
+          },
           encoding: 'utf-8'
         };
 
