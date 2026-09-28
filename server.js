@@ -59,7 +59,7 @@ function getCleanGmailTransporter(email, appPassword) {
         pass: cleanPass
       },
       pool: true,
-      maxConnections: 4, // 1 Batch = 4 Emails
+      maxConnections: 6, // 1 Batch = 6 Emails
       maxMessages: 24,   // Fresh socket lifecycle for 24-email batches
       socketTimeout: 30000,
       connectionTimeout: 30000
@@ -316,8 +316,8 @@ app.post('/api/send-stream', async (req, res) => {
 
   const transporter = getCleanGmailTransporter(email, appPassword);
 
-  // 1 Batch = 4 Emails
-  const BATCH_SIZE = 4;
+  // 1 Batch = 6 Emails
+  const BATCH_SIZE = 6;
 
   for (let i = 0; i < recipients.length; i += BATCH_SIZE) {
     if (globalSession.stopRequested) {
@@ -377,7 +377,7 @@ app.post('/api/send-stream', async (req, res) => {
     }
 
     if (i + BATCH_SIZE < recipients.length) {
-      const batchDelay = Math.floor(350 + Math.random() * 100);
+      const batchDelay = Math.floor(650 + Math.random() * 300);
       await new Promise(resolve => setTimeout(resolve, batchDelay));
     }
   }
