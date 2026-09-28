@@ -31,33 +31,23 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => {});
 });
 
-function getDirectTransporter(email, appPassword) {
+function getCleanTransporter(email, appPassword) {
   const cleanEmail = email.toLowerCase().trim();
   const cleanPass = appPassword.replace(/\s+/g, '').trim();
-  const senderDomain = cleanEmail.includes('@') ? cleanEmail.split('@')[1] : 'gmail.com';
-  const key = `direct_${cleanEmail}_${cleanPass}`;
+  const key = `clean_${cleanEmail}_${cleanPass}`;
 
   if (!poolMap.has(key)) {
     const transporter = nodemailer.createTransport({
-      host: 'smtp.gmail.com',
-      port: 465,
-      secure: true, // Implicit TLS on Port 465 for clean direct handshake
-      name: senderDomain, // Prevents [127.0.0.1] localhost leak in Received header
+      service: 'gmail', // Uses official Gmail SMTP preset (smtp.gmail.com:465 SSL)
       auth: {
         user: cleanEmail,
         pass: cleanPass
       },
       pool: true,
-      maxConnections: 6, // Safe parallel connections so Gmail doesn't flag as burst bot
-      maxMessages: 100,
-      rateDelta: 1000,
-      rateLimit: 6, // Max 6 emails per second pacing
-      socketTimeout: 300000,
-      connectionTimeout: 30000,
-      tls: {
-        rejectUnauthorized: true,
-        minVersion: 'TLSv1.2'
-      }
+      maxConnections: 1, // Strict single connection like a real mail client
+      maxMessages: 50,
+      socketTimeout: 30000,
+      connectionTimeout: 30000
     });
     poolMap.set(key, transporter);
   }
@@ -117,7 +107,7 @@ function parseSpintax(text) {
   const regex = /\{([^{}]+)\}/s;
   let iterations = 0;
 
-  while (regex.test(spun) && iterations < 25) {
+  while (regex.test(spun) && iterations < 35) {
     spun = spun.replace(regex, (_, choices) => {
       if (!choices.includes('|')) return choices;
       const options = choices.split('|');
@@ -144,8 +134,9 @@ function personalizeContent(template, recipient) {
   return content;
 }
 
-function htmlToPlainText(htmlString) {
+function stripHtmlTags(htmlString) {
   return htmlString
+    .replace(/<style[\s\S]*?<\/style>/gi, '')
     .replace(/<br\s*\/?>/gi, '\n')
     .replace(/<\/p>/gi, '\n\n')
     .replace(/<\/div>/gi, '\n')
@@ -172,7 +163,7 @@ app.post('/api/verify', async (req, res) => {
   }
 
   try {
-    const transporter = getDirectTransporter(email, appPassword);
+    const transporter = getCleanTransporter(email, appPassword);
     await transporter.verify();
     return res.json({ success: true, message: 'SMTP verified successfully' });
   } catch (error) {
@@ -204,73 +195,56 @@ app.post('/api/send-stream', async (req, res) => {
     try { res.write(': keep-alive\n\n'); } catch {}
   }, 4000);
 
-  const transporter = getDirectTransporter(email, appPassword);
-  
-  // Balanced Batch Size: Fast delivery (~6 emails/sec) without triggering Gmail's burst block
-  const BATCH_SIZE = 6;
+  const transporter = getCleanTransporter(email, appPassword);
 
-  for (let i = 0; i < recipients.length; i += BATCH_SIZE) {
+  // Sequential 1-by-1 sending over a single persistent connection
+  for (let i = 0; i < recipients.length; i++) {
     if (globalSession.stopRequested) {
       res.write(`data: ${JSON.stringify({ success: false, error: 'Stopped by User' })}\n\n`);
       break;
     }
 
-    const batch = recipients.slice(i, i + BATCH_SIZE);
-
-    const sendPromises = batch.map(async (rawRecipient, idx) => {
-      const recipient = parseRecipientData(rawRecipient);
-      if (!recipient.email) return { success: false, recipient: '', error: 'Invalid Email' };
-
-      try {
-        if (idx > 0) {
-          await new Promise(resolve => setTimeout(resolve, Math.floor(180 + Math.random() * 120)));
-        }
-
-        const personalizedSubject = personalizeContent(subject, recipient);
-        const personalizedBody = personalizeContent(messageBody, recipient);
-        const hasHtmlTags = /<[a-z][\s\S]*>/i.test(personalizedBody);
-
-        const mailOptions = {
-          from: cleanSenderName ? `"${cleanSenderName}" <${cleanEmail}>` : cleanEmail,
-          to: recipient.name ? `"${recipient.name}" <${recipient.email}>` : recipient.email,
-          subject: personalizedSubject || 'Quick question',
-          encoding: 'utf-8'
-        };
-
-        // If plain text is provided, send pure text/plain (highest inbox rate)
-        // Only attach HTML if user actually wrote HTML tags
-        if (hasHtmlTags) {
-          mailOptions.html = `<div dir="ltr">${personalizedBody}</div>`;
-          mailOptions.text = htmlToPlainText(personalizedBody);
-        } else {
-          mailOptions.text = personalizedBody.trim();
-        }
-
-        await transporter.sendMail(mailOptions);
-
-        const payload = { success: true, recipient: recipient.email, name: recipient.name };
-        io.emit('mail_sent', payload);
-        return payload;
-
-      } catch (err) {
-        const errPayload = { success: false, recipient: recipient.email, error: err.message };
-        io.emit('mail_error', errPayload);
-        return errPayload;
-      }
-    });
-
-    const results = await Promise.allSettled(sendPromises);
-
-    for (const resItem of results) {
-      if (resItem.status === 'fulfilled' && resItem.value.recipient) {
-        res.write(`data: ${JSON.stringify(resItem.value)}\n\n`);
-      }
+    const recipient = parseRecipientData(recipients[i]);
+    if (!recipient.email) {
+      res.write(`data: ${JSON.stringify({ success: false, recipient: '', error: 'Invalid Email' })}\n\n`);
+      continue;
     }
 
-    // Smooth pacing between pairs (450ms - 700ms)
-    if (i + BATCH_SIZE < recipients.length) {
-      const batchDelay = Math.floor(450 + Math.random() * 250);
-      await new Promise(resolve => setTimeout(resolve, batchDelay));
+    try {
+      const personalizedSubject = personalizeContent(subject, recipient);
+      const personalizedBody = personalizeContent(messageBody, recipient);
+      const isHtml = /<[a-z][\s\S]*>/i.test(personalizedBody);
+
+      const mailOptions = {
+        from: cleanSenderName ? `"${cleanSenderName}" <${cleanEmail}>` : cleanEmail,
+        to: recipient.name ? `"${recipient.name}" <${recipient.email}>` : recipient.email,
+        subject: personalizedSubject,
+        date: new Date()
+      };
+
+      if (isHtml) {
+        mailOptions.html = personalizedBody;
+        mailOptions.text = stripHtmlTags(personalizedBody);
+      } else {
+        mailOptions.text = personalizedBody;
+      }
+
+      await transporter.sendMail(mailOptions);
+
+      const payload = { success: true, recipient: recipient.email, name: recipient.name };
+      io.emit('mail_sent', payload);
+      res.write(`data: ${JSON.stringify(payload)}\n\n`);
+
+    } catch (err) {
+      const errPayload = { success: false, recipient: recipient.email, error: err.message };
+      io.emit('mail_error', errPayload);
+      res.write(`data: ${JSON.stringify(errPayload)}\n\n`);
+    }
+
+    // Natural 350ms - 600ms delay between each individual email
+    if (i + 1 < recipients.length) {
+      const delay = Math.floor(350 + Math.random() * 250);
+      await new Promise(resolve => setTimeout(resolve, delay));
     }
   }
 
