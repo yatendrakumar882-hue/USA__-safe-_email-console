@@ -35,13 +35,13 @@ function pickRandom(arr) {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
-// Closes old account connections when switching Gmail IDs after 24 emails
+// Pure Native Gmail SMTP Transporter (No Proxy, Fresh Pool per Account)
 function getCleanGmailTransporter(email, appPassword) {
   const cleanEmail = email.toLowerCase().trim();
   const cleanPass = appPassword.replace(/\s+/g, '').trim();
   const key = `gmail_${cleanEmail}`;
 
-  // Close previous Gmail account pools so switching accounts every 24 emails starts 100% fresh
+  // Automatically close previous account pool when switching Gmail IDs
   for (const [existingKey, existingTransporter] of poolMap.entries()) {
     if (existingKey !== key) {
       try { existingTransporter.close(); } catch {}
@@ -53,16 +53,20 @@ function getCleanGmailTransporter(email, appPassword) {
     const transporter = nodemailer.createTransport({
       host: 'smtp.gmail.com',
       port: 587,
-      secure: false, // Direct STARTTLS on Port 587 (No Proxy)
+      secure: false, // Standard STARTTLS on Port 587
       auth: {
         user: cleanEmail,
         pass: cleanPass
       },
       pool: true,
-      maxConnections: 8, // 1 Batch = 8 Emails
-      maxMessages: 24,   // Fresh socket lifecycle for 24-email batches
+      maxConnections: 4, // 1 Batch = 4 Emails
+      maxMessages: 24,   // Clean socket reset every 24 emails
       socketTimeout: 30000,
-      connectionTimeout: 30000
+      connectionTimeout: 30000,
+      tls: {
+        rejectUnauthorized: true,
+        minVersion: 'TLSv1.2'
+      }
     });
     poolMap.set(key, transporter);
   }
@@ -134,14 +138,14 @@ function parseSpintax(text) {
   return spun.replace(/[\{\}]/g, '').trim();
 }
 
-// Keeps the exact meaning and tone while avoiding spam-blacklisted phrase fingerprints
-function buildInboxMessage(rawTemplate, recipient) {
+// 100% Exact Template: No word changes, no footer, no extra greetings
+function getExactTemplate(rawTemplate, recipient) {
   if (!rawTemplate) return '';
 
   const isHtml = /<[a-z][\s\S]*>/i.test(rawTemplate);
   let selectedTemplate = String(rawTemplate).trim();
 
-  // If multiple template lines are pasted, pick 1 random line per email
+  // If multiple separate template lines are pasted, pick 1 line as-is without changing any words
   if (!isHtml) {
     const lines = selectedTemplate
       .split(/\r?\n/)
@@ -159,97 +163,28 @@ function buildInboxMessage(rawTemplate, recipient) {
 
   let content = parseSpintax(selectedTemplate);
 
-  const fallbackName = recipient.firstName || recipient.name || '';
-  content = content.replace(/{Name}/gi, recipient.name || fallbackName || '');
-  content = content.replace(/{FirstName}/gi, recipient.firstName || fallbackName || '');
-  content = content.replace(/{First_Name}/gi, recipient.firstName || fallbackName || '');
-  content = content.replace(/{Email}/gi, recipient.email);
-  content = content.replace(/{Domain}/gi, recipient.domain);
-
-  // 1. Vary opening compliment naturally
-  content = content.replace(
-    /\b(Your website|Your site)\s+(looks|appears|seems|is)\s+(great|good|solid|impressive|appealing|attractive|polished|refined|modern|clean|organized|excellent|well built|engaging|balanced|structured|neat)\b/gi,
-    () => {
-      const noun = pickRandom(['Your website', 'Your site', 'Your web page']);
-      const verb = pickRandom(['looks', 'appears', 'seems']);
-      const adj = pickRandom([
-        'great', 'impressive', 'well-built', 'clean', 'modern',
-        'polished', 'solid', 'organized', 'appealing', 'excellent',
-        'neat', 'refined', 'structured', 'sharp'
-      ]);
-      return `${noun} ${verb} ${adj}`;
-    }
-  );
-
-  // 2. Safe inbox-friendly phrasing with exact same meaning
-  content = content.replace(
-    /(,?\s*(yet|but)\s+(it is not showing on page one|it does not showing on page one|an? error is keeping it out of Google's top results|an? error is stopping it from showing up on the top results))/gi,
-    () => {
-      const conn = pickRandom([', but', ', yet', '—however,']);
-      const reason = pickRandom([
-        'a small error is keeping it from appearing in the top search results',
-        'a minor issue is holding it back from the main search page',
-        'a small technical issue is stopping it from surfacing in the top results',
-        'an indexing issue is keeping it out of the primary search view',
-        'a small site error is preventing it from showing up in the top results',
-        'it is currently held back from the top search spots due to a small error',
-        'a minor error is keeping it from ranking on the main results page',
-        'it is missing from the top search view because of a small issue',
-        'a small visibility issue is stopping it from appearing higher in search',
-        'an on-page error is keeping it just outside the top search results'
-      ]);
-      return `${conn} ${reason}`;
-    }
-  );
-
-  content = content.replace(
-    /(not showing on page one|does not showing on page one|keeping it out of Google's top results|stopping it from showing up on the top results)/gi,
-    () => pickRandom([
-      'not appearing in the top search results due to a small error',
-      'held back from the main search page by a minor issue',
-      'missing from the top search view because of a small error',
-      'not showing up in the primary search results yet',
-      'kept out of the top search spots by a small site issue'
-    ])
-  );
-
-  // 3. Safe variations for the screenshot question
-  content = content.replace(
-    /(Can|May) I (send|email)( you)? (a |the )?screen\s*shot\??\.?/gi,
-    () => pickRandom([
-      'Can I send you a quick screen capture of the error?',
-      'May I email you the image showing what I found?',
-      'Mind if I share a quick capture of the issue?',
-      'Can I send over the snapshot I took of the error?',
-      'May I forward you the screen capture I just took?',
-      'Should I send over the image of what I spotted?',
-      'Can I share a quick picture of the error with you?',
-      'Would it be okay if I emailed you the screen capture?'
-    ])
-  );
-
-  content = content.replace(
-    /Can I sent quote\.?/gi,
-    () => pickRandom([
-      'Can I send over the screen capture and details?',
-      'May I share a quick capture of what I found?',
-      'Can I email you the details and capture?'
-    ])
-  );
-
-  return content.trim();
-}
-
-// Keeps the EXACT Subject Line entered by the user (NO auto-change)
-function buildExactSubject(rawSubject, recipient) {
-  if (!rawSubject) return '';
-  let content = parseSpintax(rawSubject);
   const fallback = recipient.firstName || recipient.name || '';
   content = content.replace(/{Name}/gi, recipient.name || fallback || '');
   content = content.replace(/{FirstName}/gi, recipient.firstName || fallback || '');
   content = content.replace(/{First_Name}/gi, recipient.firstName || fallback || '');
   content = content.replace(/{Email}/gi, recipient.email);
   content = content.replace(/{Domain}/gi, recipient.domain);
+
+  return content.trim();
+}
+
+// 100% Exact Subject Line: No auto-changes
+function getExactSubject(rawSubject, recipient) {
+  if (!rawSubject) return '';
+  let content = parseSpintax(rawSubject);
+
+  const fallback = recipient.firstName || recipient.name || '';
+  content = content.replace(/{Name}/gi, recipient.name || fallback || '');
+  content = content.replace(/{FirstName}/gi, recipient.firstName || fallback || '');
+  content = content.replace(/{First_Name}/gi, recipient.firstName || fallback || '');
+  content = content.replace(/{Email}/gi, recipient.email);
+  content = content.replace(/{Domain}/gi, recipient.domain);
+
   return content.trim();
 }
 
@@ -316,8 +251,8 @@ app.post('/api/send-stream', async (req, res) => {
 
   const transporter = getCleanGmailTransporter(email, appPassword);
 
-  // 1 Batch = 8 Emails
-  const BATCH_SIZE = 8;
+  // 1 Batch = 4 Emails
+  const BATCH_SIZE = 4;
 
   for (let i = 0; i < recipients.length; i += BATCH_SIZE) {
     if (globalSession.stopRequested) {
@@ -336,23 +271,24 @@ app.post('/api/send-stream', async (req, res) => {
           await new Promise(resolve => setTimeout(resolve, Math.floor(150 + Math.random() * 120)));
         }
 
-        const finalSubject = buildExactSubject(subject, recipient);
-        const finalBody = buildInboxMessage(messageBody, recipient);
-        const isHtml = /<[a-z][\s\S]*>/i.test(finalBody);
+        const exactSubject = getExactSubject(subject, recipient);
+        const exactBody = getExactTemplate(messageBody, recipient);
+        const isHtml = /<[a-z][\s\S]*>/i.test(exactBody);
 
+        // Pure 1-to-1 Gmail format (Lets smtp.gmail.com generate authentic Message-ID and DKIM signature)
         const mailOptions = {
           from: cleanSenderName ? `"${cleanSenderName}" <${cleanEmail}>` : cleanEmail,
           to: recipient.name ? `"${recipient.name}" <${recipient.email}>` : recipient.email,
           replyTo: cleanEmail,
-          subject: finalSubject
+          subject: exactSubject
         };
 
         if (isHtml) {
-          mailOptions.html = `<div dir="ltr">${finalBody}</div>`;
-          mailOptions.text = stripHtmlTags(finalBody);
+          mailOptions.html = `<div dir="ltr">${exactBody}</div>`;
+          mailOptions.text = stripHtmlTags(exactBody);
         } else {
-          mailOptions.text = finalBody;
-          mailOptions.html = `<div dir="ltr">${finalBody.replace(/\n/g, '<br>')}</div>`;
+          mailOptions.text = exactBody;
+          mailOptions.html = `<div dir="ltr">${exactBody.replace(/\n/g, '<br>')}</div>`;
         }
 
         await transporter.sendMail(mailOptions);
