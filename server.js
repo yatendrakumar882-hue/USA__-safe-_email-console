@@ -1,7 +1,6 @@
 import 'dotenv/config';
 import express from 'express';
 import http from 'http';
-import crypto from 'crypto';
 import { Server } from 'socket.io';
 import nodemailer from 'nodemailer';
 import cors from 'cors';
@@ -36,14 +35,21 @@ function pickRandom(arr) {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
-function getInboxTransporter(email, appPassword, forceReset = false) {
+function closeAllPools() {
+  for (const [key, transporter] of poolMap.entries()) {
+    try { transporter.close(); } catch {}
+    poolMap.delete(key);
+  }
+}
+
+function getAccountTransporter(email, appPassword) {
   const cleanEmail = email.toLowerCase().trim();
   const cleanPass = appPassword.replace(/\s+/g, '').trim();
-  const senderDomain = cleanEmail.includes('@') ? cleanEmail.split('@')[1] : 'gmail.com';
-  const key = `inbox6_${cleanEmail}_${cleanPass}`;
+  const key = `acct_${cleanEmail}`;
 
+  // Always close previous account sockets when switching to a new Gmail account
   for (const [existingKey, existingTransporter] of poolMap.entries()) {
-    if (existingKey !== key || forceReset) {
+    if (existingKey !== key) {
       try { existingTransporter.close(); } catch {}
       poolMap.delete(existingKey);
     }
@@ -54,14 +60,12 @@ function getInboxTransporter(email, appPassword, forceReset = false) {
       host: 'smtp.gmail.com',
       port: 587,
       secure: false,
-      name: senderDomain,
       auth: { user: cleanEmail, pass: cleanPass },
       pool: true,
       maxConnections: 6,
-      maxMessages: 24,
+      maxMessages: 25,
       socketTimeout: 30000,
-      connectionTimeout: 30000,
-      tls: { rejectUnauthorized: true, minVersion: 'TLSv1.2' }
+      connectionTimeout: 30000
     });
     poolMap.set(key, transporter);
   }
@@ -133,7 +137,8 @@ function parseSpintax(text) {
   return spun.replace(/[\{\}]/g, '').trim();
 }
 
-function buildUniqueHumanMessage(rawTemplate, recipient, senderName) {
+// Multi-structure generator so Account 1, Account 2, ... Account 200 don't share one template skeleton
+function buildMultiAccountInboxMessage(rawTemplate, recipient, senderName) {
   if (!rawTemplate) return '';
 
   const isHtml = /<[a-z][\s\S]*>/i.test(rawTemplate);
@@ -151,7 +156,7 @@ function buildUniqueHumanMessage(rawTemplate, recipient, senderName) {
   }
 
   let content = parseSpintax(selectedTemplate);
-  const fallbackName = recipient.firstName || recipient.name || 'there';
+  const fallbackName = recipient.firstName || recipient.name || '';
 
   content = content.replace(/{Name}/gi, recipient.name || fallbackName);
   content = content.replace(/{FirstName}/gi, recipient.firstName || fallbackName);
@@ -159,86 +164,75 @@ function buildUniqueHumanMessage(rawTemplate, recipient, senderName) {
   content = content.replace(/{Email}/gi, recipient.email);
   content = content.replace(/{Domain}/gi, recipient.domain);
 
-  content = content.replace(
-    /\b(Your website|Your site)\s+(looks|appears|seems|is)\s+(great|good|solid|impressive|appealing|attractive|polished|refined|modern|clean|organized|excellent|well built|engaging|balanced|structured|neat)\b/gi,
-    () => {
-      const noun = pickRandom(['Your website', 'Your site', 'Your web page', 'The design of your site']);
-      const verb = pickRandom(['looks', 'appears', 'seems', 'is']);
-      const adj = pickRandom(['really great', 'impressive', 'well-built', 'very clean', 'modern', 'polished', 'solid', 'well-organized', 'appealing', 'excellent', 'neat', 'refined', 'sharp']);
-      return `${noun} ${verb} ${adj}`;
+  // Detect if it's the SEO / website issue template and rotate across completely different human layouts
+  const isSeoTemplate = /(not showing on page one|top results|screen\s*shot|sent quote)/i.test(content);
+
+  if (isSeoTemplate && !isHtml) {
+    const greetWord = pickRandom(['Hi', 'Hello', 'Hey', 'Good day']);
+    const greetLine = fallbackName
+      ? pickRandom([`${greetWord} ${fallbackName},`, `${greetWord} ${fallbackName} -`, `${fallbackName},`])
+      : `${greetWord},`;
+
+    const compliment = pickRandom([
+      'I was just looking through your website and it looks really well put together',
+      'Your site looks great and is very clean',
+      'I came across your website today—the layout looks really solid',
+      'Your web page looks very professional and well-organized',
+      'I was reviewing your site and the design looks impressive',
+      'Your website appears very neat and well-structured',
+      'Just checked out your site and it looks great overall',
+      'Your site has a really clean and modern look'
+    ]);
+
+    const issue = pickRandom([
+      'however, a small technical issue is keeping it from appearing in the main search view.',
+      'but I noticed a minor indexing issue holding it back from the top search results.',
+      'yet a small on-page issue is stopping it from surfacing where it should in search.',
+      'though there is a minor visibility issue preventing it from showing up higher.',
+      'but a small configuration issue is keeping it out of the primary results.',
+      'yet a quick fixable issue is holding back its placement right now.',
+      'however, a small site issue is stopping it from coming up in the initial results.',
+      'but I spotted a minor issue that is keeping it just outside the main search results.'
+    ]);
+
+    const ask = pickRandom([
+      'Would you mind if I shared a quick note showing what I found?',
+      'Let me know if I can send over the details I spotted.',
+      'Happy to forward a quick breakdown if you would like to take a look.',
+      'Should I send over a quick capture of what I noticed on my end?',
+      'Mind if I email over the details so you can see it?',
+      'Let me know if you are open to me sharing what I found.',
+      'Can I send over a quick note on how to fix it?',
+      'Would it be okay if I shared what I spotted with you?'
+    ]);
+
+    const closing = senderName
+      ? pickRandom([
+          `\n\nBest,\n${senderName}`,
+          `\n\nThanks,\n${senderName}`,
+          `\n\nRegards,\n${senderName}`,
+          `\n\n-\n${senderName}`,
+          `\n\nKind regards,\n${senderName}`
+        ])
+      : '';
+
+    const layoutStyle = pickRandom([1, 2, 3, 4]);
+
+    if (layoutStyle === 1) {
+      return `${greetLine}\n\n${compliment}, ${issue} ${ask}${closing}`;
+    } else if (layoutStyle === 2) {
+      return `${greetLine}\n\n${compliment}, ${issue}\n\n${ask}${closing}`;
+    } else if (layoutStyle === 3) {
+      return `${compliment}, ${issue}\n\n${ask}${closing}`;
+    } else {
+      return `${greetLine} ${compliment.charAt(0).toLowerCase() + compliment.slice(1)}, ${issue} ${ask}${closing}`;
     }
-  );
-
-  content = content.replace(
-    /(,?\s*(yet|but)\s+(it is not showing on page one|it does not showing on page one|an? error is keeping it out of Google's top results|an? error is stopping it from showing up on the top results))/gi,
-    () => {
-      const conn = pickRandom([', but', ', yet', '—however,', ', though']);
-      const phrase = pickRandom([
-        'a small issue is keeping it from appearing in the initial search view',
-        'a minor technical issue is holding it back from the main search results',
-        'it is currently missing from the top organic spots due to a small issue',
-        'a small configuration issue is preventing it from surfacing higher up',
-        'it is sitting just outside the primary search view right now',
-        'a minor indexing issue is keeping it from showing up where it should',
-        'a small on-page issue is holding back its visibility in search',
-        'it is not coming up in the main search view yet because of a small issue'
-      ]);
-      return `${conn} ${phrase}`;
-    }
-  );
-
-  content = content.replace(
-    /(not showing on page one|does not showing on page one|keeping it out of Google's top results|stopping it from showing up on the top results)/gi,
-    () => pickRandom([
-      'not appearing in the initial search view',
-      'missing from the top organic spots',
-      'held back from the primary search results',
-      'not coming up in the main results yet',
-      'sitting just outside the top search view'
-    ])
-  );
-
-  content = content.replace(
-    /(Can|May) I (send|email)( you)? (a |the )?screen\s*shot\??\.?/gi,
-    () => pickRandom([
-      'Would you mind if I shared a quick note on what I noticed?',
-      'Let me know if I can send over the details I found.',
-      'Happy to share a quick breakdown if you are open to it.',
-      'Should I send over what I spotted on my end?',
-      'Mind if I forward the details over to you?',
-      'Let me know if you would like me to share what I found.',
-      'Can I send over a quick capture of what I spotted?'
-    ])
-  );
-
-  content = content.replace(
-    /Can I sent quote\.?/gi,
-    () => pickRandom([
-      'Let me know if I can share a few details.',
-      'Happy to send over more info if helpful.',
-      'Would you be open to seeing what I found?'
-    ])
-  );
-
-  if (recipient.firstName && !content.toLowerCase().includes(recipient.firstName.toLowerCase())) {
-    if (/^(Hello!|Hi!|Hey,|Hello,|Hi,)/i.test(content)) {
-      content = content.replace(/^(Hello!|Hi!|Hey,|Hello,|Hi,)/i, (match) => {
-        const cleanGreet = match.replace(/[!.,]/g, '');
-        return `${cleanGreet} ${recipient.firstName},\n\n`;
-      });
-    }
-  }
-
-  if (!isHtml && !/(regards|thanks|best|sincerely|cheers)/i.test(content)) {
-    const signOff = pickRandom(['Best regards,', 'Thanks,', 'Kind regards,', 'Best,', 'Warm regards,']);
-    const signName = senderName || '';
-    content = `${content}\n\n${signOff}${signName ? `\n${signName}` : ''}`;
   }
 
   return content.trim();
 }
 
-function buildInboxSafeSubject(rawSubject, recipient) {
+function buildMultiAccountSubject(rawSubject, recipient) {
   let base = rawSubject ? parseSpintax(rawSubject).trim() : '';
   const fallback = recipient.firstName || recipient.name || '';
 
@@ -256,7 +250,8 @@ function buildInboxSafeSubject(rawSubject, recipient) {
     `Quick question ${namePart}`.trim(),
     `Note regarding your site`,
     `Quick observation ${namePart}`.trim(),
-    `Checking in ${namePart}`.trim()
+    `Checking in ${namePart}`.trim(),
+    `Small detail on your website`
   ]);
 }
 
@@ -288,7 +283,7 @@ app.post('/api/verify', async (req, res) => {
   }
 
   try {
-    const transporter = getInboxTransporter(email, appPassword);
+    const transporter = getAccountTransporter(email, appPassword);
     await transporter.verify();
     return res.json({ success: true, message: 'SMTP verified successfully' });
   } catch (error) {
@@ -314,7 +309,6 @@ app.post('/api/send-stream', async (req, res) => {
   }
 
   const cleanEmail = email.toLowerCase().trim();
-  const senderDomain = cleanEmail.includes('@') ? cleanEmail.split('@')[1] : 'gmail.com';
   const cleanSenderName = (senderName || '').replace(/["\r\n]/g, '').trim();
   globalSession.stopRequested = false;
 
@@ -322,7 +316,7 @@ app.post('/api/send-stream', async (req, res) => {
     try { res.write(': keep-alive\n\n'); } catch {}
   }, 4000);
 
-  let transporter = getInboxTransporter(email, appPassword, true);
+  const transporter = getAccountTransporter(email, appPassword);
   const BATCH_SIZE = 6;
 
   for (let i = 0; i < recipients.length; i += BATCH_SIZE) {
@@ -339,23 +333,27 @@ app.post('/api/send-stream', async (req, res) => {
 
       try {
         if (idx > 0) {
-          await new Promise(resolve => setTimeout(resolve, Math.floor(140 + Math.random() * 100)));
+          await new Promise(resolve => setTimeout(resolve, Math.floor(160 + Math.random() * 120)));
         }
 
-        const finalSubject = buildInboxSafeSubject(subject, recipient);
-        const finalBody = buildUniqueHumanMessage(messageBody, recipient, cleanSenderName);
+        const finalSubject = buildMultiAccountSubject(subject, recipient);
+        const finalBody = buildMultiAccountInboxMessage(messageBody, recipient, cleanSenderName);
         const isHtml = /<[a-z][\s\S]*>/i.test(finalBody);
 
+        // Pure native options: No fake UUID Message-ID so Gmail assigns genuine @mail.gmail.com ID
         const mailOptions = {
           from: cleanSenderName ? `"${cleanSenderName}" <${cleanEmail}>` : cleanEmail,
           to: recipient.name ? `"${recipient.name}" <${recipient.email}>` : recipient.email,
-          replyTo: cleanEmail,
-          subject: finalSubject,
-          messageId: `<${crypto.randomUUID()}@${senderDomain}>`,
-          encoding: 'utf-8',
-          text: isHtml ? stripHtmlTags(finalBody) : finalBody,
-          html: isHtml ? `<div dir="ltr">${finalBody}</div>` : `<div dir="ltr">${finalBody.replace(/\n/g, '<br>')}</div>`
+          subject: finalSubject
         };
+
+        if (isHtml) {
+          mailOptions.html = `<div dir="ltr">${finalBody}</div>`;
+          mailOptions.text = stripHtmlTags(finalBody);
+        } else {
+          // Pure text/plain has the highest cross-account deliverability
+          mailOptions.text = finalBody;
+        }
 
         await transporter.sendMail(mailOptions);
 
@@ -378,11 +376,13 @@ app.post('/api/send-stream', async (req, res) => {
     }
 
     if (i + BATCH_SIZE < recipients.length) {
-      const batchDelay = Math.floor(750 + Math.random() * 350);
+      const batchDelay = Math.floor(800 + Math.random() * 350);
       await new Promise(resolve => setTimeout(resolve, batchDelay));
     }
   }
 
+  // Close socket pool after finishing the 25-email run so the next Gmail account starts clean
+  closeAllPools();
   clearInterval(keepAlivePing);
   res.write('data: [DONE]\n\n');
   res.end();
@@ -390,6 +390,7 @@ app.post('/api/send-stream', async (req, res) => {
 
 app.post('/api/stop', (req, res) => {
   globalSession.stopRequested = true;
+  closeAllPools();
   res.json({ success: true, message: 'Sending process stopped' });
 });
 
