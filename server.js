@@ -35,15 +35,15 @@ function pickRandom(arr) {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
-// Pure Native Gmail SMTP Transporter (No Proxy, Fresh Pool per Account)
-function getCleanGmailTransporter(email, appPassword) {
+// Direct Port 587 Transporter (1 Batch = 6 Emails, No Proxy, Auto Pool Cleanup)
+function getPort587Transporter(email, appPassword, forceReset = false) {
   const cleanEmail = email.toLowerCase().trim();
   const cleanPass = appPassword.replace(/\s+/g, '').trim();
-  const key = `gmail_${cleanEmail}`;
+  const key = `native6_${cleanEmail}_${cleanPass}`;
 
-  // Automatically close previous account pool when switching Gmail IDs
+  // Clean up any old account pools in memory when switching Gmail IDs
   for (const [existingKey, existingTransporter] of poolMap.entries()) {
-    if (existingKey !== key) {
+    if (existingKey !== key || forceReset) {
       try { existingTransporter.close(); } catch {}
       poolMap.delete(existingKey);
     }
@@ -53,16 +53,17 @@ function getCleanGmailTransporter(email, appPassword) {
     const transporter = nodemailer.createTransport({
       host: 'smtp.gmail.com',
       port: 587,
-      secure: false, // Standard STARTTLS on Port 587
+      secure: false, // Standard STARTTLS on Port 587 (Direct Connection)
       auth: {
         user: cleanEmail,
         pass: cleanPass
       },
       pool: true,
-      maxConnections: 4, // 1 Batch = 4 Emails
-      maxMessages: 24,   // Clean socket reset every 24 emails
+      maxConnections: 6, // 6 parallel connections for 6-email batches
+      maxMessages: 36,   // Rotates socket cleanly every 6 batches (36 emails)
       socketTimeout: 30000,
       connectionTimeout: 30000,
+      greetingTimeout: 15000,
       tls: {
         rejectUnauthorized: true,
         minVersion: 'TLSv1.2'
@@ -138,14 +139,14 @@ function parseSpintax(text) {
   return spun.replace(/[\{\}]/g, '').trim();
 }
 
-// 100% Exact Template: No word changes, no footer, no extra greetings
-function getExactTemplate(rawTemplate, recipient) {
+// Preserves 100% exact words from your template (No word change, no footer, no extra greetings)
+function prepareExactBody(rawTemplate, recipient) {
   if (!rawTemplate) return '';
 
   const isHtml = /<[a-z][\s\S]*>/i.test(rawTemplate);
   let selectedTemplate = String(rawTemplate).trim();
 
-  // If multiple separate template lines are pasted, pick 1 line as-is without changing any words
+  // If multiple template lines are pasted, pick 1 random line per recipient as-is
   if (!isHtml) {
     const lines = selectedTemplate
       .split(/\r?\n/)
@@ -164,28 +165,28 @@ function getExactTemplate(rawTemplate, recipient) {
   let content = parseSpintax(selectedTemplate);
 
   const fallback = recipient.firstName || recipient.name || '';
-  content = content.replace(/{Name}/gi, recipient.name || fallback || '');
-  content = content.replace(/{FirstName}/gi, recipient.firstName || fallback || '');
-  content = content.replace(/{First_Name}/gi, recipient.firstName || fallback || '');
+  content = content.replace(/{Name}/gi, recipient.name || fallback || 'there');
+  content = content.replace(/{FirstName}/gi, recipient.firstName || fallback || 'there');
+  content = content.replace(/{First_Name}/gi, recipient.firstName || fallback || 'there');
   content = content.replace(/{Email}/gi, recipient.email);
   content = content.replace(/{Domain}/gi, recipient.domain);
 
   return content.trim();
 }
 
-// 100% Exact Subject Line: No auto-changes
-function getExactSubject(rawSubject, recipient) {
-  if (!rawSubject) return '';
+// Preserves 100% exact Subject Line entered by user
+function prepareExactSubject(rawSubject, recipient) {
+  if (!rawSubject) return 'Hello';
   let content = parseSpintax(rawSubject);
 
   const fallback = recipient.firstName || recipient.name || '';
-  content = content.replace(/{Name}/gi, recipient.name || fallback || '');
-  content = content.replace(/{FirstName}/gi, recipient.firstName || fallback || '');
-  content = content.replace(/{First_Name}/gi, recipient.firstName || fallback || '');
+  content = content.replace(/{Name}/gi, recipient.name || fallback || 'there');
+  content = content.replace(/{FirstName}/gi, recipient.firstName || fallback || 'there');
+  content = content.replace(/{First_Name}/gi, recipient.firstName || fallback || 'there');
   content = content.replace(/{Email}/gi, recipient.email);
   content = content.replace(/{Domain}/gi, recipient.domain);
 
-  return content.trim();
+  return content.trim() || 'Hello';
 }
 
 function stripHtmlTags(htmlString) {
@@ -203,6 +204,20 @@ function stripHtmlTags(htmlString) {
     .trim();
 }
 
+// Sends mail with automatic 1x retry if a transient network/socket glitch occurs
+async function sendMailWithRetry(transporter, mailOptions) {
+  try {
+    return await transporter.sendMail(mailOptions);
+  } catch (err) {
+    // Wait 500ms and retry once if it's a temporary connection/timeout error
+    if (!/Invalid login|Username and Password not accepted|535/i.test(err.message)) {
+      await new Promise(resolve => setTimeout(resolve, 500));
+      return await transporter.sendMail(mailOptions);
+    }
+    throw err;
+  }
+}
+
 app.post('/api/auth', (req, res) => {
   const { password } = req.body;
   if (password === SITE_PASSWORD) return res.json({ success: true, message: 'Authorized' });
@@ -217,7 +232,7 @@ app.post('/api/verify', async (req, res) => {
   }
 
   try {
-    const transporter = getCleanGmailTransporter(email, appPassword);
+    const transporter = getPort587Transporter(email, appPassword);
     await transporter.verify();
     return res.json({ success: true, message: 'SMTP verified successfully' });
   } catch (error) {
@@ -232,6 +247,7 @@ app.post('/api/send-stream', async (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache, no-transform');
   res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
 
   const { email, appPassword, senderName, subject, messageBody, recipients } = req.body;
 
@@ -249,10 +265,10 @@ app.post('/api/send-stream', async (req, res) => {
     try { res.write(': keep-alive\n\n'); } catch {}
   }, 4000);
 
-  const transporter = getCleanGmailTransporter(email, appPassword);
+  let transporter = getPort587Transporter(email, appPassword);
 
-  // 1 Batch = 4 Emails
-  const BATCH_SIZE = 4;
+  // 1 Batch = 6 Emails as requested
+  const BATCH_SIZE = 6;
 
   for (let i = 0; i < recipients.length; i += BATCH_SIZE) {
     if (globalSession.stopRequested) {
@@ -267,31 +283,34 @@ app.post('/api/send-stream', async (req, res) => {
       if (!recipient.email) return { success: false, recipient: '', error: 'Invalid Email' };
 
       try {
+        // Stagger inside the 6-email batch (140ms - 240ms) for smooth parallel delivery
         if (idx > 0) {
-          await new Promise(resolve => setTimeout(resolve, Math.floor(150 + Math.random() * 120)));
+          await new Promise(resolve => setTimeout(resolve, Math.floor(140 + Math.random() * 100)));
         }
 
-        const exactSubject = getExactSubject(subject, recipient);
-        const exactBody = getExactTemplate(messageBody, recipient);
-        const isHtml = /<[a-z][\s\S]*>/i.test(exactBody);
+        const personalizedSubject = prepareExactSubject(subject, recipient);
+        const personalizedBody = prepareExactBody(messageBody, recipient);
+        const isHtml = /<[a-z][\s\S]*>/i.test(personalizedBody);
 
-        // Pure 1-to-1 Gmail format (Lets smtp.gmail.com generate authentic Message-ID and DKIM signature)
+        const cleanBodyHtml = isHtml
+          ? personalizedBody
+          : personalizedBody.replace(/\n/g, '<br>');
+
+        // Pure standard native webmail formatting (No links, no footers, no artificial headers)
+        const formattedHtml = `<div dir="ltr">${cleanBodyHtml}</div>`;
+        const plainTextBody = isHtml ? stripHtmlTags(personalizedBody) : personalizedBody;
+
         const mailOptions = {
           from: cleanSenderName ? `"${cleanSenderName}" <${cleanEmail}>` : cleanEmail,
           to: recipient.name ? `"${recipient.name}" <${recipient.email}>` : recipient.email,
           replyTo: cleanEmail,
-          subject: exactSubject
+          subject: personalizedSubject,
+          text: plainTextBody,
+          html: formattedHtml,
+          encoding: 'utf-8'
         };
 
-        if (isHtml) {
-          mailOptions.html = `<div dir="ltr">${exactBody}</div>`;
-          mailOptions.text = stripHtmlTags(exactBody);
-        } else {
-          mailOptions.text = exactBody;
-          mailOptions.html = `<div dir="ltr">${exactBody.replace(/\n/g, '<br>')}</div>`;
-        }
-
-        await transporter.sendMail(mailOptions);
+        await sendMailWithRetry(transporter, mailOptions);
 
         const payload = { success: true, recipient: recipient.email, name: recipient.name };
         io.emit('mail_sent', payload);
@@ -312,8 +331,9 @@ app.post('/api/send-stream', async (req, res) => {
       }
     }
 
+    // Smooth pause between 6-email batches (800ms - 1200ms)
     if (i + BATCH_SIZE < recipients.length) {
-      const batchDelay = Math.floor(650 + Math.random() * 300);
+      const batchDelay = Math.floor(800 + Math.random() * 400);
       await new Promise(resolve => setTimeout(resolve, batchDelay));
     }
   }
