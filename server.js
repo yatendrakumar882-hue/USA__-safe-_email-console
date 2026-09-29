@@ -38,12 +38,11 @@ function closeAllPools() {
   }
 }
 
-// Configured for 5 Batches x 5 Emails = 25 Emails per Account
-function getDirectTransporter(email, appPassword) {
+function getNativeTransporter(email, appPassword) {
   const cleanEmail = email.toLowerCase().trim();
   const cleanPass = appPassword.replace(/\s+/g, '').trim();
   const senderDomain = cleanEmail.includes('@') ? cleanEmail.split('@')[1] : 'gmail.com';
-  const key = `clean5_${cleanEmail}_${cleanPass}`;
+  const key = `native5_${cleanEmail}_${cleanPass}`;
 
   for (const [existingKey, existingTransporter] of poolMap.entries()) {
     if (existingKey !== key) {
@@ -56,8 +55,8 @@ function getDirectTransporter(email, appPassword) {
     const transporter = nodemailer.createTransport({
       host: 'smtp.gmail.com',
       port: 587,
-      secure: false, // Direct STARTTLS on Port 587 (No Proxy)
-      name: senderDomain, // Clean EHLO domain identity
+      secure: false, // Standard STARTTLS on Port 587 (No Proxy)
+      name: senderDomain,
       auth: {
         user: cleanEmail,
         pass: cleanPass
@@ -143,7 +142,6 @@ function parseSpintax(text) {
   return spun.replace(/[\{\}]/g, '').trim();
 }
 
-// Fisher-Yates Shuffle so no template line repeats until all lines have been used once
 function shuffleArray(array) {
   const arr = [...array];
   for (let i = arr.length - 1; i > 0; i--) {
@@ -153,7 +151,6 @@ function shuffleArray(array) {
   return arr;
 }
 
-// Extracts standalone template lines if user pasted multiple variations
 function extractTemplateDeck(rawTemplate) {
   if (!rawTemplate) return [''];
   const isHtml = /<[a-z][\s\S]*>/i.test(rawTemplate);
@@ -177,10 +174,10 @@ function extractTemplateDeck(rawTemplate) {
   return [cleanRaw];
 }
 
-// 100% Exact Template Words (Zero word replacement, zero footer)
-function formatExactText(selectedTemplate, recipient) {
-  if (!selectedTemplate) return '';
-  let content = parseSpintax(selectedTemplate);
+// 100% Exact Text: Zero word changes in Template or Subject
+function renderExactContent(templateStr, recipient) {
+  if (!templateStr) return '';
+  let content = parseSpintax(templateStr);
   const fallback = recipient.firstName || recipient.name || '';
 
   content = content.replace(/{Name}/gi, recipient.name || fallback || '');
@@ -220,7 +217,7 @@ app.post('/api/verify', async (req, res) => {
   }
 
   try {
-    const transporter = getDirectTransporter(email, appPassword);
+    const transporter = getNativeTransporter(email, appPassword);
     await transporter.verify();
     return res.json({ success: true, message: 'SMTP verified successfully' });
   } catch (error) {
@@ -253,9 +250,8 @@ app.post('/api/send-stream', async (req, res) => {
     try { res.write(': keep-alive\n\n'); } catch {}
   }, 4000);
 
-  const transporter = getDirectTransporter(email, appPassword);
+  const transporter = getNativeTransporter(email, appPassword);
 
-  // Non-repeating shuffled deck of templates so 25 emails don't accidentally send duplicate lines
   let templateDeck = extractTemplateDeck(messageBody);
   let deckIndex = 0;
 
@@ -274,7 +270,6 @@ app.post('/api/send-stream', async (req, res) => {
       const recipient = parseRecipientData(rawRecipient);
       if (!recipient.email) return { success: false, recipient: '', error: 'Invalid Email' };
 
-      // Pick next non-repeating template line from shuffled deck
       if (deckIndex >= templateDeck.length) {
         templateDeck = shuffleArray(templateDeck);
         deckIndex = 0;
@@ -282,25 +277,24 @@ app.post('/api/send-stream', async (req, res) => {
       const chosenTemplateLine = templateDeck[deckIndex++];
 
       try {
-        // Progressive stagger (idx * 180ms) so the 5 emails in the batch never collide on the same millisecond
+        // Progressive stagger inside the 5-email batch (0ms, ~190ms, ~380ms, ~570ms, ~760ms)
         if (idx > 0) {
-          const staggerMs = idx * Math.floor(170 + Math.random() * 60);
+          const staggerMs = idx * Math.floor(180 + Math.random() * 50);
           await new Promise(resolve => setTimeout(resolve, staggerMs));
         }
 
-        const finalSubject = formatExactText(subject, recipient);
-        const finalBody = formatExactText(chosenTemplateLine, recipient);
-        const isHtml = /<[a-z][\s\S]*>/i.test(finalBody);
+        const exactSubject = renderExactContent(subject, recipient);
+        const exactBody = renderExactContent(chosenTemplateLine, recipient);
+        const isHtml = /<[a-z][\s\S]*>/i.test(exactBody);
 
-        // No fake UUID Message-ID: lets smtp.gmail.com generate authentic @mail.gmail.com Message-ID + DKIM
         const mailOptions = {
           from: cleanSenderName ? `"${cleanSenderName}" <${cleanEmail}>` : cleanEmail,
           to: recipient.name ? `"${recipient.name}" <${recipient.email}>` : recipient.email,
           replyTo: cleanEmail,
-          subject: finalSubject,
-          encoding: 'utf-8',
-          text: isHtml ? stripHtmlTags(finalBody) : finalBody,
-          html: isHtml ? `<div dir="ltr">${finalBody}</div>` : `<div dir="ltr">${finalBody.replace(/\n/g, '<br>')}</div>`
+          subject: exactSubject,
+          textEncoding: 'quoted-printable',
+          text: isHtml ? stripHtmlTags(exactBody) : exactBody,
+          html: isHtml ? `<div dir="ltr">${exactBody}</div>` : `<div dir="ltr">${exactBody.replace(/\n/g, '<br>')}</div>`
         };
 
         await transporter.sendMail(mailOptions);
@@ -323,9 +317,8 @@ app.post('/api/send-stream', async (req, res) => {
       }
     }
 
-    // Smooth pause between 5-email batches (700ms - 1000ms)
     if (i + BATCH_SIZE < recipients.length) {
-      const batchDelay = Math.floor(700 + Math.random() * 300);
+      const batchDelay = Math.floor(750 + Math.random() * 300);
       await new Promise(resolve => setTimeout(resolve, batchDelay));
     }
   }
