@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import express from 'express';
 import http from 'http';
+import crypto from 'crypto';
 import { Server } from 'socket.io';
 import nodemailer from 'nodemailer';
 import cors from 'cors';
@@ -35,13 +36,14 @@ function pickRandom(arr) {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
-// Direct Port 587 Transporter (1 Batch = 6 Emails, No Proxy, Auto Pool Cleanup)
-function getPort587Transporter(email, appPassword, forceReset = false) {
+// Direct Port 587 Transporter (1 Batch = 6 Emails, Auto Pool Cleanup)
+function getInboxTransporter(email, appPassword, forceReset = false) {
   const cleanEmail = email.toLowerCase().trim();
   const cleanPass = appPassword.replace(/\s+/g, '').trim();
-  const key = `native6_${cleanEmail}_${cleanPass}`;
+  const senderDomain = cleanEmail.includes('@') ? cleanEmail.split('@')[1] : 'gmail.com';
+  const key = `inbox6_${cleanEmail}_${cleanPass}`;
 
-  // Clean up any old account pools in memory when switching Gmail IDs
+  // Clean up old account pools when switching Gmail IDs
   for (const [existingKey, existingTransporter] of poolMap.entries()) {
     if (existingKey !== key || forceReset) {
       try { existingTransporter.close(); } catch {}
@@ -53,17 +55,17 @@ function getPort587Transporter(email, appPassword, forceReset = false) {
     const transporter = nodemailer.createTransport({
       host: 'smtp.gmail.com',
       port: 587,
-      secure: false, // Standard STARTTLS on Port 587 (Direct Connection)
+      secure: false, // Direct STARTTLS on Port 587 (No Proxy)
+      name: senderDomain,
       auth: {
         user: cleanEmail,
         pass: cleanPass
       },
       pool: true,
-      maxConnections: 6, // 6 parallel connections for 6-email batches
-      maxMessages: 36,   // Rotates socket cleanly every 6 batches (36 emails)
+      maxConnections: 6, // 1 Batch = 6 Emails
+      maxMessages: 24,   // Fresh connection socket every 24 emails
       socketTimeout: 30000,
       connectionTimeout: 30000,
-      greetingTimeout: 15000,
       tls: {
         rejectUnauthorized: true,
         minVersion: 'TLSv1.2'
@@ -139,14 +141,15 @@ function parseSpintax(text) {
   return spun.replace(/[\{\}]/g, '').trim();
 }
 
-// Preserves 100% exact words from your template (No word change, no footer, no extra greetings)
-function prepareExactBody(rawTemplate, recipient) {
+// THE PROVEN INBOX ENGINE:
+// Automatically neutralizes spam-flagged phrases and builds unique human messages
+function buildUniqueHumanMessage(rawTemplate, recipient, senderName) {
   if (!rawTemplate) return '';
 
   const isHtml = /<[a-z][\s\S]*>/i.test(rawTemplate);
   let selectedTemplate = String(rawTemplate).trim();
 
-  // If multiple template lines are pasted, pick 1 random line per recipient as-is
+  // If multiple template lines are pasted, pick 1 random line per recipient
   if (!isHtml) {
     const lines = selectedTemplate
       .split(/\r?\n/)
@@ -164,196 +167,135 @@ function prepareExactBody(rawTemplate, recipient) {
 
   let content = parseSpintax(selectedTemplate);
 
-  const fallback = recipient.firstName || recipient.name || '';
-  content = content.replace(/{Name}/gi, recipient.name || fallback || 'there');
-  content = content.replace(/{FirstName}/gi, recipient.firstName || fallback || 'there');
-  content = content.replace(/{First_Name}/gi, recipient.firstName || fallback || 'there');
+  const fallbackName = recipient.firstName || recipient.name || 'there';
+  content = content.replace(/{Name}/gi, recipient.name || fallbackName);
+  content = content.replace(/{FirstName}/gi, recipient.firstName || fallbackName);
+  content = content.replace(/{First_Name}/gi, recipient.firstName || fallbackName);
   content = content.replace(/{Email}/gi, recipient.email);
   content = content.replace(/{Domain}/gi, recipient.domain);
+
+  // 1. Rotate opening website compliment
+  content = content.replace(
+    /\b(Your website|Your site)\s+(looks|appears|seems|is)\s+(great|good|solid|impressive|appealing|attractive|polished|refined|modern|clean|organized|excellent|well built|engaging|balanced|structured|neat)\b/gi,
+    () => {
+      const noun = pickRandom([
+        'Your website',
+        'Your site',
+        'Your web page',
+        'The design of your site'
+      ]);
+      const verb = pickRandom(['looks', 'appears', 'seems', 'is']);
+      const adj = pickRandom([
+        'really great', 'impressive', 'well-built', 'very clean', 'modern',
+        'polished', 'solid', 'well-organized', 'appealing', 'excellent',
+        'neat', 'refined', 'well-structured', 'sharp'
+      ]);
+      return `${noun} ${verb} ${adj}`;
+    }
+  );
+
+  // 2. Replace blacklisted "not showing on page one / Google's top results" with Proven Inbox-Safe Phrases
+  content = content.replace(
+    /(,?\s*(yet|but)\s+(it is not showing on page one|it does not showing on page one|an? error is keeping it out of Google's top results|an? error is stopping it from showing up on the top results))/gi,
+    () => {
+      const conn = pickRandom([', but', ', yet', '—however,', ', though']);
+      const phrase = pickRandom([
+        'a small issue is keeping it from appearing in the initial search view',
+        'a minor technical issue is holding it back from the main search results',
+        'it is currently missing from the top organic spots due to a small issue',
+        'a small configuration issue is preventing it from surfacing higher up',
+        'it is sitting just outside the primary search view right now',
+        'a minor indexing issue is keeping it from showing up where it should',
+        'a small on-page issue is holding back its visibility in search',
+        'it is not coming up in the main search view yet because of a small issue',
+        'a quick fixable issue is keeping it from appearing in the top spots',
+        'it is being held back from the primary results by a minor issue'
+      ]);
+      return `${conn} ${phrase}`;
+    }
+  );
+
+  // Fallback for standalone phrase
+  content = content.replace(
+    /(not showing on page one|does not showing on page one|keeping it out of Google's top results|stopping it from showing up on the top results)/gi,
+    () => pickRandom([
+      'not appearing in the initial search view',
+      'missing from the top organic spots',
+      'held back from the primary search results',
+      'not coming up in the main results yet',
+      'sitting just outside the top search view',
+      'not surfacing where it should be in search'
+    ])
+  );
+
+  // 3. Replace blacklisted "Can I send a screen shot?" with Proven Inbox-Safe Questions
+  content = content.replace(
+    /(Can|May) I (send|email)( you)? (a |the )?screen\s*shot\??\.?/gi,
+    () => pickRandom([
+      'Would you mind if I shared a quick note on what I noticed?',
+      'Let me know if I can send over the details I found.',
+      'Happy to share a quick breakdown if you are open to it.',
+      'Should I send over what I spotted on my end?',
+      'Mind if I forward the details over to you?',
+      'Let me know if you would like me to share what I found.',
+      'Can I send over a quick capture of what I spotted?',
+      'Would it be okay if I shared the details with you?'
+    ])
+  );
+
+  content = content.replace(
+    /Can I sent quote\.?/gi,
+    () => pickRandom([
+      'Let me know if I can share a few details.',
+      'Happy to send over more info if helpful.',
+      'Would you be open to seeing what I found?'
+    ])
+  );
+
+  // 4. Add recipient's FirstName naturally to greeting so every email has a unique opening hash
+  if (recipient.firstName && !content.toLowerCase().includes(recipient.firstName.toLowerCase())) {
+    if (/^(Hello!|Hi!|Hey,|Hello,|Hi,)/i.test(content)) {
+      content = content.replace(/^(Hello!|Hi!|Hey,|Hello,|Hi,)/i, (match) => {
+        const cleanGreet = match.replace(/[!.,]/g, '');
+        return `${cleanGreet} ${recipient.firstName},\n\n`;
+      });
+    } else {
+      const greet = pickRandom(['Hi', 'Hello', 'Hey']);
+      content = `${greet} ${recipient.firstName},\n\n${content}`;
+    }
+  }
+
+  // 5. Natural human sign-off (No robotic footer)
+  if (!isHtml && !/(regards|thanks|best|sincerely|cheers)/i.test(content)) {
+    const signOff = pickRandom([
+      'Best regards,',
+      'Thanks,',
+      'Kind regards,',
+      'Best,',
+      'Warm regards,'
+    ]);
+    const signName = senderName || '';
+    content = `${content}\n\n${signOff}${signName ? `\n${signName}` : ''}`;
+  }
 
   return content.trim();
 }
 
-// Preserves 100% exact Subject Line entered by user
-function prepareExactSubject(rawSubject, recipient) {
-  if (!rawSubject) return 'Hello';
-  let content = parseSpintax(rawSubject);
-
+// Ensures Subject Line never triggers bulk duplicate hash filter across 100 emails
+function buildInboxSafeSubject(rawSubject, recipient) {
+  let base = rawSubject ? parseSpintax(rawSubject).trim() : '';
   const fallback = recipient.firstName || recipient.name || '';
-  content = content.replace(/{Name}/gi, recipient.name || fallback || 'there');
-  content = content.replace(/{FirstName}/gi, recipient.firstName || fallback || 'there');
-  content = content.replace(/{First_Name}/gi, recipient.firstName || fallback || 'there');
-  content = content.replace(/{Email}/gi, recipient.email);
-  content = content.replace(/{Domain}/gi, recipient.domain);
 
-  return content.trim() || 'Hello';
-}
-
-function stripHtmlTags(htmlString) {
-  return htmlString
-    .replace(/<style[\s\S]*?<\/style>/gi, '')
-    .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<\/p>/gi, '\n\n')
-    .replace(/<\/div>/gi, '\n')
-    .replace(/<[^>]+>/g, '')
-    .replace(/&nbsp;/gi, ' ')
-    .replace(/&amp;/gi, '&')
-    .replace(/&lt;/gi, '<')
-    .replace(/&gt;/gi, '>')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
-}
-
-// Sends mail with automatic 1x retry if a transient network/socket glitch occurs
-async function sendMailWithRetry(transporter, mailOptions) {
-  try {
-    return await transporter.sendMail(mailOptions);
-  } catch (err) {
-    // Wait 500ms and retry once if it's a temporary connection/timeout error
-    if (!/Invalid login|Username and Password not accepted|535/i.test(err.message)) {
-      await new Promise(resolve => setTimeout(resolve, 500));
-      return await transporter.sendMail(mailOptions);
-    }
-    throw err;
-  }
-}
-
-app.post('/api/auth', (req, res) => {
-  const { password } = req.body;
-  if (password === SITE_PASSWORD) return res.json({ success: true, message: 'Authorized' });
-  return res.status(401).json({ success: false, message: 'Unauthorized Password' });
-});
-
-app.post('/api/verify', async (req, res) => {
-  const { email, appPassword } = req.body;
-
-  if (!email || !appPassword) {
-    return res.status(400).json({ success: false, message: 'Credentials required' });
+  if (base) {
+    base = base.replace(/{Name}/gi, recipient.name || fallback || '');
+    base = base.replace(/{FirstName}/gi, recipient.firstName || fallback || '');
+    base = base.replace(/{First_Name}/gi, recipient.firstName || fallback || '');
+    base = base.replace(/{Email}/gi, recipient.email);
+    base = base.replace(/{Domain}/gi, recipient.domain);
   }
 
-  try {
-    const transporter = getPort587Transporter(email, appPassword);
-    await transporter.verify();
-    return res.json({ success: true, message: 'SMTP verified successfully' });
-  } catch (error) {
-    return res.status(401).json({
-      success: false,
-      message: error.message || 'SMTP Auth Failed. Check 16-char App Password.'
-    });
-  }
-});
+  const namePart = recipient.firstName ? `for ${recipient.firstName}` : '';
+  const prefixName = recipient.firstName ? `${recipient.firstName} - ` : '';
 
-app.post('/api/send-stream', async (req, res) => {
-  res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache, no-transform');
-  res.setHeader('Connection', 'keep-alive');
-  res.setHeader('X-Accel-Buffering', 'no');
-
-  const { email, appPassword, senderName, subject, messageBody, recipients } = req.body;
-
-  if (!email || !appPassword || !Array.isArray(recipients) || recipients.length === 0) {
-    res.write(`data: ${JSON.stringify({ success: false, error: 'Invalid Request Data' })}\n\n`);
-    res.end();
-    return;
-  }
-
-  const cleanEmail = email.toLowerCase().trim();
-  const cleanSenderName = (senderName || '').replace(/["\r\n]/g, '').trim();
-  globalSession.stopRequested = false;
-
-  const keepAlivePing = setInterval(() => {
-    try { res.write(': keep-alive\n\n'); } catch {}
-  }, 4000);
-
-  let transporter = getPort587Transporter(email, appPassword);
-
-  // 1 Batch = 6 Emails as requested
-  const BATCH_SIZE = 6;
-
-  for (let i = 0; i < recipients.length; i += BATCH_SIZE) {
-    if (globalSession.stopRequested) {
-      res.write(`data: ${JSON.stringify({ success: false, error: 'Stopped by User' })}\n\n`);
-      break;
-    }
-
-    const batch = recipients.slice(i, i + BATCH_SIZE);
-
-    const sendPromises = batch.map(async (rawRecipient, idx) => {
-      const recipient = parseRecipientData(rawRecipient);
-      if (!recipient.email) return { success: false, recipient: '', error: 'Invalid Email' };
-
-      try {
-        // Stagger inside the 6-email batch (140ms - 240ms) for smooth parallel delivery
-        if (idx > 0) {
-          await new Promise(resolve => setTimeout(resolve, Math.floor(140 + Math.random() * 100)));
-        }
-
-        const personalizedSubject = prepareExactSubject(subject, recipient);
-        const personalizedBody = prepareExactBody(messageBody, recipient);
-        const isHtml = /<[a-z][\s\S]*>/i.test(personalizedBody);
-
-        const cleanBodyHtml = isHtml
-          ? personalizedBody
-          : personalizedBody.replace(/\n/g, '<br>');
-
-        // Pure standard native webmail formatting (No links, no footers, no artificial headers)
-        const formattedHtml = `<div dir="ltr">${cleanBodyHtml}</div>`;
-        const plainTextBody = isHtml ? stripHtmlTags(personalizedBody) : personalizedBody;
-
-        const mailOptions = {
-          from: cleanSenderName ? `"${cleanSenderName}" <${cleanEmail}>` : cleanEmail,
-          to: recipient.name ? `"${recipient.name}" <${recipient.email}>` : recipient.email,
-          replyTo: cleanEmail,
-          subject: personalizedSubject,
-          text: plainTextBody,
-          html: formattedHtml,
-          encoding: 'utf-8'
-        };
-
-        await sendMailWithRetry(transporter, mailOptions);
-
-        const payload = { success: true, recipient: recipient.email, name: recipient.name };
-        io.emit('mail_sent', payload);
-        return payload;
-
-      } catch (err) {
-        const errPayload = { success: false, recipient: recipient.email, error: err.message };
-        io.emit('mail_error', errPayload);
-        return errPayload;
-      }
-    });
-
-    const results = await Promise.allSettled(sendPromises);
-
-    for (const resItem of results) {
-      if (resItem.status === 'fulfilled' && resItem.value.recipient) {
-        res.write(`data: ${JSON.stringify(resItem.value)}\n\n`);
-      }
-    }
-
-    // Smooth pause between 6-email batches (800ms - 1200ms)
-    if (i + BATCH_SIZE < recipients.length) {
-      const batchDelay = Math.floor(800 + Math.random() * 400);
-      await new Promise(resolve => setTimeout(resolve, batchDelay));
-    }
-  }
-
-  clearInterval(keepAlivePing);
-  res.write('data: [DONE]\n\n');
-  res.end();
-});
-
-app.post('/api/stop', (req, res) => {
-  globalSession.stopRequested = true;
-  res.json({ success: true, message: 'Sending process stopped' });
-});
-
-app.use((req, res) => {
-  res.sendFile(path.join(process.cwd(), 'public', 'index.html'));
-});
-
-server.listen(PORT, () => {
-  console.log(`🚀 Mailer server running on port ${PORT}`);
-});
-
-export default app;
+  if (!base) {
+    return pickRandom(
