@@ -43,14 +43,12 @@ function closeAllPools() {
   }
 }
 
-// Restored the exact working SMTP handshake that delivered 50-100 emails to Inbox
-function getWorkingInboxTransporter(email, appPassword) {
+function getDirectTransporter(email, appPassword) {
   const cleanEmail = email.toLowerCase().trim();
   const cleanPass = appPassword.replace(/\s+/g, '').trim();
   const senderDomain = cleanEmail.includes('@') ? cleanEmail.split('@')[1] : 'gmail.com';
-  const key = `inbox_${cleanEmail}_${cleanPass}`;
+  const key = `clean_${cleanEmail}_${cleanPass}`;
 
-  // Close previous account pool when switching Gmail accounts
   for (const [existingKey, existingTransporter] of poolMap.entries()) {
     if (existingKey !== key) {
       try { existingTransporter.close(); } catch {}
@@ -62,15 +60,15 @@ function getWorkingInboxTransporter(email, appPassword) {
     const transporter = nodemailer.createTransport({
       host: 'smtp.gmail.com',
       port: 587,
-      secure: false, // Direct STARTTLS on Port 587
-      name: senderDomain, // CRITICAL on Vercel: Hides AWS Lambda internal hostname
+      secure: false, // Standard STARTTLS on Port 587 (No Proxy)
+      name: senderDomain,
       auth: {
         user: cleanEmail,
         pass: cleanPass
       },
       pool: true,
-      maxConnections: 4, // Optimal parallel connections for Inbox landing
-      maxMessages: 25,   // Matches 25 emails per account
+      maxConnections: 4,
+      maxMessages: 25,
       socketTimeout: 30000,
       connectionTimeout: 30000,
       tls: {
@@ -148,13 +146,14 @@ function parseSpintax(text) {
   return spun.replace(/[\{\}]/g, '').trim();
 }
 
-// Fresh Unburned Phrasing Engine (Keeps exact SEO meaning, 0% burned spam phrases)
-function buildFreshInboxBody(rawTemplate, recipient, senderName) {
+// 100% Exact Template: No word changes, no footer, no extra text added
+function getExactBody(rawTemplate, recipient) {
   if (!rawTemplate) return '';
 
   const isHtml = /<[a-z][\s\S]*>/i.test(rawTemplate);
   let selectedTemplate = String(rawTemplate).trim();
 
+  // If multiple separate lines of templates are pasted, pick 1 line per email without changing any words
   if (!isHtml) {
     const lines = selectedTemplate.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 15);
     const looksLikeVariationList =
@@ -167,141 +166,30 @@ function buildFreshInboxBody(rawTemplate, recipient, senderName) {
   }
 
   let content = parseSpintax(selectedTemplate);
-  const fallbackName = recipient.firstName || recipient.name || '';
+  const fallback = recipient.firstName || recipient.name || '';
 
-  content = content.replace(/{Name}/gi, recipient.name || fallbackName);
-  content = content.replace(/{FirstName}/gi, recipient.firstName || fallbackName);
-  content = content.replace(/{First_Name}/gi, recipient.firstName || fallbackName);
+  content = content.replace(/{Name}/gi, recipient.name || fallback || '');
+  content = content.replace(/{FirstName}/gi, recipient.firstName || fallback || '');
+  content = content.replace(/{First_Name}/gi, recipient.firstName || fallback || '');
   content = content.replace(/{Email}/gi, recipient.email);
   content = content.replace(/{Domain}/gi, recipient.domain);
-
-  // 1. Fresh Opening Compliments
-  content = content.replace(
-    /\b(Your website|Your site)\s+(looks|appears|seems|is)\s+(great|good|solid|impressive|appealing|attractive|polished|refined|modern|clean|organized|excellent|well built|engaging|balanced|structured|neat)\b/gi,
-    () => {
-      const p1 = pickRandom([
-        'Your website',
-        'Your site',
-        'The layout of your site',
-        'Your web page',
-        'The design of your website'
-      ]);
-      const p2 = pickRandom(['looks', 'appears', 'is', 'seems']);
-      const p3 = pickRandom([
-        'really well put together',
-        'very clean and modern',
-        'impressive and well-built',
-        'great overall',
-        'very neat and professional',
-        'polished and well-structured',
-        'solid and well-organized',
-        'sharp and clean'
-      ]);
-      return `${p1} ${p2} ${p3}`;
-    }
-  );
-
-  // 2. Fresh Unburned Search/Visibility Explanations (Same meaning, zero spam-filter triggers)
-  content = content.replace(
-    /(,?\s*(yet|but)\s+(it is not showing on page one|it does not showing on page one|an? error is keeping it out of Google's top results|an? error is stopping it from showing up on the top results))/gi,
-    () => {
-      const conj = pickRandom([', but', ', yet', '—though', ', however']);
-      const bodyPart = pickRandom([
-        'I noticed a small technical hiccup that is holding back its search visibility',
-        'there is a minor indexing setting keeping it from appearing where it should in search',
-        'a small on-page issue is preventing it from surfacing in the main search view',
-        'I spotted a minor site issue that is limiting its organic placement right now',
-        'a quick fixable issue is keeping it just outside the primary search results',
-        'there is a small configuration detail holding it back from the top spots',
-        'I came across a minor crawl issue that is affecting how it shows up in search',
-        'a small visibility issue is keeping it from coming up in the initial results'
-      ]);
-      return `${conj} ${bodyPart}`;
-    }
-  );
-
-  content = content.replace(
-    /(not showing on page one|does not showing on page one|keeping it out of Google's top results|stopping it from showing up on the top results)/gi,
-    () => pickRandom([
-      'held back from the main search view by a small issue',
-      'missing from the primary search spots due to a minor issue',
-      'not surfacing where it should in search right now',
-      'kept just outside the main results by a small technical detail',
-      'not appearing in the initial search results yet'
-    ])
-  );
-
-  // 3. Fresh Unburned Call-To-Action Questions
-  content = content.replace(
-    /(Can|May) I (send|email)( you)? (a |the )?screen\s*shot\??\.?/gi,
-    () => pickRandom([
-      'Would you mind if I sent over a quick note on what I spotted?',
-      'Let me know if I can share the details I found with you.',
-      'Happy to forward over what I noticed if you would like to take a look.',
-      'Mind if I send over a quick breakdown of the issue?',
-      'Should I email you a quick visual of what I found on my end?',
-      'Would it be okay if I shared a quick note showing where the issue is?',
-      'Let me know if you are open to seeing what I spotted.'
-    ])
-  );
-
-  content = content.replace(
-    /Can I sent quote\.?/gi,
-    () => pickRandom([
-      'Let me know if I can share a quick note on this.',
-      'Happy to send over the details if helpful.',
-      'Mind if I forward what I spotted?'
-    ])
-  );
-
-  // 4. Personalize greeting with recipient FirstName if available
-  if (recipient.firstName && !content.toLowerCase().includes(recipient.firstName.toLowerCase())) {
-    if (/^(Hello!|Hi!|Hey,|Hello,|Hi,)/i.test(content)) {
-      content = content.replace(/^(Hello!|Hi!|Hey,|Hello,|Hi,)/i, (match) => {
-        const cleanGreet = match.replace(/[!.,]/g, '');
-        return `${cleanGreet} ${recipient.firstName},\n\n`;
-      });
-    }
-  }
 
   return content.trim();
 }
 
-// Ensures every email has a unique Subject Line even if the user types a static subject
-function buildFreshInboxSubject(rawSubject, recipient) {
-  let base = rawSubject ? parseSpintax(rawSubject).trim() : '';
+// 100% Exact Subject Line: No word changes
+function getExactSubject(rawSubject, recipient) {
+  if (!rawSubject) return '';
+  let content = parseSpintax(rawSubject);
   const fallback = recipient.firstName || recipient.name || '';
 
-  if (base) {
-    base = base.replace(/{Name}/gi, recipient.name || fallback || '');
-    base = base.replace(/{FirstName}/gi, recipient.firstName || fallback || '');
-    base = base.replace(/{First_Name}/gi, recipient.firstName || fallback || '');
-    base = base.replace(/{Email}/gi, recipient.email);
-    base = base.replace(/{Domain}/gi, recipient.domain);
-  }
+  content = content.replace(/{Name}/gi, recipient.name || fallback || '');
+  content = content.replace(/{FirstName}/gi, recipient.firstName || fallback || '');
+  content = content.replace(/{First_Name}/gi, recipient.firstName || fallback || '');
+  content = content.replace(/{Email}/gi, recipient.email);
+  content = content.replace(/{Domain}/gi, recipient.domain);
 
-  const nameTag = recipient.firstName || '';
-
-  if (!base) {
-    return pickRandom([
-      nameTag ? `Quick question for ${nameTag}` : 'Quick question regarding your site',
-      nameTag ? `${nameTag} - quick note about your website` : 'Quick note about your website',
-      'Small detail I noticed on your site',
-      nameTag ? `Checking in, ${nameTag}` : 'Quick observation on your site',
-      'Question regarding your website'
-    ]);
-  }
-
-  // If user entered a static subject without variables, slightly vary it per recipient so 25 emails don't share 1 hash
-  if (nameTag && !base.toLowerCase().includes(nameTag.toLowerCase())) {
-    return pickRandom([
-      `${base} - ${nameTag}`,
-      `${nameTag}, ${base.charAt(0).toLowerCase() + base.slice(1)}`,
-      `${base}`
-    ]);
-  }
-
-  return base;
+  return content.trim();
 }
 
 function stripHtmlTags(htmlString) {
@@ -332,7 +220,7 @@ app.post('/api/verify', async (req, res) => {
   }
 
   try {
-    const transporter = getWorkingInboxTransporter(email, appPassword);
+    const transporter = getDirectTransporter(email, appPassword);
     await transporter.verify();
     return res.json({ success: true, message: 'SMTP verified successfully' });
   } catch (error) {
@@ -366,7 +254,7 @@ app.post('/api/send-stream', async (req, res) => {
     try { res.write(': keep-alive\n\n'); } catch {}
   }, 4000);
 
-  const transporter = getWorkingInboxTransporter(email, appPassword);
+  const transporter = getDirectTransporter(email, appPassword);
   const BATCH_SIZE = 4;
 
   for (let i = 0; i < recipients.length; i += BATCH_SIZE) {
@@ -386,8 +274,8 @@ app.post('/api/send-stream', async (req, res) => {
           await new Promise(resolve => setTimeout(resolve, Math.floor(150 + Math.random() * 120)));
         }
 
-        const finalSubject = buildFreshInboxSubject(subject, recipient);
-        const finalBody = buildFreshInboxBody(messageBody, recipient, cleanSenderName);
+        const finalSubject = getExactSubject(subject, recipient);
+        const finalBody = getExactBody(messageBody, recipient);
         const isHtml = /<[a-z][\s\S]*>/i.test(finalBody);
 
         const mailOptions = {
