@@ -20,29 +20,31 @@ app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 
+function pickRandom(arr) {
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
 /* ==========================================================================
-   1. CLEAN DIRECT GMAIL TRANSPORTER (NO PROXY, PROPER POOL REUSE)
+   1. CLEAN DIRECT GMAIL TRANSPORTER
    ========================================================================== */
 function closeAllPools() {
   for (const [key, transporter] of poolMap.entries()) {
     try {
       transporter.close();
     } catch (e) {
-      // Ignore close errors
+      // Ignore
     }
     poolMap.delete(key);
   }
 }
 
-function getNativeTransporter(email, appPassword) {
+function getNativeTransporter(email, appPassword, forceFresh = false) {
   const cleanEmail = email.toLowerCase().trim();
   const cleanPass = appPassword.replace(/\s+/g, '').trim();
-  const senderDomain = cleanEmail.includes('@') ? cleanEmail.split('@')[1] : 'gmail.com';
   const key = `native_${cleanEmail}_${cleanPass}`;
 
-  // Close old pool if switching to a different Gmail account
   for (const [existingKey, existingTransporter] of poolMap.entries()) {
-    if (existingKey !== key) {
+    if (existingKey !== key || forceFresh) {
       try {
         existingTransporter.close();
       } catch (e) {
@@ -55,18 +57,20 @@ function getNativeTransporter(email, appPassword) {
   if (!poolMap.has(key)) {
     const transporter = nodemailer.createTransport({
       host: 'smtp.gmail.com',
-      port: 465,
-      secure: true,
-      name: senderDomain,
+      port: 587,
+      secure: false,
       auth: {
         user: cleanEmail,
         pass: cleanPass
       },
       pool: true,
       maxConnections: 4,
-      maxMessages: 100,
+      maxMessages: 25,
       socketTimeout: 30000,
       connectionTimeout: 30000,
+      greetingTimeout: 15000,
+      disableFileAccess: true,
+      disableUrlAccess: true,
       tls: {
         rejectUnauthorized: true,
         minVersion: 'TLSv1.2'
@@ -79,7 +83,7 @@ function getNativeTransporter(email, appPassword) {
 }
 
 /* ==========================================================================
-   2. RECIPIENT DATA & SPINTAX ENGINE
+   2. RECIPIENT PARSER & FRESH INBOX VARIATION ENGINE
    ========================================================================== */
 function parseRecipientData(input) {
   let email = '';
@@ -108,6 +112,8 @@ function parseRecipientData(input) {
     }
   }
 
+  email = email.replace(/[\u200B-\u200D\uFEFF"<>'\s]/g, '').toLowerCase();
+
   if (!rawName && email.includes('@')) {
     const prefix = email.split('@')[0];
     rawName = prefix.replace(/[0-9_.-]/g, ' ').trim();
@@ -121,10 +127,10 @@ function parseRecipientData(input) {
   const domain = email.includes('@') ? email.split('@')[1] : '';
 
   return {
-    email: email.toLowerCase(),
+    email,
     name: formattedName,
-    firstName: firstName,
-    domain: domain
+    firstName,
+    domain
   };
 }
 
@@ -134,7 +140,7 @@ function parseSpintax(text) {
   const regex = /\{([^{}]+)\}/s;
   let iterations = 0;
 
-  while (regex.test(spun) && iterations < 25) {
+  while (regex.test(spun) && iterations < 35) {
     spun = spun.replace(regex, (_, choices) => {
       if (!choices.includes('|')) return choices;
       const options = choices.split('|');
@@ -146,11 +152,15 @@ function parseSpintax(text) {
   return spun.replace(/[\{\}]/g, '').trim();
 }
 
-function shuffleArray(array) {
+function shuffleWithoutBoundaryRepeat(array, lastUsedItem = null) {
   const arr = [...array];
   for (let i = arr.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  if (arr.length > 1 && lastUsedItem && arr[0] === lastUsedItem) {
+    const swapIdx = 1 + Math.floor(Math.random() * (arr.length - 1));
+    [arr[0], arr[swapIdx]] = [arr[swapIdx], arr[0]];
   }
   return arr;
 }
@@ -171,16 +181,18 @@ function extractTemplateDeck(rawTemplate) {
       lines.filter(l => /^(hi|hello|hey|your|good\s)/i.test(l)).length >= Math.ceil(lines.length * 0.6);
 
     if (looksLikeVariationList) {
-      return shuffleArray(lines);
+      const uniqueLines = [...new Set(lines)];
+      return shuffleWithoutBoundaryRepeat(uniqueLines);
     }
   }
 
   return [cleanRaw];
 }
 
-function personalizeContent(template, recipient) {
-  if (!template) return '';
-  let content = parseSpintax(template);
+// Replaces yesterday's burned phrases with fresh, unflagged conversational equivalents
+function buildFreshInboxBody(templateStr, recipient) {
+  if (!templateStr) return '';
+  let content = parseSpintax(templateStr);
 
   const displayName = recipient.name || recipient.firstName || 'there';
   const displayFirstName = recipient.firstName || displayName;
@@ -191,7 +203,78 @@ function personalizeContent(template, recipient) {
   content = content.replace(/{Email}/gi, recipient.email);
   content = content.replace(/{Domain}/gi, recipient.domain);
 
+  // Refresh opening compliment so yesterday's exact text hash is never repeated
+  content = content.replace(
+    /\b(Your website|Your site)\s+(looks|appears|seems|is)\s+(great|good|solid|impressive|appealing|attractive|polished|refined|modern|clean|organized|excellent|well built|engaging|balanced|structured|neat)\b/gi,
+    () => {
+      const p1 = pickRandom(['Your website', 'Your site', 'Your web page', 'The layout of your site']);
+      const p2 = pickRandom(['looks', 'appears', 'seems', 'is']);
+      const p3 = pickRandom([
+        'really well put together',
+        'very clean and modern',
+        'well-built',
+        'great overall',
+        'neat and well-structured',
+        'solid and well-organized',
+        'polished and clean'
+      ]);
+      return `${p1} ${p2} ${p3}`;
+    }
+  );
+
+  // Refresh burned "page one / Google's top results" phrase
+  content = content.replace(
+    /(,?\s*(yet|but)\s+(it is not showing on page one|it does not showing on page one|an? error is keeping it out of Google's top results|an? error is stopping it from showing up on the top results))/gi,
+    () => {
+      const conj = pickRandom([', but', ', yet', '—however,', ', though']);
+      const mid = pickRandom([
+        'I noticed a small technical detail holding back its visibility in search',
+        'there is a minor indexing issue keeping it from showing up where it should',
+        'a small on-page issue is preventing it from surfacing in the main results',
+        'I spotted a minor site issue that is holding it back from the primary search view',
+        'a quick fixable detail is keeping it just outside the main search results',
+        'there is a small configuration issue affecting how it appears in search'
+      ]);
+      return `${conj} ${mid}`;
+    }
+  );
+
+  // Refresh burned "Can I send a screen shot?" phrase
+  content = content.replace(
+    /(Can|May) I (send|email)( you)? (a |the )?screen\s*shot\??\.?/gi,
+    () => pickRandom([
+      'Would you mind if I sent over a quick note on what I noticed?',
+      'Let me know if I can share the details I spotted with you.',
+      'Mind if I forward over a quick visual of what I found?',
+      'Should I send over a quick breakdown of what I noticed on my end?',
+      'Would it be okay if I shared a quick note showing where the issue is?',
+      'Let me know if you would like me to send over what I found.'
+    ])
+  );
+
   return content.trim();
+}
+
+function buildFreshInboxSubject(rawSubject, recipient) {
+  let content = rawSubject ? parseSpintax(rawSubject).trim() : '';
+  const displayName = recipient.name || recipient.firstName || '';
+  const displayFirstName = recipient.firstName || displayName;
+
+  if (content) {
+    content = content.replace(/{Name}/gi, displayName);
+    content = content.replace(/{FirstName}/gi, displayFirstName);
+    content = content.replace(/{First_Name}/gi, displayFirstName);
+    content = content.replace(/{Email}/gi, recipient.email);
+    content = content.replace(/{Domain}/gi, recipient.domain);
+    return content;
+  }
+
+  return pickRandom([
+    displayFirstName ? `Quick question for ${displayFirstName}` : 'Quick question regarding your site',
+    'Small detail I noticed on your website',
+    'Quick note about your site',
+    displayFirstName ? `Checking in, ${displayFirstName}` : 'Quick observation on your website'
+  ]);
 }
 
 function stripHtmlTags(htmlString) {
@@ -235,7 +318,7 @@ app.post('/api/verify', async (req, res) => {
   }
 
   try {
-    const transporter = getNativeTransporter(email, appPassword);
+    const transporter = getNativeTransporter(email, appPassword, true);
     await transporter.verify();
     return res.json({ success: true, message: 'SMTP ready' });
   } catch (error) {
@@ -275,46 +358,51 @@ app.post('/api/send-stream', async (req, res) => {
     }
   }, 2500);
 
-  const defaultSubject = '{Quick question|Site Overview|Quick note}';
-  const defaultBody = `Your site looks great, but a small issue is keeping it from showing in the top results. Can I send a screenshot?`;
+  const seenEmails = new Set();
+  const uniqueRecipients = [];
+  for (const item of recipients) {
+    const parsed = parseRecipientData(item);
+    if (parsed.email && parsed.email.includes('@') && !seenEmails.has(parsed.email)) {
+      seenEmails.add(parsed.email);
+      uniqueRecipients.push(parsed);
+    }
+  }
 
-  const finalSubjectTemplate = (subject && subject.trim()) ? subject : defaultSubject;
+  const defaultBody = `Your website looks great, but a small issue is keeping it from showing in the top results. Can I send a screenshot?`;
   const rawBodyTemplate = (messageBody && messageBody.trim()) ? messageBody : defaultBody;
 
   let templateDeck = extractTemplateDeck(rawBodyTemplate);
   let deckIndex = 0;
+  let lastTemplateUsed = null;
 
-  // Single shared connection pool for the entire session (fixes per-email login flood)
-  const transporter = getNativeTransporter(email, appPassword);
+  const transporter = getNativeTransporter(email, appPassword, true);
   const BLITZ_SIZE = 4;
 
-  for (let i = 0; i < recipients.length; i += BLITZ_SIZE) {
+  for (let i = 0; i < uniqueRecipients.length; i += BLITZ_SIZE) {
     if (globalSession.stopRequested) {
       res.write(`data: ${JSON.stringify({ success: false, error: 'Stopped by User' })}\n\n`);
       break;
     }
 
-    const blitzBatch = recipients.slice(i, i + BLITZ_SIZE);
+    const blitzBatch = uniqueRecipients.slice(i, i + BLITZ_SIZE);
 
-    const blitzTasks = blitzBatch.map(async (rawRecipient, idx) => {
+    const blitzTasks = blitzBatch.map(async (recipient, idx) => {
       if (globalSession.stopRequested) return;
 
-      const recipient = parseRecipientData(rawRecipient);
-      if (!recipient.email) return;
-
       if (deckIndex >= templateDeck.length) {
-        templateDeck = shuffleArray(templateDeck);
+        templateDeck = shuffleWithoutBoundaryRepeat(templateDeck, lastTemplateUsed);
         deckIndex = 0;
       }
       const selectedBodyLine = templateDeck[deckIndex++];
+      lastTemplateUsed = selectedBodyLine;
 
       try {
         if (idx > 0) {
-          await new Promise(resolve => setTimeout(resolve, idx * 90));
+          await new Promise(resolve => setTimeout(resolve, idx * 110));
         }
 
-        const personalizedSubject = personalizeContent(finalSubjectTemplate, recipient);
-        const personalizedBody = personalizeContent(selectedBodyLine, recipient);
+        const personalizedSubject = buildFreshInboxSubject(subject, recipient);
+        const personalizedBody = buildFreshInboxBody(selectedBodyLine, recipient);
         const isHtml = /<[a-z][\s\S]*>/i.test(personalizedBody);
 
         const mailOptions = {
@@ -322,10 +410,12 @@ app.post('/api/send-stream', async (req, res) => {
           to: recipient.name ? `"${recipient.name}" <${recipient.email}>` : recipient.email,
           replyTo: cleanEmail,
           subject: personalizedSubject,
-          textEncoding: 'quoted-printable',
-          text: isHtml ? stripHtmlTags(personalizedBody) : personalizedBody,
-          html: isHtml ? `<div dir="ltr">${personalizedBody}</div>` : `<div dir="ltr">${personalizedBody.replace(/\n/g, '<br>')}</div>`
+          text: isHtml ? stripHtmlTags(personalizedBody) : personalizedBody
         };
+
+        if (isHtml) {
+          mailOptions.html = `<div dir="ltr">${personalizedBody}</div>`;
+        }
 
         await transporter.sendMail(mailOptions);
 
@@ -340,8 +430,8 @@ app.post('/api/send-stream', async (req, res) => {
 
     await Promise.allSettled(blitzTasks);
 
-    if (i + BLITZ_SIZE < recipients.length && !globalSession.stopRequested) {
-      await new Promise(resolve => setTimeout(resolve, 180));
+    if (i + BLITZ_SIZE < uniqueRecipients.length && !globalSession.stopRequested) {
+      await new Promise(resolve => setTimeout(resolve, 250));
     }
   }
 
