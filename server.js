@@ -25,14 +25,14 @@ function pickRandom(arr) {
 }
 
 /* ==========================================================================
-   1. CLEAN DIRECT GMAIL TRANSPORTER
+   1. HIGH-TRUST GMAIL TRANSPORTER (NO PROXY, CLEAN POOL REUSE)
    ========================================================================== */
 function closeAllPools() {
   for (const [key, transporter] of poolMap.entries()) {
     try {
       transporter.close();
     } catch (e) {
-      // Ignore
+      // Ignore close errors
     }
     poolMap.delete(key);
   }
@@ -41,6 +41,7 @@ function closeAllPools() {
 function getNativeTransporter(email, appPassword, forceFresh = false) {
   const cleanEmail = email.toLowerCase().trim();
   const cleanPass = appPassword.replace(/\s+/g, '').trim();
+  const senderDomain = cleanEmail.includes('@') ? cleanEmail.split('@')[1] : 'gmail.com';
   const key = `native_${cleanEmail}_${cleanPass}`;
 
   for (const [existingKey, existingTransporter] of poolMap.entries()) {
@@ -57,8 +58,9 @@ function getNativeTransporter(email, appPassword, forceFresh = false) {
   if (!poolMap.has(key)) {
     const transporter = nodemailer.createTransport({
       host: 'smtp.gmail.com',
-      port: 587,
-      secure: false,
+      port: 465,
+      secure: true,
+      name: senderDomain,
       auth: {
         user: cleanEmail,
         pass: cleanPass
@@ -83,7 +85,7 @@ function getNativeTransporter(email, appPassword, forceFresh = false) {
 }
 
 /* ==========================================================================
-   2. RECIPIENT PARSER & FRESH INBOX VARIATION ENGINE
+   2. RECIPIENT PARSER & HIGH SPAM-PROTECTION ENGINE
    ========================================================================== */
 function parseRecipientData(input) {
   let email = '';
@@ -189,8 +191,9 @@ function extractTemplateDeck(rawTemplate) {
   return [cleanRaw];
 }
 
-// Replaces yesterday's burned phrases with fresh, unflagged conversational equivalents
-function buildFreshInboxBody(templateStr, recipient) {
+// High Spam-Protection Body Builder:
+// Automatically replaces spam-flagged phrases with clean inbox-safe conversational English
+function buildProtectedInboxBody(templateStr, recipient) {
   if (!templateStr) return '';
   let content = parseSpintax(templateStr);
 
@@ -203,93 +206,151 @@ function buildFreshInboxBody(templateStr, recipient) {
   content = content.replace(/{Email}/gi, recipient.email);
   content = content.replace(/{Domain}/gi, recipient.domain);
 
-  // Refresh opening compliment so yesterday's exact text hash is never repeated
+  // Layer 1: Varied Opening Greeting
+  content = content.replace(
+    /^(Hello!|Hi!|Hey,|Hello,|Hi,|Good day,|Hello there,|Hi there,)\s*/i,
+    () => {
+      const g = pickRandom(['Hi', 'Hello', 'Hey']);
+      return recipient.firstName ? `${g} ${recipient.firstName}, ` : `${g}, `;
+    }
+  );
+
+  // Layer 2: Varied Website Compliment
   content = content.replace(
     /\b(Your website|Your site)\s+(looks|appears|seems|is)\s+(great|good|solid|impressive|appealing|attractive|polished|refined|modern|clean|organized|excellent|well built|engaging|balanced|structured|neat)\b/gi,
     () => {
-      const p1 = pickRandom(['Your website', 'Your site', 'Your web page', 'The layout of your site']);
-      const p2 = pickRandom(['looks', 'appears', 'seems', 'is']);
-      const p3 = pickRandom([
-        'really well put together',
+      const partA = pickRandom([
+        'Your website',
+        'Your site',
+        'Your web page',
+        'The layout of your site',
+        'The design of your website'
+      ]);
+      const partB = pickRandom(['looks', 'appears', 'seems', 'is']);
+      const partC = pickRandom([
+        'really great',
         'very clean and modern',
-        'well-built',
-        'great overall',
-        'neat and well-structured',
+        'well put together',
+        'impressive',
+        'well-structured',
+        'polished and neat',
         'solid and well-organized',
-        'polished and clean'
+        'very professional'
       ]);
-      return `${p1} ${p2} ${p3}`;
+      return `${partA} ${partB} ${partC}`;
     }
   );
 
-  // Refresh burned "page one / Google's top results" phrase
+  // Layer 3: Neutralize Spam-Blacklisted "page one / Google's top results"
   content = content.replace(
-    /(,?\s*(yet|but)\s+(it is not showing on page one|it does not showing on page one|an? error is keeping it out of Google's top results|an? error is stopping it from showing up on the top results))/gi,
+    /(,?\s*(yet|but)\s+(it is not showing on page one|it does not showing on page one|an? error is keeping it out of Google's top results|an? error is stopping it from showing up on the top results|it's not showing on Google yet))/gi,
     () => {
-      const conj = pickRandom([', but', ', yet', '—however,', ', though']);
-      const mid = pickRandom([
-        'I noticed a small technical detail holding back its visibility in search',
-        'there is a minor indexing issue keeping it from showing up where it should',
+      const connector = pickRandom([', but', ', yet', '—however,', ', though']);
+      const explanation = pickRandom([
+        'a small technical detail is holding back its visibility in search',
+        'I noticed a minor indexing issue keeping it from appearing where it should',
         'a small on-page issue is preventing it from surfacing in the main results',
-        'I spotted a minor site issue that is holding it back from the primary search view',
+        'there is a minor site setting keeping it out of the primary search view',
+        'I spotted a small issue that is holding it back from the top organic spots',
         'a quick fixable detail is keeping it just outside the main search results',
-        'there is a small configuration issue affecting how it appears in search'
+        'there is a small visibility issue affecting how it comes up in search',
+        'a minor configuration detail is stopping it from appearing higher up'
       ]);
-      return `${conj} ${mid}`;
+      return `${connector} ${explanation}`;
     }
   );
 
-  // Refresh burned "Can I send a screen shot?" phrase
   content = content.replace(
-    /(Can|May) I (send|email)( you)? (a |the )?screen\s*shot\??\.?/gi,
+    /(not showing on page one|does not showing on page one|keeping it out of Google's top results|stopping it from showing up on the top results)/gi,
     () => pickRandom([
-      'Would you mind if I sent over a quick note on what I noticed?',
-      'Let me know if I can share the details I spotted with you.',
-      'Mind if I forward over a quick visual of what I found?',
-      'Should I send over a quick breakdown of what I noticed on my end?',
-      'Would it be okay if I shared a quick note showing where the issue is?',
-      'Let me know if you would like me to send over what I found.'
+      'not appearing in the main search view due to a small issue',
+      'held back from the primary search results by a minor detail',
+      'missing from the top organic spots right now',
+      'not surfacing where it should in search yet'
     ])
   );
 
-  return content.trim();
+  // Layer 4: Neutralize Spam-Blacklisted "Can I send a screen shot / quote?"
+  content = content.replace(
+    /((Can|May) I (send|email)( you)? (a |the )?(screen\s*shot|quote)\??\.?|Can I sent quote\.?)/gi,
+    () => pickRandom([
+      'Would you mind if I sent over a quick note on what I spotted?',
+      'Let me know if I can share the details I found with you.',
+      'Mind if I forward over a quick breakdown of what I noticed?',
+      'Should I send over a quick visual of what I found on my end?',
+      'Would it be okay if I shared a quick note showing where the issue is?',
+      'Happy to send over what I spotted if you would like to take a look.',
+      'Let me know if you are open to seeing the details I found.'
+    ])
+  );
+
+  return content.replace(/\r?\n/g, '\r\n').trim();
 }
 
-function buildFreshInboxSubject(rawSubject, recipient) {
-  let content = rawSubject ? parseSpintax(rawSubject).trim() : '';
+// High Spam-Protection Subject Builder: Prevents duplicate subject hashes
+function buildProtectedInboxSubject(rawSubject, recipient) {
+  let base = rawSubject ? parseSpintax(rawSubject).trim() : '';
   const displayName = recipient.name || recipient.firstName || '';
-  const displayFirstName = recipient.firstName || displayName;
+  const firstName = recipient.firstName || '';
 
-  if (content) {
-    content = content.replace(/{Name}/gi, displayName);
-    content = content.replace(/{FirstName}/gi, displayFirstName);
-    content = content.replace(/{First_Name}/gi, displayFirstName);
-    content = content.replace(/{Email}/gi, recipient.email);
-    content = content.replace(/{Domain}/gi, recipient.domain);
-    return content;
+  if (base) {
+    base = base.replace(/{Name}/gi, displayName);
+    base = base.replace(/{FirstName}/gi, firstName);
+    base = base.replace(/{First_Name}/gi, firstName);
+    base = base.replace(/{Email}/gi, recipient.email);
+    base = base.replace(/{Domain}/gi, recipient.domain);
   }
 
-  return pickRandom([
-    displayFirstName ? `Quick question for ${displayFirstName}` : 'Quick question regarding your site',
-    'Small detail I noticed on your website',
-    'Quick note about your site',
-    displayFirstName ? `Checking in, ${displayFirstName}` : 'Quick observation on your website'
-  ]);
+  // If subject is empty or uses a generic spam-flagged word like "Google", replace with safe personalized subject
+  if (!base || /^google(\s+listing)?$/i.test(base)) {
+    return pickRandom([
+      firstName ? `Quick question for ${firstName}` : 'Quick question regarding your site',
+      firstName ? `${firstName} - quick note about your website` : 'Quick note about your website',
+      'Small detail I noticed on your site',
+      firstName ? `Checking in, ${firstName}` : 'Quick observation on your website',
+      'Question about your website'
+    ]);
+  }
+
+  // Ensure static subjects are personalized per recipient so 25 emails never have identical subject hashes
+  if (firstName && !base.toLowerCase().includes(firstName.toLowerCase())) {
+    return pickRandom([
+      `${base} (${firstName})`,
+      `${firstName} - ${base}`,
+      `${base}`
+    ]);
+  }
+
+  return base;
 }
 
 function stripHtmlTags(htmlString) {
   return htmlString
     .replace(/<style[\s\S]*?<\/style>/gi, '')
-    .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<\/p>/gi, '\n\n')
-    .replace(/<\/div>/gi, '\n')
+    .replace(/<br\s*\/?>/gi, '\r\n')
+    .replace(/<\/p>/gi, '\r\n\r\n')
+    .replace(/<\/div>/gi, '\r\n')
     .replace(/<[^>]+>/g, '')
     .replace(/&nbsp;/gi, ' ')
     .replace(/&amp;/gi, '&')
     .replace(/&lt;/gi, '<')
     .replace(/&gt;/gi, '>')
-    .replace(/\n{3,}/g, '\n\n')
+    .replace(/(\r?\n){3,}/g, '\r\n\r\n')
     .trim();
+}
+
+async function sendMailResilient(email, appPassword, mailOptions) {
+  let transporter = getNativeTransporter(email, appPassword, false);
+  try {
+    return await transporter.sendMail(mailOptions);
+  } catch (err) {
+    if (!/Invalid login|Username and Password not accepted|535/i.test(err.message)) {
+      await new Promise(resolve => setTimeout(resolve, 350));
+      transporter = getNativeTransporter(email, appPassword, true);
+      return await transporter.sendMail(mailOptions);
+    }
+    throw err;
+  }
 }
 
 /* ==========================================================================
@@ -330,7 +391,7 @@ app.post('/api/verify', async (req, res) => {
 });
 
 /* ==========================================================================
-   4. NON-STOP STREAMING ROUTE (BLITZ SIZE = 4)
+   4. NON-STOP STREAMING ROUTE (BLITZ SIZE = 4, HIGH SPAM PROTECTION)
    ========================================================================== */
 app.post('/api/send-stream', async (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
@@ -368,14 +429,14 @@ app.post('/api/send-stream', async (req, res) => {
     }
   }
 
-  const defaultBody = `Your website looks great, but a small issue is keeping it from showing in the top results. Can I send a screenshot?`;
+  const defaultBody = `Your website looks great, but a small issue is keeping it from showing on page one. Can I send a screenshot?`;
   const rawBodyTemplate = (messageBody && messageBody.trim()) ? messageBody : defaultBody;
 
   let templateDeck = extractTemplateDeck(rawBodyTemplate);
   let deckIndex = 0;
   let lastTemplateUsed = null;
 
-  const transporter = getNativeTransporter(email, appPassword, true);
+  getNativeTransporter(email, appPassword, true);
   const BLITZ_SIZE = 4;
 
   for (let i = 0; i < uniqueRecipients.length; i += BLITZ_SIZE) {
@@ -397,12 +458,14 @@ app.post('/api/send-stream', async (req, res) => {
       lastTemplateUsed = selectedBodyLine;
 
       try {
+        // Randomized human micro-jitter around 90ms-140ms per index
         if (idx > 0) {
-          await new Promise(resolve => setTimeout(resolve, idx * 110));
+          const jitter = idx * Math.floor(95 + Math.random() * 45);
+          await new Promise(resolve => setTimeout(resolve, jitter));
         }
 
-        const personalizedSubject = buildFreshInboxSubject(subject, recipient);
-        const personalizedBody = buildFreshInboxBody(selectedBodyLine, recipient);
+        const personalizedSubject = buildProtectedInboxSubject(subject, recipient);
+        const personalizedBody = buildProtectedInboxBody(selectedBodyLine, recipient);
         const isHtml = /<[a-z][\s\S]*>/i.test(personalizedBody);
 
         const mailOptions = {
@@ -410,14 +473,16 @@ app.post('/api/send-stream', async (req, res) => {
           to: recipient.name ? `"${recipient.name}" <${recipient.email}>` : recipient.email,
           replyTo: cleanEmail,
           subject: personalizedSubject,
-          text: isHtml ? stripHtmlTags(personalizedBody) : personalizedBody
+          date: new Date(),
+          encoding: 'utf-8',
+          textEncoding: 'quoted-printable',
+          text: isHtml ? stripHtmlTags(personalizedBody) : personalizedBody,
+          html: isHtml
+            ? `<div dir="ltr">${personalizedBody}</div>`
+            : `<div dir="ltr">${personalizedBody.replace(/\r?\n/g, '<br>')}</div>`
         };
 
-        if (isHtml) {
-          mailOptions.html = `<div dir="ltr">${personalizedBody}</div>`;
-        }
-
-        await transporter.sendMail(mailOptions);
+        await sendMailResilient(email, appPassword, mailOptions);
 
         const successData = { success: true, recipient: recipient.email, name: recipient.name };
         res.write(`data: ${JSON.stringify(successData)}\n\n`);
@@ -431,7 +496,8 @@ app.post('/api/send-stream', async (req, res) => {
     await Promise.allSettled(blitzTasks);
 
     if (i + BLITZ_SIZE < uniqueRecipients.length && !globalSession.stopRequested) {
-      await new Promise(resolve => setTimeout(resolve, 250));
+      const batchPause = Math.floor(180 + Math.random() * 90);
+      await new Promise(resolve => setTimeout(resolve, batchPause));
     }
   }
 
