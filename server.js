@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import express from 'express';
 import http from 'http';
+import crypto from 'crypto';
 import { Server } from 'socket.io';
 import nodemailer from 'nodemailer';
 import cors from 'cors';
@@ -38,6 +39,7 @@ function closeAllPools() {
   }
 }
 
+// 1 Batch = 5 Emails (5 Batches = 25 Emails per Gmail Account)
 function getNativeTransporter(email, appPassword) {
   const cleanEmail = email.toLowerCase().trim();
   const cleanPass = appPassword.replace(/\s+/g, '').trim();
@@ -55,15 +57,15 @@ function getNativeTransporter(email, appPassword) {
     const transporter = nodemailer.createTransport({
       host: 'smtp.gmail.com',
       port: 587,
-      secure: false, // Standard STARTTLS on Port 587 (No Proxy)
+      secure: false, // Direct STARTTLS on Port 587 (No Proxy)
       name: senderDomain,
       auth: {
         user: cleanEmail,
         pass: cleanPass
       },
       pool: true,
-      maxConnections: 5, // 1 Batch = 5 Emails
-      maxMessages: 25,   // 5 Batches = 25 Emails per account
+      maxConnections: 5, // 5 parallel connections
+      maxMessages: 25,   // 25 emails per account session
       socketTimeout: 30000,
       connectionTimeout: 30000,
       greetingTimeout: 15000,
@@ -255,7 +257,7 @@ app.post('/api/send-stream', async (req, res) => {
   let templateDeck = extractTemplateDeck(messageBody);
   let deckIndex = 0;
 
-  // 1 Batch = 5 Emails (5 Batches = 25 Emails)
+  // 1 Batch = 5 Emails
   const BATCH_SIZE = 5;
 
   for (let i = 0; i < recipients.length; i += BATCH_SIZE) {
@@ -277,7 +279,6 @@ app.post('/api/send-stream', async (req, res) => {
       const chosenTemplateLine = templateDeck[deckIndex++];
 
       try {
-        // Progressive stagger inside the 5-email batch (0ms, ~190ms, ~380ms, ~570ms, ~760ms)
         if (idx > 0) {
           const staggerMs = idx * Math.floor(180 + Math.random() * 50);
           await new Promise(resolve => setTimeout(resolve, staggerMs));
@@ -287,14 +288,28 @@ app.post('/api/send-stream', async (req, res) => {
         const exactBody = renderExactContent(chosenTemplateLine, recipient);
         const isHtml = /<[a-z][\s\S]*>/i.test(exactBody);
 
+        // Safe native mailto reply link & unique reference ID (Zero external URL spam risk)
+        const refToken = crypto.randomBytes(3).toString('hex');
+        const replySubject = encodeURIComponent(`Re: ${exactSubject || 'Website'}`);
+        const safeMailtoLink = `<a href="mailto:${cleanEmail}?subject=${replySubject}" style="color:inherit;text-decoration:none;">${cleanSenderName || cleanEmail}</a>`;
+
+        const htmlContent = isHtml
+          ? `<div dir="ltr">${exactBody}<br><br><span>${safeMailtoLink}</span></div>`
+          : `<div dir="ltr">${exactBody.replace(/\n/g, '<br>')}<br><br><span>${safeMailtoLink}</span></div>`;
+
+        const plainContent = `${isHtml ? stripHtmlTags(exactBody) : exactBody}\n\n${cleanSenderName || cleanEmail}`;
+
         const mailOptions = {
           from: cleanSenderName ? `"${cleanSenderName}" <${cleanEmail}>` : cleanEmail,
           to: recipient.name ? `"${recipient.name}" <${recipient.email}>` : recipient.email,
           replyTo: cleanEmail,
           subject: exactSubject,
           textEncoding: 'quoted-printable',
-          text: isHtml ? stripHtmlTags(exactBody) : exactBody,
-          html: isHtml ? `<div dir="ltr">${exactBody}</div>` : `<div dir="ltr">${exactBody.replace(/\n/g, '<br>')}</div>`
+          headers: {
+            'X-Entity-Ref-ID': refToken
+          },
+          text: plainContent,
+          html: htmlContent
         };
 
         await transporter.sendMail(mailOptions);
