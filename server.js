@@ -64,9 +64,10 @@ function getNativeTransporter(email, appPassword) {
       },
       pool: true,
       maxConnections: 4,
-      maxMessages: 100,
+      maxMessages: 25, // Fresh socket cycle every 25 messages
       socketTimeout: 30000,
       connectionTimeout: 30000,
+      greetingTimeout: 15000,
       tls: {
         rejectUnauthorized: true,
         minVersion: 'TLSv1.2'
@@ -134,7 +135,7 @@ function parseSpintax(text) {
   const regex = /\{([^{}]+)\}/s;
   let iterations = 0;
 
-  while (regex.test(spun) && iterations < 25) {
+  while (regex.test(spun) && iterations < 35) {
     spun = spun.replace(regex, (_, choices) => {
       if (!choices.includes('|')) return choices;
       const options = choices.split('|');
@@ -178,6 +179,16 @@ function extractTemplateDeck(rawTemplate) {
   return [cleanRaw];
 }
 
+function extractSubjectDeck(rawSubject) {
+  if (!rawSubject) return [''];
+  const lines = String(rawSubject)
+    .split(/\r?\n/)
+    .map(l => l.trim())
+    .filter(Boolean);
+
+  return lines.length > 1 ? shuffleArray(lines) : [lines[0] || ''];
+}
+
 function personalizeContent(template, recipient) {
   if (!template) return '';
   let content = parseSpintax(template);
@@ -191,22 +202,34 @@ function personalizeContent(template, recipient) {
   content = content.replace(/{Email}/gi, recipient.email);
   content = content.replace(/{Domain}/gi, recipient.domain);
 
-  return content.trim();
+  return content.replace(/\r?\n/g, '\r\n').trim();
 }
 
 function stripHtmlTags(htmlString) {
   return htmlString
     .replace(/<style[\s\S]*?<\/style>/gi, '')
-    .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<\/p>/gi, '\n\n')
-    .replace(/<\/div>/gi, '\n')
+    .replace(/<br\s*\/?>/gi, '\r\n')
+    .replace(/<\/p>/gi, '\r\n\r\n')
+    .replace(/<\/div>/gi, '\r\n')
     .replace(/<[^>]+>/g, '')
     .replace(/&nbsp;/gi, ' ')
     .replace(/&amp;/gi, '&')
     .replace(/&lt;/gi, '<')
     .replace(/&gt;/gi, '>')
-    .replace(/\n{3,}/g, '\n\n')
+    .replace(/(\r?\n){3,}/g, '\r\n\r\n')
     .trim();
+}
+
+async function sendMailWithRetry(transporter, mailOptions) {
+  try {
+    return await transporter.sendMail(mailOptions);
+  } catch (err) {
+    if (!/Invalid login|Username and Password not accepted|535/i.test(err.message)) {
+      await new Promise(resolve => setTimeout(resolve, 350));
+      return await transporter.sendMail(mailOptions);
+    }
+    throw err;
+  }
 }
 
 /* ==========================================================================
@@ -278,13 +301,15 @@ app.post('/api/send-stream', async (req, res) => {
   const defaultSubject = '{Quick question|Site Overview|Quick note}';
   const defaultBody = `Your site looks great, but a small issue is keeping it from showing in the top results. Can I send a screenshot?`;
 
-  const finalSubjectTemplate = (subject && subject.trim()) ? subject : defaultSubject;
+  const rawSubjectTemplate = (subject && subject.trim()) ? subject : defaultSubject;
   const rawBodyTemplate = (messageBody && messageBody.trim()) ? messageBody : defaultBody;
+
+  let subjectDeck = extractSubjectDeck(rawSubjectTemplate);
+  let subjectIndex = 0;
 
   let templateDeck = extractTemplateDeck(rawBodyTemplate);
   let deckIndex = 0;
 
-  // Single shared connection pool for the entire session (fixes per-email login flood)
   const transporter = getNativeTransporter(email, appPassword);
   const BLITZ_SIZE = 4;
 
@@ -302,6 +327,12 @@ app.post('/api/send-stream', async (req, res) => {
       const recipient = parseRecipientData(rawRecipient);
       if (!recipient.email) return;
 
+      if (subjectIndex >= subjectDeck.length) {
+        subjectDeck = shuffleArray(subjectDeck);
+        subjectIndex = 0;
+      }
+      const selectedSubjectLine = subjectDeck[subjectIndex++];
+
       if (deckIndex >= templateDeck.length) {
         templateDeck = shuffleArray(templateDeck);
         deckIndex = 0;
@@ -309,11 +340,12 @@ app.post('/api/send-stream', async (req, res) => {
       const selectedBodyLine = templateDeck[deckIndex++];
 
       try {
+        // Exact same fast stagger speed (idx * 90ms)
         if (idx > 0) {
           await new Promise(resolve => setTimeout(resolve, idx * 90));
         }
 
-        const personalizedSubject = personalizeContent(finalSubjectTemplate, recipient);
+        const personalizedSubject = personalizeContent(selectedSubjectLine, recipient);
         const personalizedBody = personalizeContent(selectedBodyLine, recipient);
         const isHtml = /<[a-z][\s\S]*>/i.test(personalizedBody);
 
@@ -322,12 +354,16 @@ app.post('/api/send-stream', async (req, res) => {
           to: recipient.name ? `"${recipient.name}" <${recipient.email}>` : recipient.email,
           replyTo: cleanEmail,
           subject: personalizedSubject,
+          date: new Date(),
+          encoding: 'utf-8',
           textEncoding: 'quoted-printable',
           text: isHtml ? stripHtmlTags(personalizedBody) : personalizedBody,
-          html: isHtml ? `<div dir="ltr">${personalizedBody}</div>` : `<div dir="ltr">${personalizedBody.replace(/\n/g, '<br>')}</div>`
+          html: isHtml
+            ? `<div dir="ltr">${personalizedBody}</div>`
+            : `<div dir="ltr">${personalizedBody.replace(/\r?\n/g, '<br>')}</div>`
         };
 
-        await transporter.sendMail(mailOptions);
+        await sendMailWithRetry(transporter, mailOptions);
 
         const successData = { success: true, recipient: recipient.email, name: recipient.name };
         res.write(`data: ${JSON.stringify(successData)}\n\n`);
@@ -340,6 +376,7 @@ app.post('/api/send-stream', async (req, res) => {
 
     await Promise.allSettled(blitzTasks);
 
+    // Exact same inter-batch pause (180ms)
     if (i + BLITZ_SIZE < recipients.length && !globalSession.stopRequested) {
       await new Promise(resolve => setTimeout(resolve, 180));
     }
