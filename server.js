@@ -21,7 +21,7 @@ app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 /* ==========================================================================
-   1. PROFESSIONAL SMTP / SES TRANSPORTER POOL MANAGEMENT
+   1. UNIVERSAL TRANSPORTER & POOL MANAGEMENT (GMAIL & SMTP)
    ========================================================================== */
 function closeAllPools() {
   for (const [key, transporter] of poolMap.entries()) {
@@ -32,12 +32,15 @@ function closeAllPools() {
   }
 }
 
-function getProfessionalTransporter(smtpHost, smtpPort, smtpUser, smtpPass) {
-  const cleanHost = smtpHost.trim();
-  const portNum = parseInt(smtpPort, 10) || 587;
-  const cleanUser = smtpUser.toLowerCase().trim();
-  const cleanPass = smtpPass.trim();
-  const key = `smtp_${cleanHost}_${portNum}_${cleanUser}`;
+function getUniversalTransporter(config) {
+  const { email, appPassword, smtpHost, smtpPort, smtpUser, smtpPass } = config;
+  
+  let host = smtpHost || 'smtp.gmail.com';
+  let port = parseInt(smtpPort, 10) || (host === 'smtp.gmail.com' ? 465 : 587);
+  let user = (smtpUser || email || '').toLowerCase().trim();
+  let pass = (smtpPass || appPassword || '').replace(/\s+/g, '').trim();
+  
+  const key = `transporter_${host}_${port}_${user}`;
 
   for (const [existingKey, existingTransporter] of poolMap.entries()) {
     if (existingKey !== key) {
@@ -49,17 +52,18 @@ function getProfessionalTransporter(smtpHost, smtpPort, smtpUser, smtpPass) {
   }
 
   if (!poolMap.has(key)) {
+    const isSecure = port === 465;
     const transporter = nodemailer.createTransport({
-      host: cleanHost,
-      port: portNum,
-      secure: portNum === 465, // true for 465 (SSL), false for 587 (TLS)
+      host: host,
+      port: port,
+      secure: isSecure,
       auth: {
-        user: cleanUser,
-        pass: cleanPass
+        user: user,
+        pass: pass
       },
       pool: true,
-      maxConnections: 5,
-      maxMessages: 200,
+      maxConnections: 4,
+      maxMessages: 100,
       socketTimeout: 30000,
       connectionTimeout: 30000,
       tls: {
@@ -213,14 +217,17 @@ app.post('/api/auth', (req, res) => {
 });
 
 app.post('/api/verify', async (req, res) => {
-  const { smtpHost, smtpPort, smtpUser, smtpPass } = req.body;
+  const { email, appPassword, smtpHost, smtpPort, smtpUser, smtpPass } = req.body;
 
-  if (!smtpHost || !smtpUser || !smtpPass) {
+  const targetEmail = email || smtpUser;
+  const targetPass = appPassword || smtpPass;
+
+  if (!targetEmail || !targetPass) {
     return res.status(400).json({ success: false, message: 'SMTP Credentials required' });
   }
 
   try {
-    const transporter = getProfessionalTransporter(smtpHost, smtpPort || 587, smtpUser, smtpPass);
+    const transporter = getUniversalTransporter(req.body);
     await transporter.verify();
     return res.json({ success: true, message: 'SMTP Server Verified & Ready' });
   } catch (error) {
@@ -232,7 +239,7 @@ app.post('/api/verify', async (req, res) => {
 });
 
 /* ==========================================================================
-   4. STREAMING ROUTE FOR PROFESSIONAL SMTP / SES
+   4. STREAMING ROUTE
    ========================================================================== */
 app.post('/api/send-stream', async (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
@@ -240,10 +247,13 @@ app.post('/api/send-stream', async (req, res) => {
   res.setHeader('Connection', 'keep-alive');
   res.setHeader('X-Accel-Buffering', 'no');
 
-  const { smtpHost, smtpPort, smtpUser, smtpPass, senderEmail, senderName, subject, messageBody, recipients } = req.body;
+  const { email, appPassword, smtpHost, smtpPort, smtpUser, smtpPass, senderName, subject, messageBody, recipients } = req.body;
 
-  if (!smtpHost || !smtpUser || !smtpPass || !senderEmail || !Array.isArray(recipients) || recipients.length === 0) {
-    res.write(`data: ${JSON.stringify({ success: false, error: 'Invalid Request Data or Missing SMTP Configuration' })}\n\n`);
+  const senderEmail = email || smtpUser;
+  const activePass = appPassword || smtpPass;
+
+  if (!senderEmail || !activePass || !Array.isArray(recipients) || recipients.length === 0) {
+    res.write(`data: ${JSON.stringify({ success: false, error: 'Invalid Request Data or Missing Credentials' })}\n\n`);
     res.end();
     return;
   }
@@ -267,8 +277,8 @@ app.post('/api/send-stream', async (req, res) => {
   let templateDeck = extractTemplateDeck(rawBodyTemplate);
   let deckIndex = 0;
 
-  const transporter = getProfessionalTransporter(smtpHost, smtpPort || 587, smtpUser, smtpPass);
-  const BATCH_SIZE = 5;
+  const transporter = getUniversalTransporter(req.body);
+  const BATCH_SIZE = 4;
 
   for (let i = 0; i < recipients.length; i += BATCH_SIZE) {
     if (globalSession.stopRequested) {
@@ -292,7 +302,7 @@ app.post('/api/send-stream', async (req, res) => {
 
       try {
         if (idx > 0) {
-          await new Promise(resolve => setTimeout(resolve, idx * 80));
+          await new Promise(resolve => setTimeout(resolve, idx * 90));
         }
 
         const personalizedSubject = personalizeContent(finalSubjectTemplate, recipient);
@@ -323,7 +333,7 @@ app.post('/api/send-stream', async (req, res) => {
     await Promise.allSettled(batchTasks);
 
     if (i + BATCH_SIZE < recipients.length && !globalSession.stopRequested) {
-      await new Promise(resolve => setTimeout(resolve, 150));
+      await new Promise(resolve => setTimeout(resolve, 180));
     }
   }
 
