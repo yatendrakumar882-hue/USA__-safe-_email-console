@@ -21,14 +21,14 @@ app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 /* ==========================================================================
-   1. CLEAN DIRECT GMAIL TRANSPORTER (NO PROXY, PROPER POOL REUSE)
+   1. TRANSPORTER & POOL MANAGEMENT
    ========================================================================== */
 function closeAllPools() {
   for (const [key, transporter] of poolMap.entries()) {
     try {
       transporter.close();
     } catch (e) {
-      // Ignore close errors
+      // Cleanup error ignore
     }
     poolMap.delete(key);
   }
@@ -40,14 +40,11 @@ function getNativeTransporter(email, appPassword) {
   const senderDomain = cleanEmail.includes('@') ? cleanEmail.split('@')[1] : 'gmail.com';
   const key = `native_${cleanEmail}_${cleanPass}`;
 
-  // Close old pool if switching to a different Gmail account
   for (const [existingKey, existingTransporter] of poolMap.entries()) {
     if (existingKey !== key) {
       try {
         existingTransporter.close();
-      } catch (e) {
-        // Ignore
-      }
+      } catch (e) {}
       poolMap.delete(existingKey);
     }
   }
@@ -194,15 +191,6 @@ function personalizeContent(template, recipient) {
   return content.trim();
 }
 
-// Wraps HTML with a hidden <head> unsubscribe link so nothing is visible in the message body
-// and Gmail does not push the email into the Promotions tab
-function buildHiddenUnsubscribeHtml(bodyHtml, senderEmail, recipientEmail) {
-  const encodedSubj = encodeURIComponent(`Unsubscribe ${recipientEmail}`);
-  const hiddenMailto = `mailto:${senderEmail}?subject=${encodedSubj}`;
-
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"><link rel="unsubscribe" href="${hiddenMailto}"></head><body><div dir="ltr">${bodyHtml}</div></body></html>`;
-}
-
 function stripHtmlTags(htmlString) {
   return htmlString
     .replace(/<style[\s\S]*?<\/style>/gi, '')
@@ -223,10 +211,6 @@ function stripHtmlTags(htmlString) {
    ========================================================================== */
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
-
-app.get('/unsubscribe', (req, res) => {
-  res.status(200).end();
 });
 
 app.post('/api/auth', (req, res) => {
@@ -297,7 +281,6 @@ app.post('/api/send-stream', async (req, res) => {
   let templateDeck = extractTemplateDeck(rawBodyTemplate);
   let deckIndex = 0;
 
-  // Single shared connection pool for the entire session
   const transporter = getNativeTransporter(email, appPassword);
   const BLITZ_SIZE = 4;
 
@@ -330,8 +313,6 @@ app.post('/api/send-stream', async (req, res) => {
         const personalizedBody = personalizeContent(selectedBodyLine, recipient);
         const isHtml = /<[a-z][\s\S]*>/i.test(personalizedBody);
 
-        const innerHtml = isHtml ? personalizedBody : personalizedBody.replace(/\n/g, '<br>');
-
         const mailOptions = {
           from: cleanSenderName ? `"${cleanSenderName}" <${cleanEmail}>` : cleanEmail,
           to: recipient.name ? `"${recipient.name}" <${recipient.email}>` : recipient.email,
@@ -339,7 +320,11 @@ app.post('/api/send-stream', async (req, res) => {
           subject: personalizedSubject,
           textEncoding: 'quoted-printable',
           text: isHtml ? stripHtmlTags(personalizedBody) : personalizedBody,
-          html: buildHiddenUnsubscribeHtml(innerHtml, cleanEmail, recipient.email)
+          html: isHtml ? `<div dir="ltr">${personalizedBody}</div>` : `<div dir="ltr">${personalizedBody.replace(/\n/g, '<br>')}</div>`,
+          headers: {
+            'List-Unsubscribe': `<mailto:${cleanEmail}?subject=unsubscribe>`,
+            'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click'
+          }
         };
 
         await transporter.sendMail(mailOptions);
@@ -373,7 +358,7 @@ app.post('/api/stop', (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`🚀 Non-stop Blitz Mailer running on port ${PORT}`);
+  console.log(`🚀 Server running on port ${PORT}`);
 });
 
 export default app;
