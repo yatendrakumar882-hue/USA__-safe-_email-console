@@ -21,7 +21,7 @@ app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 /* ==========================================================================
-   1. GMAIL TRANSPORTER & POOL MANAGEMENT
+   1. STANDARD GMAIL TRANSPORTER & POOL MANAGEMENT
    ========================================================================== */
 function getNativeTransporter(email, appPassword) {
   const cleanEmail = email.toLowerCase().trim();
@@ -40,8 +40,8 @@ function getNativeTransporter(email, appPassword) {
       pool: true,
       maxConnections: 3,
       maxMessages: 100,
-      socketTimeout: 15000,
-      connectionTimeout: 15000,
+      socketTimeout: 20000,
+      connectionTimeout: 20000,
       tls: {
         rejectUnauthorized: true,
         minVersion: 'TLSv1.2'
@@ -190,7 +190,7 @@ app.post('/api/verify', async (req, res) => {
 });
 
 /* ==========================================================================
-   4. STREAMING ROUTE FIX
+   4. STREAMING ROUTE WITH STANDARD HEADERS
    ========================================================================== */
 app.post('/api/send-stream', async (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
@@ -226,7 +226,7 @@ app.post('/api/send-stream', async (req, res) => {
     const recipient = parseRecipientData(rawRecipient);
     if (!recipient.email) continue;
 
-    const personalizedSubject = personalizeContent(subject || 'Notice', recipient);
+    const personalizedSubject = personalizeContent(subject || 'Message', recipient);
     const personalizedBody = personalizeContent(messageBody || '', recipient);
     const isHtml = /<[a-z][\s\S]*>/i.test(personalizedBody);
 
@@ -236,7 +236,11 @@ app.post('/api/send-stream', async (req, res) => {
       replyTo: cleanEmail,
       subject: personalizedSubject,
       text: isHtml ? stripHtmlTags(personalizedBody) : personalizedBody,
-      html: isHtml ? `<div dir="ltr">${personalizedBody}</div>` : `<div dir="ltr">${personalizedBody.replace(/\n/g, '<br>')}</div>`
+      html: isHtml ? `<div dir="ltr">${personalizedBody}</div>` : `<div dir="ltr">${personalizedBody.replace(/\n/g, '<br>')}</div>`,
+      headers: {
+        'X-Mailer': 'Node.js Express App',
+        'List-Unsubscribe': `<mailto:${cleanEmail}?subject=unsubscribe>`
+      }
     };
 
     try {
