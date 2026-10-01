@@ -21,7 +21,7 @@ app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 /* ==========================================================================
-   1. STANDARD GMAIL TRANSPORTER & POOL MANAGEMENT
+   1. STANDARD TRANSPORTER SETUP
    ========================================================================== */
 function getNativeTransporter(email, appPassword) {
   const cleanEmail = email.toLowerCase().trim();
@@ -41,11 +41,7 @@ function getNativeTransporter(email, appPassword) {
       maxConnections: 3,
       maxMessages: 100,
       socketTimeout: 20000,
-      connectionTimeout: 20000,
-      tls: {
-        rejectUnauthorized: true,
-        minVersion: 'TLSv1.2'
-      }
+      connectionTimeout: 20000
     });
     poolMap.set(key, transporter);
   }
@@ -54,7 +50,7 @@ function getNativeTransporter(email, appPassword) {
 }
 
 /* ==========================================================================
-   2. RECIPIENT DATA & SPINTAX ENGINE
+   2. RECIPIENT PARSER & HELPERS
    ========================================================================== */
 function parseRecipientData(input) {
   let email = '';
@@ -69,72 +65,15 @@ function parseRecipientData(input) {
     if (angleMatch) {
       rawName = angleMatch[1] ? angleMatch[1].trim() : '';
       email = angleMatch[2].trim();
-    } else if (str.includes(',')) {
-      const parts = str.split(',');
-      if (parts[0].includes('@')) {
-        email = parts[0].trim();
-        rawName = parts[1].trim();
-      } else {
-        rawName = parts[0].trim();
-        email = parts[1].trim();
-      }
     } else {
       email = str;
     }
   }
 
-  if (!rawName && email.includes('@')) {
-    const prefix = email.split('@')[0];
-    rawName = prefix.replace(/[0-9_.-]/g, ' ').trim();
-  }
-
-  const formattedName = rawName
-    ? rawName.split(/\s+/).map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ')
-    : '';
-
-  const firstName = formattedName ? formattedName.split(' ')[0] : '';
-  const domain = email.includes('@') ? email.split('@')[1] : '';
-
   return {
     email: email.toLowerCase(),
-    name: formattedName,
-    firstName: firstName,
-    domain: domain
+    name: rawName
   };
-}
-
-function parseSpintax(text) {
-  if (!text) return '';
-  let spun = String(text);
-  const regex = /\{([^{}]+)\}/s;
-  let iterations = 0;
-
-  while (regex.test(spun) && iterations < 25) {
-    spun = spun.replace(regex, (_, choices) => {
-      if (!choices.includes('|')) return choices;
-      const options = choices.split('|');
-      const pick = options[Math.floor(Math.random() * options.length)];
-      return pick ? pick.trim() : '';
-    });
-    iterations++;
-  }
-  return spun.replace(/[\{\}]/g, '').trim();
-}
-
-function personalizeContent(template, recipient) {
-  if (!template) return '';
-  let content = parseSpintax(template);
-
-  const displayName = recipient.name || recipient.firstName || 'there';
-  const displayFirstName = recipient.firstName || displayName;
-
-  content = content.replace(/{Name}/gi, displayName);
-  content = content.replace(/{FirstName}/gi, displayFirstName);
-  content = content.replace(/{First_Name}/gi, displayFirstName);
-  content = content.replace(/{Email}/gi, recipient.email);
-  content = content.replace(/{Domain}/gi, recipient.domain);
-
-  return content.trim();
 }
 
 function stripHtmlTags(htmlString) {
@@ -142,13 +81,7 @@ function stripHtmlTags(htmlString) {
     .replace(/<style[\s\S]*?<\/style>/gi, '')
     .replace(/<br\s*\/?>/gi, '\n')
     .replace(/<\/p>/gi, '\n\n')
-    .replace(/<\/div>/gi, '\n')
     .replace(/<[^>]+>/g, '')
-    .replace(/&nbsp;/gi, ' ')
-    .replace(/&amp;/gi, '&')
-    .replace(/&lt;/gi, '<')
-    .replace(/&gt;/gi, '>')
-    .replace(/\n{3,}/g, '\n\n')
     .trim();
 }
 
@@ -172,11 +105,6 @@ app.post('/api/verify', async (req, res) => {
     return res.status(400).json({ success: false, message: 'Credentials required' });
   }
 
-  const cleanPass = appPassword.replace(/\s+/g, '').trim();
-  if (cleanPass.length !== 16) {
-    return res.status(400).json({ success: false, message: 'App Password must be 16 characters' });
-  }
-
   try {
     const transporter = getNativeTransporter(email, appPassword);
     await transporter.verify();
@@ -190,7 +118,7 @@ app.post('/api/verify', async (req, res) => {
 });
 
 /* ==========================================================================
-   4. STREAMING ROUTE WITH STANDARD HEADERS
+   4. SSE STREAMING ROUTE
    ========================================================================== */
 app.post('/api/send-stream', async (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
@@ -226,21 +154,15 @@ app.post('/api/send-stream', async (req, res) => {
     const recipient = parseRecipientData(rawRecipient);
     if (!recipient.email) continue;
 
-    const personalizedSubject = personalizeContent(subject || 'Message', recipient);
-    const personalizedBody = personalizeContent(messageBody || '', recipient);
-    const isHtml = /<[a-z][\s\S]*>/i.test(personalizedBody);
+    const isHtml = /<[a-z][\s\S]*>/i.test(messageBody);
 
     const mailOptions = {
       from: cleanSenderName ? `"${cleanSenderName}" <${cleanEmail}>` : cleanEmail,
       to: recipient.name ? `"${recipient.name}" <${recipient.email}>` : recipient.email,
       replyTo: cleanEmail,
-      subject: personalizedSubject,
-      text: isHtml ? stripHtmlTags(personalizedBody) : personalizedBody,
-      html: isHtml ? `<div dir="ltr">${personalizedBody}</div>` : `<div dir="ltr">${personalizedBody.replace(/\n/g, '<br>')}</div>`,
-      headers: {
-        'X-Mailer': 'Node.js Express App',
-        'List-Unsubscribe': `<mailto:${cleanEmail}?subject=unsubscribe>`
-      }
+      subject: subject || 'Notification',
+      text: isHtml ? stripHtmlTags(messageBody) : messageBody,
+      html: isHtml ? `<div dir="ltr">${messageBody}</div>` : `<div dir="ltr">${(messageBody || '').replace(/\n/g, '<br>')}</div>`
     };
 
     try {
