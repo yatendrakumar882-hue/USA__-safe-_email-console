@@ -5,9 +5,6 @@ import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
-// ==========================================================================
-// 1. SYSTEM INITIALIZATION & PATH CONFIGURATION
-// ==========================================================================
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -15,74 +12,47 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const SITE_PASSWORD = process.env.SITE_PASSWORD || 'Y##';
 
-// Global execution state & Connection Pool Management
-const globalSession = {
-  stopRequested: false,
-  activeJobs: 0,
-  startTime: null
-};
-
+const globalSession = { stopRequested: false };
 const poolMap = new Map();
 
-// ==========================================================================
-// 2. MIDDLEWARE CONFIGURATION
-// ==========================================================================
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Logging Middleware for Incoming Requests
-app.use((req, res, next) => {
-  const timestamp = new Date().toISOString();
-  console.log(`[${timestamp}] ${req.method} ${req.url} - IP: ${req.ip}`);
-  next();
-});
-
-// ==========================================================================
-// 3. TRANSPORTER & CONNECTION POOL MANAGEMENT
-// ==========================================================================
-
-/**
- * Safely closes all open SMTP connection pools
- */
+/* ==========================================================================
+   1. CLEAN DIRECT GMAIL TRANSPORTER (NO PROXY, PROPER POOL REUSE)
+   ========================================================================== */
 function closeAllPools() {
-  console.log('Cleaning up SMTP Connection Pools...');
   for (const [key, transporter] of poolMap.entries()) {
     try {
       transporter.close();
-      console.log(`Closed pool: ${key}`);
     } catch (e) {
-      console.error(`Error closing pool ${key}:`, e.message);
+      // Ignore close errors
     }
     poolMap.delete(key);
   }
 }
 
-/**
- * Gets or creates a pooled Nodemailer transporter for Gmail
- */
 function getNativeTransporter(email, appPassword) {
   const cleanEmail = email.toLowerCase().trim();
   const cleanPass = appPassword.replace(/\s+/g, '').trim();
   const senderDomain = cleanEmail.includes('@') ? cleanEmail.split('@')[1] : 'gmail.com';
   const key = `native_${cleanEmail}_${cleanPass}`;
 
-  // Purge outdated connection pools if user switched accounts
+  // Close old pool if switching to a different Gmail account
   for (const [existingKey, existingTransporter] of poolMap.entries()) {
     if (existingKey !== key) {
       try {
         existingTransporter.close();
-        console.log(`Purged inactive pool: ${existingKey}`);
       } catch (e) {
-        console.error(`Purge error for ${existingKey}:`, e.message);
+        // Ignore
       }
       poolMap.delete(existingKey);
     }
   }
 
   if (!poolMap.has(key)) {
-    console.log(`Creating new pooled transporter for: ${cleanEmail}`);
     const transporter = nodemailer.createTransport({
       host: 'smtp.gmail.com',
       port: 465,
@@ -94,7 +64,7 @@ function getNativeTransporter(email, appPassword) {
       },
       pool: true,
       maxConnections: 4,
-      maxMessages: 100,
+      maxMessages: 25, // Fresh socket cycle every 25 messages
       socketTimeout: 30000,
       connectionTimeout: 30000,
       greetingTimeout: 15000,
@@ -103,20 +73,15 @@ function getNativeTransporter(email, appPassword) {
         minVersion: 'TLSv1.2'
       }
     });
-
     poolMap.set(key, transporter);
   }
 
   return poolMap.get(key);
 }
 
-// ==========================================================================
-// 4. RECIPIENT DATA PARSER & HELPERS
-// ==========================================================================
-
-/**
- * Extracts structured recipient data from various input formats
- */
+/* ==========================================================================
+   2. RECIPIENT DATA & SPINTAX ENGINE
+   ========================================================================== */
 function parseRecipientData(input) {
   let email = '';
   let rawName = '';
@@ -164,9 +129,6 @@ function parseRecipientData(input) {
   };
 }
 
-/**
- * Parses Spintax formatting {option1|option2|option3}
- */
 function parseSpintax(text) {
   if (!text) return '';
   let spun = String(text);
@@ -185,9 +147,6 @@ function parseSpintax(text) {
   return spun.replace(/[\{\}]/g, '').trim();
 }
 
-/**
- * Shuffles array elements in-place using Fisher-Yates algorithm
- */
 function shuffleArray(array) {
   const arr = [...array];
   for (let i = arr.length - 1; i > 0; i--) {
@@ -197,9 +156,6 @@ function shuffleArray(array) {
   return arr;
 }
 
-/**
- * Extracts multiple body variation lines or templates
- */
 function extractTemplateDeck(rawTemplate) {
   if (!rawTemplate) return [''];
   const isHtml = /<[a-z][\s\S]*>/i.test(rawTemplate);
@@ -223,9 +179,6 @@ function extractTemplateDeck(rawTemplate) {
   return [cleanRaw];
 }
 
-/**
- * Extracts subject line variations from input
- */
 function extractSubjectDeck(rawSubject) {
   if (!rawSubject) return [''];
   const lines = String(rawSubject)
@@ -236,9 +189,6 @@ function extractSubjectDeck(rawSubject) {
   return lines.length > 1 ? shuffleArray(lines) : [lines[0] || ''];
 }
 
-/**
- * Personalizes content variables
- */
 function personalizeContent(template, recipient) {
   if (!template) return '';
   let content = parseSpintax(template);
@@ -255,9 +205,6 @@ function personalizeContent(template, recipient) {
   return content.replace(/\r?\n/g, '\r\n').trim();
 }
 
-/**
- * Converts HTML strings into clean Plain Text
- */
 function stripHtmlTags(htmlString) {
   return htmlString
     .replace(/<style[\s\S]*?<\/style>/gi, '')
@@ -273,44 +220,28 @@ function stripHtmlTags(htmlString) {
     .trim();
 }
 
-/**
- * Internal mail dispatch with single automatic retry logic
- */
 async function sendMailWithRetry(transporter, mailOptions) {
   try {
     return await transporter.sendMail(mailOptions);
   } catch (err) {
     if (!/Invalid login|Username and Password not accepted|535/i.test(err.message)) {
-      console.warn(`Retry attempt triggered due to error: ${err.message}`);
-      await new Promise(resolve => setTimeout(resolve, 400));
+      await new Promise(resolve => setTimeout(resolve, 350));
       return await transporter.sendMail(mailOptions);
     }
     throw err;
   }
 }
 
-// ==========================================================================
-// 5. PUBLIC API ROUTES
-// ==========================================================================
-
+/* ==========================================================================
+   3. API ROUTES
+   ========================================================================== */
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-app.get('/api/health', (req, res) => {
-  res.json({
-    status: 'online',
-    activePools: poolMap.size,
-    uptime: process.uptime(),
-    timestamp: new Date().toISOString()
-  });
-});
-
 app.post('/api/auth', (req, res) => {
   const { password } = req.body;
-  if (password === SITE_PASSWORD) {
-    return res.json({ success: true, message: 'Authorized' });
-  }
+  if (password === SITE_PASSWORD) return res.json({ success: true, message: 'Authorized' });
   return res.status(401).json({ success: false, message: 'Unauthorized Password' });
 });
 
@@ -331,7 +262,6 @@ app.post('/api/verify', async (req, res) => {
     await transporter.verify();
     return res.json({ success: true, message: 'SMTP ready' });
   } catch (error) {
-    console.error('SMTP Verification Failed:', error.message);
     return res.status(401).json({
       success: false,
       message: error.message || 'SMTP Auth Failed. Check 16-char App Password.'
@@ -339,12 +269,10 @@ app.post('/api/verify', async (req, res) => {
   }
 });
 
-// ==========================================================================
-// 6. STREAMING ENGINE ROUTE (SSE STREAMING)
-// ==========================================================================
-
+/* ==========================================================================
+   4. NON-STOP STREAMING ROUTE (BLITZ SIZE = 4)
+   ========================================================================== */
 app.post('/api/send-stream', async (req, res) => {
-  // Configure Server-Sent Events headers
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache, no-transform');
   res.setHeader('Connection', 'keep-alive');
@@ -360,24 +288,18 @@ app.post('/api/send-stream', async (req, res) => {
 
   const cleanEmail = email.toLowerCase().trim();
   const cleanSenderName = (senderName || '').replace(/["\r\n]/g, '').trim();
-
   globalSession.stopRequested = false;
-  globalSession.activeJobs += 1;
-  globalSession.startTime = new Date();
 
-  // SSE Keep-Alive Ping
   const keepAlivePing = setInterval(() => {
     try {
-      if (!res.writableEnded) {
-        res.write(': keep-alive\n\n');
-      }
+      res.write(': keep-alive\n\n');
     } catch (e) {
-      console.error('Error writing SSE keep-alive:', e.message);
+      // Ignored
     }
   }, 2500);
 
   const defaultSubject = '{Quick question|Site Overview|Quick note}';
-  const defaultBody = `Your site looks great, but a small issue is keeping it from showing in top results. Can I send a screenshot?`;
+  const defaultBody = `Your site looks great, but a small issue is keeping it from showing in the top results. Can I send a screenshot?`;
 
   const rawSubjectTemplate = (subject && subject.trim()) ? subject : defaultSubject;
   const rawBodyTemplate = (messageBody && messageBody.trim()) ? messageBody : defaultBody;
@@ -389,35 +311,28 @@ app.post('/api/send-stream', async (req, res) => {
   let deckIndex = 0;
 
   const transporter = getNativeTransporter(email, appPassword);
-  const BATCH_SIZE = 4;
+  const BLITZ_SIZE = 4;
 
-  console.log(`Starting dispatch loop for ${recipients.length} recipients...`);
-
-  for (let i = 0; i < recipients.length; i += BATCH_SIZE) {
+  for (let i = 0; i < recipients.length; i += BLITZ_SIZE) {
     if (globalSession.stopRequested) {
-      console.log('Dispatch sequence stopped by client request.');
-      if (!res.writableEnded) {
-        res.write(`data: ${JSON.stringify({ success: false, error: 'Stopped by User' })}\n\n`);
-      }
+      res.write(`data: ${JSON.stringify({ success: false, error: 'Stopped by User' })}\n\n`);
       break;
     }
 
-    const currentBatch = recipients.slice(i, i + BATCH_SIZE);
+    const blitzBatch = recipients.slice(i, i + BLITZ_SIZE);
 
-    const batchTasks = currentBatch.map(async (rawRecipient, idx) => {
+    const blitzTasks = blitzBatch.map(async (rawRecipient, idx) => {
       if (globalSession.stopRequested) return;
 
       const recipient = parseRecipientData(rawRecipient);
       if (!recipient.email) return;
 
-      // Rotate subject decks
       if (subjectIndex >= subjectDeck.length) {
         subjectDeck = shuffleArray(subjectDeck);
         subjectIndex = 0;
       }
       const selectedSubjectLine = subjectDeck[subjectIndex++];
 
-      // Rotate template decks
       if (deckIndex >= templateDeck.length) {
         templateDeck = shuffleArray(templateDeck);
         deckIndex = 0;
@@ -425,6 +340,7 @@ app.post('/api/send-stream', async (req, res) => {
       const selectedBodyLine = templateDeck[deckIndex++];
 
       try {
+        // Exact same fast stagger speed (idx * 90ms)
         if (idx > 0) {
           await new Promise(resolve => setTimeout(resolve, idx * 90));
         }
@@ -444,77 +360,42 @@ app.post('/api/send-stream', async (req, res) => {
           text: isHtml ? stripHtmlTags(personalizedBody) : personalizedBody,
           html: isHtml
             ? `<div dir="ltr">${personalizedBody}</div>`
-            : `<div dir="ltr">${personalizedBody.replace(/\r?\n/g, '<br>')}</div>`,
-          headers: {
-            'X-Mailer': 'Node.js Express Engine',
-            'List-Unsubscribe': `<mailto:${cleanEmail}?subject=unsubscribe>`
-          }
+            : `<div dir="ltr">${personalizedBody.replace(/\r?\n/g, '<br>')}</div>`
         };
 
         await sendMailWithRetry(transporter, mailOptions);
 
-        if (!res.writableEnded) {
-          res.write(`data: ${JSON.stringify({ success: true, recipient: recipient.email, name: recipient.name })}\n\n`);
-        }
+        const successData = { success: true, recipient: recipient.email, name: recipient.name };
+        res.write(`data: ${JSON.stringify(successData)}\n\n`);
 
       } catch (err) {
-        console.error(`Failed sending to ${recipient.email}:`, err.message);
-        if (!res.writableEnded) {
-          res.write(`data: ${JSON.stringify({ success: false, recipient: recipient.email, error: err.message })}\n\n`);
-        }
+        const failData = { success: false, recipient: recipient.email, error: err.message };
+        res.write(`data: ${JSON.stringify(failData)}\n\n`);
       }
     });
 
-    await Promise.allSettled(batchTasks);
+    await Promise.allSettled(blitzTasks);
 
-    if (i + BATCH_SIZE < recipients.length && !globalSession.stopRequested) {
+    // Exact same inter-batch pause (180ms)
+    if (i + BLITZ_SIZE < recipients.length && !globalSession.stopRequested) {
       await new Promise(resolve => setTimeout(resolve, 180));
     }
   }
 
-  globalSession.activeJobs = Math.max(0, globalSession.activeJobs - 1);
   closeAllPools();
   clearInterval(keepAlivePing);
-
-  if (!res.writableEnded) {
-    res.write('data: [DONE]\n\n');
-    res.end();
-  }
+  res.write('data: [DONE]\n\n');
+  res.end();
 });
 
 app.post('/api/stop', (req, res) => {
   globalSession.stopRequested = true;
   closeAllPools();
-  res.json({ success: true, message: 'Execution stopped by user' });
+  res.json({ success: true, message: 'Stopped by User' });
 });
 
-// Global Error Handler
-app.use((err, req, res, next) => {
-  console.error('Unhandled Application Error:', err.stack);
-  res.status(500).json({ success: false, error: 'Internal Server Error' });
+app.listen(PORT, () => {
+  console.log(`🚀 Non-stop Blitz Mailer running on port ${PORT}`);
 });
-
-// ==========================================================================
-// 7. SERVER INITIALIZATION & SHUTDOWN HOOKS
-// ==========================================================================
-
-const server = app.listen(PORT, () => {
-  console.log(`==================================================`);
-  console.log(`🚀 Express Mailer Server Live on Port: ${PORT}`);
-  console.log(`==================================================`);
-});
-
-// Graceful Shutdown Handling
-process.on('SIGTERM', gracefulShutdown);
-process.on('SIGINT', gracefulShutdown);
-
-function gracefulShutdown() {
-  console.log('\nReceived shutdown signal. Closing server...');
-  closeAllPools();
-  server.close(() => {
-    console.log('HTTP Server closed. Process exiting.');
-    process.exit(0);
-  });
-}
 
 export default app;
