@@ -1,6 +1,5 @@
 import 'dotenv/config';
 import express from 'express';
-import crypto from 'crypto';
 import nodemailer from 'nodemailer';
 import cors from 'cors';
 import path from 'path';
@@ -20,10 +19,6 @@ app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
-
-function pickRandom(arr) {
-  return arr[Math.floor(Math.random() * arr.length)];
-}
 
 /* ==========================================================================
    1. CLEAN DIRECT GMAIL TRANSPORTER (NO PROXY, PROPER POOL REUSE)
@@ -45,7 +40,6 @@ function getNativeTransporter(email, appPassword) {
   const senderDomain = cleanEmail.includes('@') ? cleanEmail.split('@')[1] : 'gmail.com';
   const key = `native_${cleanEmail}_${cleanPass}`;
 
-  // Close old pool if switching to a different Gmail account
   for (const [existingKey, existingTransporter] of poolMap.entries()) {
     if (existingKey !== key) {
       try {
@@ -72,9 +66,6 @@ function getNativeTransporter(email, appPassword) {
       maxMessages: 25,
       socketTimeout: 30000,
       connectionTimeout: 30000,
-      greetingTimeout: 15000,
-      disableFileAccess: true,
-      disableUrlAccess: true,
       tls: {
         rejectUnauthorized: true,
         minVersion: 'TLSv1.2'
@@ -86,14 +77,8 @@ function getNativeTransporter(email, appPassword) {
   return poolMap.get(key);
 }
 
-function generateCleanMessageId(domain = 'gmail.com') {
-  const randomPart = crypto.randomBytes(10).toString('hex');
-  const timePart = Date.now().toString(36);
-  return `<${timePart}.${randomPart}@${domain}>`;
-}
-
 /* ==========================================================================
-   2. RECIPIENT DATA, SPINTAX & SAFE INBOX FOOTER ENGINE
+   2. RECIPIENT DATA & SPINTAX ENGINE
    ========================================================================== */
 function parseRecipientData(input) {
   let email = '';
@@ -182,11 +167,7 @@ function extractTemplateDeck(rawTemplate) {
       .map(l => l.trim())
       .filter(l => l.length > 15);
 
-    const looksLikeVariationList =
-      lines.length >= 2 &&
-      lines.filter(l => /^(hi|hello|hey|your|good\s)/i.test(l)).length >= Math.ceil(lines.length * 0.6);
-
-    if (looksLikeVariationList) {
+    if (lines.length >= 2) {
       return shuffleArray([...new Set(lines)]);
     }
   }
@@ -194,7 +175,6 @@ function extractTemplateDeck(rawTemplate) {
   return [cleanRaw];
 }
 
-// 100% Exact Template & Subject (No words changed in your main text)
 function personalizeContent(template, recipient) {
   if (!template) return '';
   let content = parseSpintax(template);
@@ -209,51 +189,6 @@ function personalizeContent(template, recipient) {
   content = content.replace(/{Domain}/gi, recipient.domain);
 
   return content.trim();
-}
-
-// Safe Primary-Inbox Footer:
-// Keeps main template untouched while making every email's MIME body unique & compliant
-function buildSafeInboxFooter(senderName, senderEmail, recipient) {
-  const signOff = pickRandom([
-    'Best regards,',
-    'Kind regards,',
-    'Warm regards,',
-    'Best,',
-    'Sincerely,',
-    'Thanks & regards,'
-  ]);
-
-  const roleTitle = pickRandom([
-    'Digital Outreach & Web Review',
-    'Client Relations & Site Analysis',
-    'Web Visibility Specialist',
-    'Search & Digital Operations',
-    'Business Development & Web Audit',
-    'Online Presence Coordinator'
-  ]);
-
-  const targetRef = recipient.domain && !/gmail\.com|yahoo\.com|outlook\.com|hotmail\.com|icloud\.com|aol\.com/i.test(recipient.domain)
-    ? recipient.domain
-    : recipient.email;
-
-  const politeNote = pickRandom([
-    `Note: Sent as a one-time personal outreach to ${targetRef}. If this isn't relevant to you, simply reply "no thanks" and I won't follow up.`,
-    `Direct note for ${recipient.firstName || targetRef}. If you prefer not to receive further notes from me, just reply "pass" and I'll update my notes.`,
-    `This is a direct 1-to-1 message regarding ${targetRef}. Feel free to reply "not interested" if you'd rather I don't reach out again.`,
-    `Personal inquiry sent to ${recipient.email}. If I reached the wrong person, please let me know and I will not message again.`,
-    `Sent directly by ${senderName || 'our team'} for ${targetRef}. Reply "stop" anytime if you'd prefer no future follow-up.`
-  ]);
-
-  const displaySender = senderName || senderEmail.split('@')[0];
-
-  const textFooter = `\n\n--\n${signOff}\n${displaySender}\n${roleTitle}\n${senderEmail}\n\n${politeNote}`;
-
-  const htmlFooter = `<br><br><div style="color:#444444;font-size:13px;line-height:1.5;border-top:1px solid #eeeeee;padding-top:10px;margin-top:14px;">` +
-    `<div>${signOff}<br><strong>${displaySender}</strong><br><span style="color:#666666;font-size:12px;">${roleTitle} &bull; <a href="mailto:${senderEmail}" style="color:#555555;text-decoration:none;">${senderEmail}</a></span></div>` +
-    `<div style="color:#888888;font-size:11px;margin-top:8px;">${politeNote}</div>` +
-    `</div>`;
-
-  return { textFooter, htmlFooter };
 }
 
 function stripHtmlTags(htmlString) {
@@ -326,7 +261,6 @@ app.post('/api/send-stream', async (req, res) => {
   }
 
   const cleanEmail = email.toLowerCase().trim();
-  const senderDomain = cleanEmail.includes('@') ? cleanEmail.split('@')[1] : 'gmail.com';
   const cleanSenderName = (senderName || '').replace(/["\r\n]/g, '').trim();
   globalSession.stopRequested = false;
 
@@ -338,8 +272,8 @@ app.post('/api/send-stream', async (req, res) => {
     }
   }, 2500);
 
-  const defaultSubject = '{Quick question|Site Overview|Quick note}';
-  const defaultBody = `Your site looks great, but a small issue is keeping it from showing in the top results. Can I send a screenshot?`;
+  const defaultSubject = '{Quick question for {FirstName}|Note for {FirstName}|Quick check, {FirstName}}';
+  const defaultBody = `Hi {FirstName}, I was looking through your website and noticed a small indexing detail holding back its search visibility. Mind if I send over what I spotted?`;
 
   const finalSubjectTemplate = (subject && subject.trim()) ? subject : defaultSubject;
   const rawBodyTemplate = (messageBody && messageBody.trim()) ? messageBody : defaultBody;
@@ -375,27 +309,18 @@ app.post('/api/send-stream', async (req, res) => {
           await new Promise(resolve => setTimeout(resolve, idx * 90));
         }
 
-        // Exact subject and body without changing a single word
         const personalizedSubject = personalizeContent(finalSubjectTemplate, recipient);
         const personalizedBody = personalizeContent(selectedBodyLine, recipient);
         const isHtml = /<[a-z][\s\S]*>/i.test(personalizedBody);
 
-        // Safe inbox footer appended cleanly below the message
-        const { textFooter, htmlFooter } = buildSafeInboxFooter(cleanSenderName, cleanEmail, recipient);
-
-        const fullPlainText = `${isHtml ? stripHtmlTags(personalizedBody) : personalizedBody}${textFooter}`;
-        const fullHtmlBody = isHtml
-          ? `<div dir="ltr">${personalizedBody}${htmlFooter}</div>`
-          : `<div dir="ltr">${personalizedBody.replace(/\n/g, '<br>')}${htmlFooter}</div>`;
-
         const mailOptions = {
           from: cleanSenderName ? `"${cleanSenderName}" <${cleanEmail}>` : cleanEmail,
           to: recipient.name ? `"${recipient.name}" <${recipient.email}>` : recipient.email,
+          replyTo: cleanEmail,
           subject: personalizedSubject,
-          messageId: generateCleanMessageId(senderDomain),
           textEncoding: 'quoted-printable',
-          text: fullPlainText,
-          html: fullHtmlBody
+          text: isHtml ? stripHtmlTags(personalizedBody) : personalizedBody,
+          html: isHtml ? `<div dir="ltr">${personalizedBody}</div>` : `<div dir="ltr">${personalizedBody.replace(/\n/g, '<br>')}</div>`
         };
 
         await transporter.sendMail(mailOptions);
