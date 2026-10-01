@@ -28,7 +28,7 @@ function closeAllPools() {
     try {
       transporter.close();
     } catch (e) {
-      // Cleanup error ignore
+      // Ignore close errors
     }
     poolMap.delete(key);
   }
@@ -320,11 +320,7 @@ app.post('/api/send-stream', async (req, res) => {
           subject: personalizedSubject,
           textEncoding: 'quoted-printable',
           text: isHtml ? stripHtmlTags(personalizedBody) : personalizedBody,
-          html: isHtml ? `<div dir="ltr">${personalizedBody}</div>` : `<div dir="ltr">${personalizedBody.replace(/\n/g, '<br>')}</div>`,
-          headers: {
-            'List-Unsubscribe': `<mailto:${cleanEmail}?subject=unsubscribe>`,
-            'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click'
-          }
+          html: isHtml ? `<div dir="ltr">${personalizedBody}</div>` : `<div dir="ltr">${personalizedBody.replace(/\n/g, '<br>')}</div>`
         };
 
         await transporter.sendMail(mailOptions);
