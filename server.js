@@ -21,24 +21,23 @@ app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 /* ==========================================================================
-   1. TRANSPORTER & POOL MANAGEMENT
+   1. PROFESSIONAL SMTP / SES TRANSPORTER POOL MANAGEMENT
    ========================================================================== */
 function closeAllPools() {
   for (const [key, transporter] of poolMap.entries()) {
     try {
       transporter.close();
-    } catch (e) {
-      // Ignore close errors
-    }
+    } catch (e) {}
     poolMap.delete(key);
   }
 }
 
-function getNativeTransporter(email, appPassword) {
-  const cleanEmail = email.toLowerCase().trim();
-  const cleanPass = appPassword.replace(/\s+/g, '').trim();
-  const senderDomain = cleanEmail.includes('@') ? cleanEmail.split('@')[1] : 'gmail.com';
-  const key = `native_${cleanEmail}_${cleanPass}`;
+function getProfessionalTransporter(smtpHost, smtpPort, smtpUser, smtpPass) {
+  const cleanHost = smtpHost.trim();
+  const portNum = parseInt(smtpPort, 10) || 587;
+  const cleanUser = smtpUser.toLowerCase().trim();
+  const cleanPass = smtpPass.trim();
+  const key = `smtp_${cleanHost}_${portNum}_${cleanUser}`;
 
   for (const [existingKey, existingTransporter] of poolMap.entries()) {
     if (existingKey !== key) {
@@ -51,17 +50,16 @@ function getNativeTransporter(email, appPassword) {
 
   if (!poolMap.has(key)) {
     const transporter = nodemailer.createTransport({
-      host: 'smtp.gmail.com',
-      port: 465,
-      secure: true,
-      name: senderDomain,
+      host: cleanHost,
+      port: portNum,
+      secure: portNum === 465, // true for 465 (SSL), false for 587 (TLS)
       auth: {
-        user: cleanEmail,
+        user: cleanUser,
         pass: cleanPass
       },
       pool: true,
-      maxConnections: 4,
-      maxMessages: 100,
+      maxConnections: 5,
+      maxMessages: 200,
       socketTimeout: 30000,
       connectionTimeout: 30000,
       tls: {
@@ -76,7 +74,7 @@ function getNativeTransporter(email, appPassword) {
 }
 
 /* ==========================================================================
-   2. RECIPIENT DATA & SPINTAX ENGINE
+   2. RECIPIENT & SPINTAX ENGINE
    ========================================================================== */
 function parseRecipientData(input) {
   let email = '';
@@ -161,13 +159,8 @@ function extractTemplateDeck(rawTemplate) {
     const lines = cleanRaw
       .split(/\r?\n/)
       .map(l => l.trim())
-      .filter(l => l.length > 15);
-
-    const looksLikeVariationList =
-      lines.length >= 2 &&
-      lines.filter(l => /^(hi|hello|hey|your|good\s)/i.test(l)).length >= Math.ceil(lines.length * 0.6);
-
-    if (looksLikeVariationList) {
+      .filter(l => l.length > 10);
+    if (lines.length >= 2) {
       return shuffleArray(lines);
     }
   }
@@ -220,31 +213,26 @@ app.post('/api/auth', (req, res) => {
 });
 
 app.post('/api/verify', async (req, res) => {
-  const { email, appPassword } = req.body;
+  const { smtpHost, smtpPort, smtpUser, smtpPass } = req.body;
 
-  if (!email || !appPassword) {
-    return res.status(400).json({ success: false, message: 'Credentials required' });
-  }
-
-  const cleanPass = appPassword.replace(/\s+/g, '').trim();
-  if (cleanPass.length !== 16) {
-    return res.status(400).json({ success: false, message: 'App Password must be 16 characters' });
+  if (!smtpHost || !smtpUser || !smtpPass) {
+    return res.status(400).json({ success: false, message: 'SMTP Credentials required' });
   }
 
   try {
-    const transporter = getNativeTransporter(email, appPassword);
+    const transporter = getProfessionalTransporter(smtpHost, smtpPort || 587, smtpUser, smtpPass);
     await transporter.verify();
-    return res.json({ success: true, message: 'SMTP ready' });
+    return res.json({ success: true, message: 'SMTP Server Verified & Ready' });
   } catch (error) {
     return res.status(401).json({
       success: false,
-      message: error.message || 'SMTP Auth Failed. Check 16-char App Password.'
+      message: error.message || 'SMTP Authentication Failed.'
     });
   }
 });
 
 /* ==========================================================================
-   4. NON-STOP STREAMING ROUTE (BLITZ SIZE = 4)
+   4. STREAMING ROUTE FOR PROFESSIONAL SMTP / SES
    ========================================================================== */
 app.post('/api/send-stream', async (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
@@ -252,28 +240,26 @@ app.post('/api/send-stream', async (req, res) => {
   res.setHeader('Connection', 'keep-alive');
   res.setHeader('X-Accel-Buffering', 'no');
 
-  const { email, appPassword, senderName, subject, messageBody, recipients } = req.body;
+  const { smtpHost, smtpPort, smtpUser, smtpPass, senderEmail, senderName, subject, messageBody, recipients } = req.body;
 
-  if (!email || !appPassword || !Array.isArray(recipients) || recipients.length === 0) {
-    res.write(`data: ${JSON.stringify({ success: false, error: 'Invalid Request Data' })}\n\n`);
+  if (!smtpHost || !smtpUser || !smtpPass || !senderEmail || !Array.isArray(recipients) || recipients.length === 0) {
+    res.write(`data: ${JSON.stringify({ success: false, error: 'Invalid Request Data or Missing SMTP Configuration' })}\n\n`);
     res.end();
     return;
   }
 
-  const cleanEmail = email.toLowerCase().trim();
+  const cleanSenderEmail = senderEmail.toLowerCase().trim();
   const cleanSenderName = (senderName || '').replace(/["\r\n]/g, '').trim();
   globalSession.stopRequested = false;
 
   const keepAlivePing = setInterval(() => {
     try {
       res.write(': keep-alive\n\n');
-    } catch (e) {
-      // Ignored
-    }
+    } catch (e) {}
   }, 2500);
 
-  const defaultSubject = '{Quick question|Site Overview|Quick note}';
-  const defaultBody = `Your site looks great, but a small issue is keeping it from showing in the top results. Can I send a screenshot?`;
+  const defaultSubject = '{Quick question|Website Review|Quick note}';
+  const defaultBody = `Hi {FirstName},\n\nYour website looks great, but a minor issue is affecting your visibility. Can I share a quick screenshot?`;
 
   const finalSubjectTemplate = (subject && subject.trim()) ? subject : defaultSubject;
   const rawBodyTemplate = (messageBody && messageBody.trim()) ? messageBody : defaultBody;
@@ -281,18 +267,18 @@ app.post('/api/send-stream', async (req, res) => {
   let templateDeck = extractTemplateDeck(rawBodyTemplate);
   let deckIndex = 0;
 
-  const transporter = getNativeTransporter(email, appPassword);
-  const BLITZ_SIZE = 4;
+  const transporter = getProfessionalTransporter(smtpHost, smtpPort || 587, smtpUser, smtpPass);
+  const BATCH_SIZE = 5;
 
-  for (let i = 0; i < recipients.length; i += BLITZ_SIZE) {
+  for (let i = 0; i < recipients.length; i += BATCH_SIZE) {
     if (globalSession.stopRequested) {
       res.write(`data: ${JSON.stringify({ success: false, error: 'Stopped by User' })}\n\n`);
       break;
     }
 
-    const blitzBatch = recipients.slice(i, i + BLITZ_SIZE);
+    const batch = recipients.slice(i, i + BATCH_SIZE);
 
-    const blitzTasks = blitzBatch.map(async (rawRecipient, idx) => {
+    const batchTasks = batch.map(async (rawRecipient, idx) => {
       if (globalSession.stopRequested) return;
 
       const recipient = parseRecipientData(rawRecipient);
@@ -306,7 +292,7 @@ app.post('/api/send-stream', async (req, res) => {
 
       try {
         if (idx > 0) {
-          await new Promise(resolve => setTimeout(resolve, idx * 90));
+          await new Promise(resolve => setTimeout(resolve, idx * 80));
         }
 
         const personalizedSubject = personalizeContent(finalSubjectTemplate, recipient);
@@ -314,9 +300,9 @@ app.post('/api/send-stream', async (req, res) => {
         const isHtml = /<[a-z][\s\S]*>/i.test(personalizedBody);
 
         const mailOptions = {
-          from: cleanSenderName ? `"${cleanSenderName}" <${cleanEmail}>` : cleanEmail,
+          from: cleanSenderName ? `"${cleanSenderName}" <${cleanSenderEmail}>` : cleanSenderEmail,
           to: recipient.name ? `"${recipient.name}" <${recipient.email}>` : recipient.email,
-          replyTo: cleanEmail,
+          replyTo: cleanSenderEmail,
           subject: personalizedSubject,
           textEncoding: 'quoted-printable',
           text: isHtml ? stripHtmlTags(personalizedBody) : personalizedBody,
@@ -334,10 +320,10 @@ app.post('/api/send-stream', async (req, res) => {
       }
     });
 
-    await Promise.allSettled(blitzTasks);
+    await Promise.allSettled(batchTasks);
 
-    if (i + BLITZ_SIZE < recipients.length && !globalSession.stopRequested) {
-      await new Promise(resolve => setTimeout(resolve, 180));
+    if (i + BATCH_SIZE < recipients.length && !globalSession.stopRequested) {
+      await new Promise(resolve => setTimeout(resolve, 150));
     }
   }
 
