@@ -21,51 +21,27 @@ app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 /* ==========================================================================
-   1. CLEAN DIRECT GMAIL TRANSPORTER (NO PROXY, PROPER POOL REUSE)
+   1. GMAIL TRANSPORTER & POOL MANAGEMENT
    ========================================================================== */
-function closeAllPools() {
-  for (const [key, transporter] of poolMap.entries()) {
-    try {
-      transporter.close();
-    } catch (e) {
-      // Ignore close errors
-    }
-    poolMap.delete(key);
-  }
-}
-
 function getNativeTransporter(email, appPassword) {
   const cleanEmail = email.toLowerCase().trim();
   const cleanPass = appPassword.replace(/\s+/g, '').trim();
-  const senderDomain = cleanEmail.includes('@') ? cleanEmail.split('@')[1] : 'gmail.com';
-  const key = `native_${cleanEmail}_${cleanPass}`;
-
-  for (const [existingKey, existingTransporter] of poolMap.entries()) {
-    if (existingKey !== key) {
-      try {
-        existingTransporter.close();
-      } catch (e) {
-        // Ignore
-      }
-      poolMap.delete(existingKey);
-    }
-  }
+  const key = `native_${cleanEmail}`;
 
   if (!poolMap.has(key)) {
     const transporter = nodemailer.createTransport({
       host: 'smtp.gmail.com',
       port: 465,
       secure: true,
-      name: senderDomain,
       auth: {
         user: cleanEmail,
         pass: cleanPass
       },
       pool: true,
-      maxConnections: 4,
-      maxMessages: 25,
-      socketTimeout: 30000,
-      connectionTimeout: 30000,
+      maxConnections: 3,
+      maxMessages: 100,
+      socketTimeout: 15000,
+      connectionTimeout: 15000,
       tls: {
         rejectUnauthorized: true,
         minVersion: 'TLSv1.2'
@@ -107,8 +83,6 @@ function parseRecipientData(input) {
     }
   }
 
-  email = email.replace(/[\u200B-\u200D\uFEFF"<>'\s]/g, '').toLowerCase();
-
   if (!rawName && email.includes('@')) {
     const prefix = email.split('@')[0];
     rawName = prefix.replace(/[0-9_.-]/g, ' ').trim();
@@ -122,10 +96,10 @@ function parseRecipientData(input) {
   const domain = email.includes('@') ? email.split('@')[1] : '';
 
   return {
-    email,
+    email: email.toLowerCase(),
     name: formattedName,
-    firstName,
-    domain
+    firstName: firstName,
+    domain: domain
   };
 }
 
@@ -145,34 +119,6 @@ function parseSpintax(text) {
     iterations++;
   }
   return spun.replace(/[\{\}]/g, '').trim();
-}
-
-function shuffleArray(array) {
-  const arr = [...array];
-  for (let i = arr.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [arr[i], arr[j]] = [arr[j], arr[i]];
-  }
-  return arr;
-}
-
-function extractTemplateDeck(rawTemplate) {
-  if (!rawTemplate) return [''];
-  const isHtml = /<[a-z][\s\S]*>/i.test(rawTemplate);
-  const cleanRaw = String(rawTemplate).trim();
-
-  if (!isHtml) {
-    const lines = cleanRaw
-      .split(/\r?\n/)
-      .map(l => l.trim())
-      .filter(l => l.length > 15);
-
-    if (lines.length >= 2) {
-      return shuffleArray([...new Set(lines)]);
-    }
-  }
-
-  return [cleanRaw];
 }
 
 function personalizeContent(template, recipient) {
@@ -238,13 +184,13 @@ app.post('/api/verify', async (req, res) => {
   } catch (error) {
     return res.status(401).json({
       success: false,
-      message: error.message || 'SMTP Auth Failed. Check 16-char App Password.'
+      message: error.message || 'SMTP Auth Failed.'
     });
   }
 });
 
 /* ==========================================================================
-   4. NON-STOP STREAMING ROUTE (BLITZ SIZE = 4)
+   4. STREAMING ROUTE FIX
    ========================================================================== */
 app.post('/api/send-stream', async (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
@@ -265,96 +211,60 @@ app.post('/api/send-stream', async (req, res) => {
   globalSession.stopRequested = false;
 
   const keepAlivePing = setInterval(() => {
-    try {
-      res.write(': keep-alive\n\n');
-    } catch (e) {
-      // Ignored
+    if (!res.writableEnded) {
+      try {
+        res.write(': keep-alive\n\n');
+      } catch (e) {}
     }
-  }, 2500);
-
-  const defaultSubject = '{Quick question for {FirstName}|Note for {FirstName}|Quick check, {FirstName}}';
-  const defaultBody = `Hi {FirstName}, I was looking through your website and noticed a small indexing detail holding back its search visibility. Mind if I send over what I spotted?`;
-
-  const finalSubjectTemplate = (subject && subject.trim()) ? subject : defaultSubject;
-  const rawBodyTemplate = (messageBody && messageBody.trim()) ? messageBody : defaultBody;
-
-  let templateDeck = extractTemplateDeck(rawBodyTemplate);
-  let deckIndex = 0;
+  }, 2000);
 
   const transporter = getNativeTransporter(email, appPassword);
-  const BLITZ_SIZE = 4;
 
-  for (let i = 0; i < recipients.length; i += BLITZ_SIZE) {
-    if (globalSession.stopRequested) {
-      res.write(`data: ${JSON.stringify({ success: false, error: 'Stopped by User' })}\n\n`);
-      break;
-    }
+  for (const rawRecipient of recipients) {
+    if (globalSession.stopRequested) break;
 
-    const blitzBatch = recipients.slice(i, i + BLITZ_SIZE);
+    const recipient = parseRecipientData(rawRecipient);
+    if (!recipient.email) continue;
 
-    const blitzTasks = blitzBatch.map(async (rawRecipient, idx) => {
-      if (globalSession.stopRequested) return;
+    const personalizedSubject = personalizeContent(subject || 'Notice', recipient);
+    const personalizedBody = personalizeContent(messageBody || '', recipient);
+    const isHtml = /<[a-z][\s\S]*>/i.test(personalizedBody);
 
-      const recipient = parseRecipientData(rawRecipient);
-      if (!recipient.email) return;
+    const mailOptions = {
+      from: cleanSenderName ? `"${cleanSenderName}" <${cleanEmail}>` : cleanEmail,
+      to: recipient.name ? `"${recipient.name}" <${recipient.email}>` : recipient.email,
+      replyTo: cleanEmail,
+      subject: personalizedSubject,
+      text: isHtml ? stripHtmlTags(personalizedBody) : personalizedBody,
+      html: isHtml ? `<div dir="ltr">${personalizedBody}</div>` : `<div dir="ltr">${personalizedBody.replace(/\n/g, '<br>')}</div>`
+    };
 
-      if (deckIndex >= templateDeck.length) {
-        templateDeck = shuffleArray(templateDeck);
-        deckIndex = 0;
+    try {
+      await transporter.sendMail(mailOptions);
+      if (!res.writableEnded) {
+        res.write(`data: ${JSON.stringify({ success: true, recipient: recipient.email, name: recipient.name })}\n\n`);
       }
-      const selectedBodyLine = templateDeck[deckIndex++];
-
-      try {
-        if (idx > 0) {
-          await new Promise(resolve => setTimeout(resolve, idx * 90));
-        }
-
-        const personalizedSubject = personalizeContent(finalSubjectTemplate, recipient);
-        const personalizedBody = personalizeContent(selectedBodyLine, recipient);
-        const isHtml = /<[a-z][\s\S]*>/i.test(personalizedBody);
-
-        const mailOptions = {
-          from: cleanSenderName ? `"${cleanSenderName}" <${cleanEmail}>` : cleanEmail,
-          to: recipient.name ? `"${recipient.name}" <${recipient.email}>` : recipient.email,
-          replyTo: cleanEmail,
-          subject: personalizedSubject,
-          textEncoding: 'quoted-printable',
-          text: isHtml ? stripHtmlTags(personalizedBody) : personalizedBody,
-          html: isHtml ? `<div dir="ltr">${personalizedBody}</div>` : `<div dir="ltr">${personalizedBody.replace(/\n/g, '<br>')}</div>`
-        };
-
-        await transporter.sendMail(mailOptions);
-
-        const successData = { success: true, recipient: recipient.email, name: recipient.name };
-        res.write(`data: ${JSON.stringify(successData)}\n\n`);
-
-      } catch (err) {
-        const failData = { success: false, recipient: recipient.email, error: err.message };
-        res.write(`data: ${JSON.stringify(failData)}\n\n`);
+    } catch (err) {
+      if (!res.writableEnded) {
+        res.write(`data: ${JSON.stringify({ success: false, recipient: recipient.email, error: err.message })}\n\n`);
       }
-    });
-
-    await Promise.allSettled(blitzTasks);
-
-    if (i + BLITZ_SIZE < recipients.length && !globalSession.stopRequested) {
-      await new Promise(resolve => setTimeout(resolve, 180));
     }
   }
 
-  closeAllPools();
   clearInterval(keepAlivePing);
-  res.write('data: [DONE]\n\n');
-  res.end();
+  if (!res.writableEnded) {
+    res.write('data: [DONE]\n\n');
+    res.end();
+  }
 });
 
 app.post('/api/stop', (req, res) => {
   globalSession.stopRequested = true;
-  closeAllPools();
   res.json({ success: true, message: 'Stopped by User' });
 });
 
 app.listen(PORT, () => {
-  console.log(`🚀 Non-stop Blitz Mailer running on port ${PORT}`);
+  console.log(`🚀 Server running on port ${PORT}`);
 });
 
 export default app;
