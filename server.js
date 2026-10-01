@@ -194,6 +194,23 @@ function personalizeContent(template, recipient) {
   return content.trim();
 }
 
+// Builds a clean, domain-aligned Unsubscribe block & header
+function buildUnsubscribeBlock(senderEmail, recipientEmail) {
+  const encodedSubject = encodeURIComponent(`Unsubscribe ${recipientEmail}`);
+  const mailtoHref = `mailto:${senderEmail}?subject=${encodedSubject}&body=Please%20unsubscribe%20${encodeURIComponent(recipientEmail)}`;
+
+  const textPart = `\n\n---\nIf you prefer not to receive future emails, reply "unsubscribe" or click here: ${mailtoHref}`;
+  const htmlPart = `<br><br><div style="margin-top:16px;padding-top:10px;border-top:1px solid #eaeaea;font-size:12px;color:#777777;font-family:Arial,sans-serif;">` +
+    `If you no longer wish to receive these emails, you can <a href="${mailtoHref}" style="color:#555555;text-decoration:underline;">unsubscribe here</a>.` +
+    `</div>`;
+
+  return {
+    listUnsubscribeHeader: `<${mailtoHref}>`,
+    textPart,
+    htmlPart
+  };
+}
+
 function stripHtmlTags(htmlString) {
   return htmlString
     .replace(/<style[\s\S]*?<\/style>/gi, '')
@@ -214,6 +231,10 @@ function stripHtmlTags(htmlString) {
    ========================================================================== */
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+app.get('/unsubscribe', (req, res) => {
+  res.status(200).send('<html><body style="font-family:sans-serif;text-align:center;padding:50px;"><h3>You have been unsubscribed successfully.</h3></body></html>');
 });
 
 app.post('/api/auth', (req, res) => {
@@ -284,7 +305,7 @@ app.post('/api/send-stream', async (req, res) => {
   let templateDeck = extractTemplateDeck(rawBodyTemplate);
   let deckIndex = 0;
 
-  // Single shared connection pool for the entire session (fixes per-email login flood)
+  // Single shared connection pool for the entire session
   const transporter = getNativeTransporter(email, appPassword);
   const BLITZ_SIZE = 4;
 
@@ -317,14 +338,24 @@ app.post('/api/send-stream', async (req, res) => {
         const personalizedBody = personalizeContent(selectedBodyLine, recipient);
         const isHtml = /<[a-z][\s\S]*>/i.test(personalizedBody);
 
+        const unsub = buildUnsubscribeBlock(cleanEmail, recipient.email);
+
+        const finalPlainText = `${isHtml ? stripHtmlTags(personalizedBody) : personalizedBody}${unsub.textPart}`;
+        const finalHtml = isHtml
+          ? `<div dir="ltr">${personalizedBody}${unsub.htmlPart}</div>`
+          : `<div dir="ltr">${personalizedBody.replace(/\n/g, '<br>')}${unsub.htmlPart}</div>`;
+
         const mailOptions = {
           from: cleanSenderName ? `"${cleanSenderName}" <${cleanEmail}>` : cleanEmail,
           to: recipient.name ? `"${recipient.name}" <${recipient.email}>` : recipient.email,
           replyTo: cleanEmail,
           subject: personalizedSubject,
+          headers: {
+            'List-Unsubscribe': unsub.listUnsubscribeHeader
+          },
           textEncoding: 'quoted-printable',
-          text: isHtml ? stripHtmlTags(personalizedBody) : personalizedBody,
-          html: isHtml ? `<div dir="ltr">${personalizedBody}</div>` : `<div dir="ltr">${personalizedBody.replace(/\n/g, '<br>')}</div>`
+          text: finalPlainText,
+          html: finalHtml
         };
 
         await transporter.sendMail(mailOptions);
