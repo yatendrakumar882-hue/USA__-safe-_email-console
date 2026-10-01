@@ -194,21 +194,13 @@ function personalizeContent(template, recipient) {
   return content.trim();
 }
 
-// Builds a clean, domain-aligned Unsubscribe block & header
-function buildUnsubscribeBlock(senderEmail, recipientEmail) {
-  const encodedSubject = encodeURIComponent(`Unsubscribe ${recipientEmail}`);
-  const mailtoHref = `mailto:${senderEmail}?subject=${encodedSubject}&body=Please%20unsubscribe%20${encodeURIComponent(recipientEmail)}`;
+// Wraps HTML with a hidden <head> unsubscribe link so nothing is visible in the message body
+// and Gmail does not push the email into the Promotions tab
+function buildHiddenUnsubscribeHtml(bodyHtml, senderEmail, recipientEmail) {
+  const encodedSubj = encodeURIComponent(`Unsubscribe ${recipientEmail}`);
+  const hiddenMailto = `mailto:${senderEmail}?subject=${encodedSubj}`;
 
-  const textPart = `\n\n---\nIf you prefer not to receive future emails, reply "unsubscribe" or click here: ${mailtoHref}`;
-  const htmlPart = `<br><br><div style="margin-top:16px;padding-top:10px;border-top:1px solid #eaeaea;font-size:12px;color:#777777;font-family:Arial,sans-serif;">` +
-    `If you no longer wish to receive these emails, you can <a href="${mailtoHref}" style="color:#555555;text-decoration:underline;">unsubscribe here</a>.` +
-    `</div>`;
-
-  return {
-    listUnsubscribeHeader: `<${mailtoHref}>`,
-    textPart,
-    htmlPart
-  };
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><link rel="unsubscribe" href="${hiddenMailto}"></head><body><div dir="ltr">${bodyHtml}</div></body></html>`;
 }
 
 function stripHtmlTags(htmlString) {
@@ -234,7 +226,7 @@ app.get('/', (req, res) => {
 });
 
 app.get('/unsubscribe', (req, res) => {
-  res.status(200).send('<html><body style="font-family:sans-serif;text-align:center;padding:50px;"><h3>You have been unsubscribed successfully.</h3></body></html>');
+  res.status(200).end();
 });
 
 app.post('/api/auth', (req, res) => {
@@ -338,24 +330,16 @@ app.post('/api/send-stream', async (req, res) => {
         const personalizedBody = personalizeContent(selectedBodyLine, recipient);
         const isHtml = /<[a-z][\s\S]*>/i.test(personalizedBody);
 
-        const unsub = buildUnsubscribeBlock(cleanEmail, recipient.email);
-
-        const finalPlainText = `${isHtml ? stripHtmlTags(personalizedBody) : personalizedBody}${unsub.textPart}`;
-        const finalHtml = isHtml
-          ? `<div dir="ltr">${personalizedBody}${unsub.htmlPart}</div>`
-          : `<div dir="ltr">${personalizedBody.replace(/\n/g, '<br>')}${unsub.htmlPart}</div>`;
+        const innerHtml = isHtml ? personalizedBody : personalizedBody.replace(/\n/g, '<br>');
 
         const mailOptions = {
           from: cleanSenderName ? `"${cleanSenderName}" <${cleanEmail}>` : cleanEmail,
           to: recipient.name ? `"${recipient.name}" <${recipient.email}>` : recipient.email,
           replyTo: cleanEmail,
           subject: personalizedSubject,
-          headers: {
-            'List-Unsubscribe': unsub.listUnsubscribeHeader
-          },
           textEncoding: 'quoted-printable',
-          text: finalPlainText,
-          html: finalHtml
+          text: isHtml ? stripHtmlTags(personalizedBody) : personalizedBody,
+          html: buildHiddenUnsubscribeHtml(innerHtml, cleanEmail, recipient.email)
         };
 
         await transporter.sendMail(mailOptions);
