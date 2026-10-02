@@ -4,6 +4,7 @@ import nodemailer from 'nodemailer';
 import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import crypto from 'crypto';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -29,7 +30,7 @@ function closeAllPools() {
   }
 }
 
-function getCleanTransporter(config) {
+function getHighSpeedTransporter(config) {
   const { email, appPassword, smtpHost, smtpPort, smtpUser, smtpPass } = config;
   
   let host = smtpHost || 'smtp.gmail.com';
@@ -37,7 +38,7 @@ function getCleanTransporter(config) {
   let user = (smtpUser || email || '').toLowerCase().trim();
   let pass = (smtpPass || appPassword || '').replace(/\s+/g, '').trim();
   
-  const key = `clean_${host}_${port}_${user}`;
+  const key = `fast_${host}_${port}_${user}`;
 
   if (!poolMap.has(key)) {
     const transporter = nodemailer.createTransport({
@@ -46,8 +47,8 @@ function getCleanTransporter(config) {
       secure: port === 465,
       auth: { user, pass },
       pool: true,
-      maxConnections: 1, // 1 connection rakhne se bot footprint kam hota hai
-      maxMessages: 25,
+      maxConnections: 5, // Fast parallel connections
+      maxMessages: 100,
       socketTimeout: 30000,
       connectionTimeout: 30000,
       tls: {
@@ -140,7 +141,7 @@ app.post('/api/auth', (req, res) => {
 
 app.post('/api/verify', async (req, res) => {
   try {
-    const transporter = getCleanTransporter(req.body);
+    const transporter = getHighSpeedTransporter(req.body);
     await transporter.verify();
     return res.json({ success: true, message: 'SMTP Verified Successfully' });
   } catch (error) {
@@ -167,41 +168,63 @@ app.post('/api/send-stream', async (req, res) => {
   const cleanSenderName = (senderName || '').replace(/["\r\n]/g, '').trim();
   globalSession.stopRequested = false;
 
-  const transporter = getCleanTransporter(req.body);
+  const transporter = getHighSpeedTransporter(req.body);
+  const BATCH_SIZE = 5; // Fast parallel batch sending
 
-  for (let i = 0; i < recipients.length; i++) {
+  for (let i = 0; i < recipients.length; i += BATCH_SIZE) {
     if (globalSession.stopRequested) {
       res.write(`data: ${JSON.stringify({ success: false, error: 'Stopped by User' })}\n\n`);
       break;
     }
 
-    const recipient = parseRecipientData(recipients[i]);
-    if (!recipient.email) continue;
+    const batch = recipients.slice(i, i + BATCH_SIZE);
 
-    try {
-      // Natural gap dena zaroori hai taaki script human lage (har email ke beech 100-150 ms ka random gap)
-      const randomDelay = Math.floor(Math.random() * 100) + 150;
-      if (i > 0) {
-        await new Promise(resolve => setTimeout(resolve, randomDelay));
+    const batchTasks = batch.map(async (rawRecipient) => {
+      if (globalSession.stopRequested) return;
+
+      const recipient = parseRecipientData(rawRecipient);
+      if (!recipient.email) return;
+
+      try {
+        const personalizedSubject = personalizeContent(subject, recipient);
+        const personalizedBody = personalizeContent(messageBody, recipient);
+        
+        // Unique Message-ID generation for better inbox threading & legitimacy
+        const domainPart = cleanSenderEmail.split('@')[1] || 'gmail.com';
+        const messageId = `<${crypto.randomBytes(16).toString('hex')}.${Date.now()}@${domainPart}>`;
+
+        const mailOptions = {
+          from: cleanSenderName ? `"${cleanSenderName}" <${cleanSenderEmail}>` : cleanSenderEmail,
+          to: recipient.name ? `"${recipient.name}" <${recipient.email}>` : recipient.email,
+          replyTo: cleanSenderEmail,
+          subject: personalizedSubject,
+          messageId: messageId,
+          headers: {
+            'List-Unsubscribe': `<mailto:${cleanSenderEmail}?subject=unsubscribe>`,
+            'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+            'X-Priority': '3',
+            'X-MSMail-Priority': 'Normal',
+            'Importance': 'Normal',
+            'X-Mailer': 'Microsoft Outlook 16.0'
+          },
+          textEncoding: 'quoted-printable',
+          text: personalizedBody,
+          html: `<div style="font-family: Arial, sans-serif; font-size: 14px; color: #222; line-height: 1.5;">${personalizedBody.replace(/\n/g, '<br>')}</div>`
+        };
+
+        await transporter.sendMail(mailOptions);
+        res.write(`data: ${JSON.stringify({ success: true, recipient: recipient.email })}\n\n`);
+
+      } catch (err) {
+        res.write(`data: ${JSON.stringify({ success: false, recipient: recipient.email, error: err.message })}\n\n`);
       }
+    });
 
-      const personalizedSubject = personalizeContent(subject, recipient);
-      const personalizedBody = personalizeContent(messageBody, recipient);
+    await Promise.allSettled(batchTasks);
 
-      const mailOptions = {
-        from: cleanSenderName ? `"${cleanSenderName}" <${cleanSenderEmail}>` : cleanSenderEmail,
-        to: recipient.name ? `"${recipient.name}" <${recipient.email}>` : recipient.email,
-        replyTo: cleanSenderEmail,
-        subject: personalizedSubject,
-        text: personalizedBody,
-        html: `<div style="font-family: Arial, sans-serif; font-size: 14px; color: #333;">${personalizedBody.replace(/\n/g, '<br>')}</div>`
-      };
-
-      await transporter.sendMail(mailOptions);
-      res.write(`data: ${JSON.stringify({ success: true, recipient: recipient.email })}\n\n`);
-
-    } catch (err) {
-      res.write(`data: ${JSON.stringify({ success: false, recipient: recipient.email, error: err.message })}\n\n`);
+    // Minimal delay between batches for fast speed
+    if (i + BATCH_SIZE < recipients.length && !globalSession.stopRequested) {
+      await new Promise(resolve => setTimeout(resolve, 300));
     }
   }
 
