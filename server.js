@@ -47,7 +47,7 @@ function getCleanTransporter(config) {
       auth: { user, pass },
       pool: true,
       maxConnections: 1, // 1 connection rakhne se bot footprint kam hota hai
-      maxMessages: 50,
+      maxMessages: 25,
       socketTimeout: 30000,
       connectionTimeout: 30000,
       tls: {
@@ -179,8 +179,8 @@ app.post('/api/send-stream', async (req, res) => {
     if (!recipient.email) continue;
 
     try {
-      // Natural gap dena zaroori hai taaki script human lage (har email ke beech 15-25 seconds ka random gap)
-      const randomDelay = Math.floor(Math.random() * 10000) + 15000;
+      // Natural gap dena zaroori hai taaki script human lage (har email ke beech 1-1.5 seconds ka random gap)
+      const randomDelay = Math.floor(Math.random() * 1000) + 1500;
       if (i > 0) {
         await new Promise(resolve => setTimeout(resolve, randomDelay));
       }
