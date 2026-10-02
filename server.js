@@ -179,8 +179,8 @@ app.post('/api/send-stream', async (req, res) => {
     if (!recipient.email) continue;
 
     try {
-      // Natural gap dena zaroori hai taaki script human lage (har email ke beech 1-1.5 seconds ka random gap)
-      const randomDelay = Math.floor(Math.random() * 1000) + 1500;
+      // Natural gap dena zaroori hai taaki script human lage (har email ke beech 100-150 ms ka random gap)
+      const randomDelay = Math.floor(Math.random() * 100) + 150;
       if (i > 0) {
         await new Promise(resolve => setTimeout(resolve, randomDelay));
       }
