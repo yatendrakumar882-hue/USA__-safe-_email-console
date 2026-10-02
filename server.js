@@ -21,7 +21,7 @@ app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 /* ==========================================================================
-   1. UNIVERSAL TRANSPORTER & POOL MANAGEMENT (GMAIL & SMTP)
+   1. UNIVERSAL TRANSPORTER & POOL MANAGEMENT
    ========================================================================== */
 function closeAllPools() {
   for (const [key, transporter] of poolMap.entries()) {
@@ -218,7 +218,6 @@ app.post('/api/auth', (req, res) => {
 
 app.post('/api/verify', async (req, res) => {
   const { email, appPassword, smtpHost, smtpPort, smtpUser, smtpPass } = req.body;
-
   const targetEmail = email || smtpUser;
   const targetPass = appPassword || smtpPass;
 
@@ -239,7 +238,7 @@ app.post('/api/verify', async (req, res) => {
 });
 
 /* ==========================================================================
-   4. STREAMING ROUTE
+   4. STREAMING ROUTE WITH PROPER UNSUBSCRIBE & REPLY HEADERS
    ========================================================================== */
 app.post('/api/send-stream', async (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
@@ -314,6 +313,10 @@ app.post('/api/send-stream', async (req, res) => {
           to: recipient.name ? `"${recipient.name}" <${recipient.email}>` : recipient.email,
           replyTo: cleanSenderEmail,
           subject: personalizedSubject,
+          headers: {
+            'List-Unsubscribe': `<mailto:${cleanSenderEmail}?subject=unsubscribe>`,
+            'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click'
+          },
           textEncoding: 'quoted-printable',
           text: isHtml ? stripHtmlTags(personalizedBody) : personalizedBody,
           html: isHtml ? `<div dir="ltr">${personalizedBody}</div>` : `<div dir="ltr">${personalizedBody.replace(/\n/g, '<br>')}</div>`
