@@ -20,9 +20,6 @@ app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-/* ==========================================================================
-   1. UNIVERSAL TRANSPORTER & POOL MANAGEMENT
-   ========================================================================== */
 function closeAllPools() {
   for (const [key, transporter] of poolMap.entries()) {
     try {
@@ -32,7 +29,7 @@ function closeAllPools() {
   }
 }
 
-function getUniversalTransporter(config) {
+function getCleanTransporter(config) {
   const { email, appPassword, smtpHost, smtpPort, smtpUser, smtpPass } = config;
   
   let host = smtpHost || 'smtp.gmail.com';
@@ -40,30 +37,17 @@ function getUniversalTransporter(config) {
   let user = (smtpUser || email || '').toLowerCase().trim();
   let pass = (smtpPass || appPassword || '').replace(/\s+/g, '').trim();
   
-  const key = `transporter_${host}_${port}_${user}`;
-
-  for (const [existingKey, existingTransporter] of poolMap.entries()) {
-    if (existingKey !== key) {
-      try {
-        existingTransporter.close();
-      } catch (e) {}
-      poolMap.delete(existingKey);
-    }
-  }
+  const key = `clean_${host}_${port}_${user}`;
 
   if (!poolMap.has(key)) {
-    const isSecure = port === 465;
     const transporter = nodemailer.createTransport({
       host: host,
       port: port,
-      secure: isSecure,
-      auth: {
-        user: user,
-        pass: pass
-      },
+      secure: port === 465,
+      auth: { user, pass },
       pool: true,
-      maxConnections: 4,
-      maxMessages: 100,
+      maxConnections: 1, // 1 connection rakhne se bot footprint kam hota hai
+      maxMessages: 50,
       socketTimeout: 30000,
       connectionTimeout: 30000,
       tls: {
@@ -77,9 +61,6 @@ function getUniversalTransporter(config) {
   return poolMap.get(key);
 }
 
-/* ==========================================================================
-   2. RECIPIENT & SPINTAX ENGINE
-   ========================================================================== */
 function parseRecipientData(input) {
   let email = '';
   let rawName = '';
@@ -93,15 +74,6 @@ function parseRecipientData(input) {
     if (angleMatch) {
       rawName = angleMatch[1] ? angleMatch[1].trim() : '';
       email = angleMatch[2].trim();
-    } else if (str.includes(',')) {
-      const parts = str.split(',');
-      if (parts[0].includes('@')) {
-        email = parts[0].trim();
-        rawName = parts[1].trim();
-      } else {
-        rawName = parts[0].trim();
-        email = parts[1].trim();
-      }
     } else {
       email = str;
     }
@@ -119,12 +91,7 @@ function parseRecipientData(input) {
   const firstName = formattedName ? formattedName.split(' ')[0] : '';
   const domain = email.includes('@') ? email.split('@')[1] : '';
 
-  return {
-    email: email.toLowerCase(),
-    name: formattedName,
-    firstName: firstName,
-    domain: domain
-  };
+  return { email: email.toLowerCase(), name: formattedName, firstName, domain };
 }
 
 function parseSpintax(text) {
@@ -145,33 +112,6 @@ function parseSpintax(text) {
   return spun.replace(/[\{\}]/g, '').trim();
 }
 
-function shuffleArray(array) {
-  const arr = [...array];
-  for (let i = arr.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [arr[i], arr[j]] = [arr[j], arr[i]];
-  }
-  return arr;
-}
-
-function extractTemplateDeck(rawTemplate) {
-  if (!rawTemplate) return [''];
-  const isHtml = /<[a-z][\s\S]*>/i.test(rawTemplate);
-  const cleanRaw = String(rawTemplate).trim();
-
-  if (!isHtml) {
-    const lines = cleanRaw
-      .split(/\r?\n/)
-      .map(l => l.trim())
-      .filter(l => l.length > 10);
-    if (lines.length >= 2) {
-      return shuffleArray(lines);
-    }
-  }
-
-  return [cleanRaw];
-}
-
 function personalizeContent(template, recipient) {
   if (!template) return '';
   let content = parseSpintax(template);
@@ -188,24 +128,6 @@ function personalizeContent(template, recipient) {
   return content.trim();
 }
 
-function stripHtmlTags(htmlString) {
-  return htmlString
-    .replace(/<style[\s\S]*?<\/style>/gi, '')
-    .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<\/p>/gi, '\n\n')
-    .replace(/<\/div>/gi, '\n')
-    .replace(/<[^>]+>/g, '')
-    .replace(/&nbsp;/gi, ' ')
-    .replace(/&amp;/gi, '&')
-    .replace(/&lt;/gi, '<')
-    .replace(/&gt;/gi, '>')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
-}
-
-/* ==========================================================================
-   3. API ROUTES
-   ========================================================================== */
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
@@ -217,42 +139,26 @@ app.post('/api/auth', (req, res) => {
 });
 
 app.post('/api/verify', async (req, res) => {
-  const { email, appPassword, smtpHost, smtpPort, smtpUser, smtpPass } = req.body;
-  const targetEmail = email || smtpUser;
-  const targetPass = appPassword || smtpPass;
-
-  if (!targetEmail || !targetPass) {
-    return res.status(400).json({ success: false, message: 'SMTP Credentials required' });
-  }
-
   try {
-    const transporter = getUniversalTransporter(req.body);
+    const transporter = getCleanTransporter(req.body);
     await transporter.verify();
-    return res.json({ success: true, message: 'SMTP Server Verified & Ready' });
+    return res.json({ success: true, message: 'SMTP Verified Successfully' });
   } catch (error) {
-    return res.status(401).json({
-      success: false,
-      message: error.message || 'SMTP Authentication Failed.'
-    });
+    return res.status(401).json({ success: false, message: error.message || 'SMTP Failed' });
   }
 });
 
-/* ==========================================================================
-   4. STREAMING ROUTE WITH PROPER UNSUBSCRIBE & REPLY HEADERS
-   ========================================================================== */
 app.post('/api/send-stream', async (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
-  res.setHeader('X-Accel-Buffering', 'no');
 
   const { email, appPassword, smtpHost, smtpPort, smtpUser, smtpPass, senderName, subject, messageBody, recipients } = req.body;
-
   const senderEmail = email || smtpUser;
   const activePass = appPassword || smtpPass;
 
   if (!senderEmail || !activePass || !Array.isArray(recipients) || recipients.length === 0) {
-    res.write(`data: ${JSON.stringify({ success: false, error: 'Invalid Request Data or Missing Credentials' })}\n\n`);
+    res.write(`data: ${JSON.stringify({ success: false, error: 'Invalid Request Data' })}\n\n`);
     res.end();
     return;
   }
@@ -261,87 +167,45 @@ app.post('/api/send-stream', async (req, res) => {
   const cleanSenderName = (senderName || '').replace(/["\r\n]/g, '').trim();
   globalSession.stopRequested = false;
 
-  const keepAlivePing = setInterval(() => {
-    try {
-      res.write(': keep-alive\n\n');
-    } catch (e) {}
-  }, 2500);
+  const transporter = getCleanTransporter(req.body);
 
-  const defaultSubject = '{Quick question|Website Review|Quick note}';
-  const defaultBody = `Hi {FirstName},\n\nYour website looks great, but a minor issue is affecting your visibility. Can I share a quick screenshot?`;
-
-  const finalSubjectTemplate = (subject && subject.trim()) ? subject : defaultSubject;
-  const rawBodyTemplate = (messageBody && messageBody.trim()) ? messageBody : defaultBody;
-
-  let templateDeck = extractTemplateDeck(rawBodyTemplate);
-  let deckIndex = 0;
-
-  const transporter = getUniversalTransporter(req.body);
-  const BATCH_SIZE = 4;
-
-  for (let i = 0; i < recipients.length; i += BATCH_SIZE) {
+  for (let i = 0; i < recipients.length; i++) {
     if (globalSession.stopRequested) {
       res.write(`data: ${JSON.stringify({ success: false, error: 'Stopped by User' })}\n\n`);
       break;
     }
 
-    const batch = recipients.slice(i, i + BATCH_SIZE);
+    const recipient = parseRecipientData(recipients[i]);
+    if (!recipient.email) continue;
 
-    const batchTasks = batch.map(async (rawRecipient, idx) => {
-      if (globalSession.stopRequested) return;
-
-      const recipient = parseRecipientData(rawRecipient);
-      if (!recipient.email) return;
-
-      if (deckIndex >= templateDeck.length) {
-        templateDeck = shuffleArray(templateDeck);
-        deckIndex = 0;
+    try {
+      // Natural gap dena zaroori hai taaki script human lage (har email ke beech 15-25 seconds ka random gap)
+      const randomDelay = Math.floor(Math.random() * 10000) + 15000;
+      if (i > 0) {
+        await new Promise(resolve => setTimeout(resolve, randomDelay));
       }
-      const selectedBodyLine = templateDeck[deckIndex++];
 
-      try {
-        if (idx > 0) {
-          await new Promise(resolve => setTimeout(resolve, idx * 90));
-        }
+      const personalizedSubject = personalizeContent(subject, recipient);
+      const personalizedBody = personalizeContent(messageBody, recipient);
 
-        const personalizedSubject = personalizeContent(finalSubjectTemplate, recipient);
-        const personalizedBody = personalizeContent(selectedBodyLine, recipient);
-        const isHtml = /<[a-z][\s\S]*>/i.test(personalizedBody);
+      const mailOptions = {
+        from: cleanSenderName ? `"${cleanSenderName}" <${cleanSenderEmail}>` : cleanSenderEmail,
+        to: recipient.name ? `"${recipient.name}" <${recipient.email}>` : recipient.email,
+        replyTo: cleanSenderEmail,
+        subject: personalizedSubject,
+        text: personalizedBody,
+        html: `<div style="font-family: Arial, sans-serif; font-size: 14px; color: #333;">${personalizedBody.replace(/\n/g, '<br>')}</div>`
+      };
 
-        const mailOptions = {
-          from: cleanSenderName ? `"${cleanSenderName}" <${cleanSenderEmail}>` : cleanSenderEmail,
-          to: recipient.name ? `"${recipient.name}" <${recipient.email}>` : recipient.email,
-          replyTo: cleanSenderEmail,
-          subject: personalizedSubject,
-          headers: {
-            'List-Unsubscribe': `<mailto:${cleanSenderEmail}?subject=unsubscribe>`,
-            'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click'
-          },
-          textEncoding: 'quoted-printable',
-          text: isHtml ? stripHtmlTags(personalizedBody) : personalizedBody,
-          html: isHtml ? `<div dir="ltr">${personalizedBody}</div>` : `<div dir="ltr">${personalizedBody.replace(/\n/g, '<br>')}</div>`
-        };
+      await transporter.sendMail(mailOptions);
+      res.write(`data: ${JSON.stringify({ success: true, recipient: recipient.email })}\n\n`);
 
-        await transporter.sendMail(mailOptions);
-
-        const successData = { success: true, recipient: recipient.email, name: recipient.name };
-        res.write(`data: ${JSON.stringify(successData)}\n\n`);
-
-      } catch (err) {
-        const failData = { success: false, recipient: recipient.email, error: err.message };
-        res.write(`data: ${JSON.stringify(failData)}\n\n`);
-      }
-    });
-
-    await Promise.allSettled(batchTasks);
-
-    if (i + BATCH_SIZE < recipients.length && !globalSession.stopRequested) {
-      await new Promise(resolve => setTimeout(resolve, 180));
+    } catch (err) {
+      res.write(`data: ${JSON.stringify({ success: false, recipient: recipient.email, error: err.message })}\n\n`);
     }
   }
 
   closeAllPools();
-  clearInterval(keepAlivePing);
   res.write('data: [DONE]\n\n');
   res.end();
 });
@@ -349,11 +213,11 @@ app.post('/api/send-stream', async (req, res) => {
 app.post('/api/stop', (req, res) => {
   globalSession.stopRequested = true;
   closeAllPools();
-  res.json({ success: true, message: 'Stopped by User' });
+  res.json({ success: true, message: 'Stopped' });
 });
 
 app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`Server running on port ${PORT}`);
 });
 
 export default app;
