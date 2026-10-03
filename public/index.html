@@ -1,341 +1,168 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Secure Mail Console - Bulk Email Sender</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <style>
-    body { font-family: 'Plus Jakarta Sans', sans-serif; }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Secure Mail Console</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="style.css">
 </head>
-<body class="bg-slate-50 text-slate-800 min-h-screen">
 
-  <!-- ================= 1. LOGIN MODAL (Password: Y##) ================= -->
-  <div id="loginModal" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
-    <div class="bg-white border border-slate-200 rounded-2xl w-full max-w-sm p-8 text-center shadow-2xl">
-      <div class="w-14 h-14 mx-auto rounded-full bg-blue-600 flex items-center justify-center text-white text-2xl mb-4 shadow-lg shadow-blue-500/20">
-        🔒
-      </div>
-      <h2 class="text-xl font-bold text-slate-900 mb-1">Access Protected</h2>
-      <p class="text-xs text-slate-500 mb-6">Enter the password to continue</p>
-
-      <input
-        type="password"
-        id="loginPassInput"
-        placeholder="Password"
-        class="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-xl text-sm text-slate-900 mb-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
-      />
-
-      <div id="loginError" class="hidden mb-3 text-xs text-rose-600 bg-rose-50 p-2.5 rounded-lg border border-rose-200">
-        ⚠️ Connection error. Try again.
-      </div>
-
-      <button
-        onclick="submitLogin()"
-        class="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl text-sm transition shadow-lg shadow-blue-600/20"
-      >
-        ➜ Enter
-      </button>
-    </div>
-  </div>
-
-  <!-- ================= 2. MAIN CONSOLE INTERFACE (WHITE THEME) ================= -->
-  <div class="max-w-6xl mx-auto px-4 py-8">
-    
-    <!-- Top Header -->
-    <div class="flex items-center justify-between pb-6 mb-6 border-b border-slate-200">
-      <div class="flex items-center gap-3">
-        <div class="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center font-bold text-lg shadow-md shadow-blue-500/20">
-          ✈️
+<body>
+    <!-- Password Gate Overlay -->
+    <div id="password-gate" class="password-gate">
+        <div class="gate-card fade-in">
+            <div class="gate-icon">
+                <i class="fa-solid fa-lock"></i>
+            </div>
+            <h2>Access Protected</h2>
+            <p>Enter the password to continue</p>
+            <form id="gate-form" autocomplete="off">
+                <div class="form-group">
+                    <div class="password-wrapper">
+                        <input type="password" id="gate-password" placeholder="Enter password..." autocomplete="current-password" required>
+                        <button type="button" id="toggle-gate-password" class="icon-button" aria-label="Toggle password visibility">
+                            <i class="fa-regular fa-eye"></i>
+                        </button>
+                    </div>
+                </div>
+                <div id="gate-error" class="gate-error hidden">
+                    <i class="fa-solid fa-triangle-exclamation"></i>
+                    <span>Incorrect password</span>
+                </div>
+                <button type="submit" id="gate-submit-btn" class="btn btn-primary btn-block">
+                    <i class="fa-solid fa-arrow-right-to-bracket"></i> Enter
+                </button>
+            </form>
         </div>
-        <div>
-          <h1 class="text-2xl font-bold text-slate-900 tracking-tight">Secure Mail Console</h1>
-          <p class="text-xs text-slate-500">Direct Primary Inbox Sender</p>
-        </div>
-      </div>
-      <button onclick="handleLogout()" class="text-xs text-rose-600 hover:text-rose-700 font-semibold px-3 py-1.5 rounded-lg bg-rose-50 border border-rose-200 transition">
-        [➜ Logout]
-      </button>
     </div>
 
-    <!-- Section Title -->
-    <div class="flex items-center gap-2 mb-6">
-      <span class="text-blue-600 text-lg">✈️</span>
-      <h2 class="text-lg font-bold text-slate-900">Bulk Email Sender</h2>
+    <!-- Main Dashboard Application -->
+    <div class="app-container hidden" id="main-app">
+        <header class="app-header">
+            <h1><i class="fa-solid fa-shield-halved"></i> Secure Mail Console</h1>
+            <button type="button" id="logout-btn" class="btn-logout" title="Double click to logout">
+                <i class="fa-solid fa-right-from-bracket"></i> Logout (Double Click)
+            </button>
+        </header>
+
+        <section id="dashboard-section">
+            <div class="dashboard-header fade-in">
+                <h2><i class="fa-solid fa-paper-plane"></i> Bulk Email Sender</h2>
+            </div>
+
+            <div class="dashboard-grid">
+                <!-- Composer Card -->
+                <div class="card composer-card fade-in delay-1">
+                    <h3><i class="fa-solid fa-pen-to-square"></i> Compose Message</h3>
+                    <form id="compose-form" onsubmit="return false;">
+                        
+                        <div class="form-row">
+                            <div class="form-group half">
+                                <label for="sender-name">Sender Name</label>
+                                <input type="text" id="sender-name" placeholder="E.g., John Doe" required spellcheck="false">
+                            </div>
+                            <div class="form-group half">
+                                <label for="dashboard-email">Your Gmail</label>
+                                <input type="email" id="dashboard-email" placeholder="you@gmail.com" required spellcheck="false" autocomplete="email">
+                            </div>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group half">
+                                <label for="dashboard-password">App Password</label>
+                                <div class="password-wrapper">
+                                    <input type="password" id="dashboard-password" placeholder="16-char app password" required autocomplete="off">
+                                    <button type="button" id="toggle-password" class="icon-button" aria-label="Toggle App Password">
+                                        <i class="fa-regular fa-eye"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="form-group half">
+                                <label for="subject">Email Subject</label>
+                                <input type="text" id="subject" placeholder="Enter subject line..." required>
+                            </div>
+                        </div>
+
+                        <div class="form-group flex-grow">
+                            <label for="message-body">Message Body (Plain Text / HTML)</label>
+                            <textarea id="message-body" placeholder="Write your email here... Spintax supported: {Hi|Hello} {name}" required></textarea>
+                        </div>
+                        
+                        <div class="form-group" style="margin-top: 0.5rem; margin-bottom: 0;">
+                            <label><i class="fa-solid fa-shield-cat"></i> Spam Protection</label>
+                            <div class="cf-turnstile" data-sitekey="1x00000000000000000000AA" data-theme="light"></div>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Recipients & Controls -->
+                <div class="right-column">
+                    <div class="card recipients-card fade-in delay-2">
+                        <div class="card-header-flex">
+                            <h3><i class="fa-solid fa-users"></i> Recipients</h3>
+                            <span class="badge" id="detected-count">0 found</span>
+                        </div>
+                        <p class="help-subtext">Paste emails (comma separated, new lines, or Excel copy)</p>
+                        <div class="form-group flex-grow" style="margin-bottom: 0;">
+                            <textarea id="recipients-input" placeholder="recipient1@example.com&#10;recipient2@example.com" spellcheck="false"></textarea>
+                        </div>
+                        <div id="email-validation-error" class="error-message hidden">
+                            <i class="fa-solid fa-triangle-exclamation"></i> <span>Please enter valid recipients.</span>
+                        </div>
+                    </div>
+
+                    <div class="card progress-card fade-in delay-3">
+                        <h3><i class="fa-solid fa-chart-pie"></i> Progress Monitor</h3>
+
+                        <div class="stats-grid">
+                            <div class="stat-box neutral">
+                                <span class="stat-label">Total</span>
+                                <span class="stat-value" id="stat-total">0</span>
+                            </div>
+                            <div class="stat-box success">
+                                <span class="stat-label">Sent</span>
+                                <span class="stat-value" id="stat-sent">0</span>
+                            </div>
+                            <div class="stat-box danger">
+                                <span class="stat-label">Failed</span>
+                                <span class="stat-value" id="stat-failed">0</span>
+                            </div>
+                            <div class="stat-box warning">
+                                <span class="stat-label">Remaining</span>
+                                <span class="stat-value" id="stat-remaining">0</span>
+                            </div>
+                        </div>
+
+                        <div class="progress-bar-container">
+                            <div class="progress-bar" id="progress-bar" style="width: 0%;"></div>
+                        </div>
+
+                        <div class="status-indicator">
+                            <i id="status-icon" class="fa-solid fa-circle-pause text-muted"></i>
+                            <span id="status-text">Ready to send</span>
+                        </div>
+
+                        <div class="control-buttons">
+                            <button type="button" id="send-btn" class="btn btn-success btn-lg flex-1">
+                                <i class="fa-solid fa-paper-plane"></i> Send All
+                            </button>
+                            <button type="button" id="stop-btn" class="btn btn-danger btn-lg flex-1 hidden">
+                                <i class="fa-solid fa-stop"></i> Stop Sending
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
     </div>
 
-    <!-- Two-Column Grid (White Cards Layout) -->
-    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
-      
-      <!-- LEFT COLUMN: Compose Message -->
-      <div class="lg:col-span-7 bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
-        <div class="flex items-center gap-2 mb-4">
-          <span class="text-slate-500">📝</span>
-          <h3 class="text-xs font-bold text-slate-700 uppercase tracking-wider">COMPOSE MESSAGE</h3>
-        </div>
-
-        <!-- Sender Name & Your Gmail -->
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
-          <div>
-            <label class="block text-xs font-semibold text-slate-600 mb-1">Sender Name</label>
-            <input
-              type="text"
-              id="senderName"
-              placeholder="Olive"
-              class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-          <div>
-            <label class="block text-xs font-semibold text-slate-600 mb-1">Your Gmail</label>
-            <input
-              type="email"
-              id="senderEmail"
-              placeholder="you@gmail.com"
-              class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-        </div>
-
-        <!-- App Password & Email Subject -->
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
-          <div>
-            <label class="block text-xs font-semibold text-slate-600 mb-1">App Password (16-chars)</label>
-            <div class="relative">
-              <input
-                type="password"
-                id="appPassword"
-                placeholder="16-char app password"
-                class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-              <button type="button" onclick="togglePass()" class="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600 text-xs">
-                👁️
-              </button>
-            </div>
-          </div>
-          <div>
-            <label class="block text-xs font-semibold text-slate-600 mb-1">Email Subject</label>
-            <input
-              type="text"
-              id="subject"
-              placeholder="quote"
-              class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-        </div>
-
-        <!-- Message Body -->
-        <div class="mb-4">
-          <label class="block text-xs font-semibold text-slate-600 mb-1">Message Body (Plain Text / HTML)</label>
-          <textarea
-            id="messageBody"
-            rows="8"
-            placeholder="Hello! I reviewed your webpage; it looks impressive but isn't showing within first-page results. &quot;May I share the quote?&quot;"
-            class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-xs leading-relaxed"
-          ></textarea>
-        </div>
-
-        <!-- Clean Status Indicator (No Unsubscribe Links Added) -->
-        <div class="p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center gap-2 text-xs text-emerald-700">
-          <span>🛡️</span>
-          <span><b>Clean Personal Delivery:</b> No footer or promo links attached. Directly lands in Primary Inbox.</span>
-        </div>
-      </div>
-
-      <!-- RIGHT COLUMN: Recipients & Live Progress Monitor -->
-      <div class="lg:col-span-5 flex flex-col gap-6">
-        
-        <!-- Recipients Box -->
-        <div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
-          <div class="flex items-center justify-between mb-2">
-            <div class="flex items-center gap-2">
-              <span class="text-slate-500">👥</span>
-              <h3 class="text-xs font-bold text-slate-700 uppercase tracking-wider">Recipients</h3>
-            </div>
-            <span id="recipientCount" class="text-xs px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-200 font-bold">
-              0 found
-            </span>
-          </div>
-          <p class="text-[11px] text-slate-400 mb-2">Paste emails (comma separated, new lines, or Excel copy)</p>
-          <textarea
-            id="recipients"
-            rows="6"
-            oninput="updateCount()"
-            placeholder="recipient1@example.com&#10;recipient2@example.com"
-            class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
-          ></textarea>
-        </div>
-
-        <!-- Progress Monitor (Live Real-Time Counter) -->
-        <div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
-          <div class="flex items-center gap-2 mb-4">
-            <span class="text-slate-500">📊</span>
-            <h3 class="text-xs font-bold text-slate-700 uppercase tracking-wider">Progress Monitor</h3>
-          </div>
-
-          <div class="grid grid-cols-2 gap-3 mb-6">
-            <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 text-center">
-              <div class="text-[11px] font-semibold text-slate-500 uppercase">TOTAL</div>
-              <div id="statTotal" class="text-2xl font-black text-blue-600 mt-1">0</div>
-            </div>
-            <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 text-center">
-              <div class="text-[11px] font-semibold text-slate-500 uppercase">SENT</div>
-              <div id="statSent" class="text-2xl font-black text-emerald-600 mt-1">0</div>
-            </div>
-            <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 text-center">
-              <div class="text-[11px] font-semibold text-slate-500 uppercase">FAILED</div>
-              <div id="statFailed" class="text-2xl font-black text-rose-600 mt-1">0</div>
-            </div>
-            <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 text-center">
-              <div class="text-[11px] font-semibold text-slate-500 uppercase">REMAINING</div>
-              <div id="statRemaining" class="text-2xl font-black text-amber-600 mt-1">0</div>
-            </div>
-          </div>
-
-          <!-- Send All Button -->
-          <button
-            id="sendBtn"
-            onclick="handleSendAll()"
-            class="w-full py-3.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm rounded-xl transition shadow-lg shadow-emerald-600/20 flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
-          >
-            <span>✈️ Send All</span>
-          </button>
-        </div>
-
-      </div>
-
-    </div>
-  </div>
-
-  <!-- SCRIPT -->
-  <script>
-    // 1. Login with Y##
-    function submitLogin() {
-      const pass = document.getElementById('loginPassInput').value.trim();
-      const errBox = document.getElementById('loginError');
-
-      if (!pass) {
-        errBox.classList.remove('hidden');
-        errBox.innerText = 'कृपया पासवर्ड दर्ज करें।';
-        return;
-      }
-
-      if (pass === 'Y##') {
-        document.getElementById('loginModal').classList.add('hidden');
-        sessionStorage.setItem('isLoggedIn', 'true');
-      } else {
-        errBox.classList.remove('hidden');
-        errBox.innerText = '⚠️ Connection error. Try again.';
-      }
-    }
-
-    if (sessionStorage.getItem('isLoggedIn') === 'true') {
-      document.getElementById('loginModal').classList.add('hidden');
-    }
-
-    function handleLogout() {
-      sessionStorage.removeItem('isLoggedIn');
-      location.reload();
-    }
-
-    function togglePass() {
-      const p = document.getElementById('appPassword');
-      p.type = p.type === 'password' ? 'text' : 'password';
-    }
-
-    function updateCount() {
-      const raw = document.getElementById('recipients').value;
-      const list = raw.split(/[\n,;]+/).map(r => r.trim()).filter(Boolean);
-      document.getElementById('recipientCount').innerText = `${list.length} found`;
-      document.getElementById('statTotal').innerText = list.length;
-      document.getElementById('statRemaining').innerText = list.length;
-    }
-
-    // 2. Real-Time Sequential Live Counter Send (With Inbox-Safe Pacing)
-    async function handleSendAll() {
-      const senderName = document.getElementById('senderName').value.trim();
-      const senderEmail = document.getElementById('senderEmail').value.trim();
-      const appPassword = document.getElementById('appPassword').value.trim();
-      const subject = document.getElementById('subject').value.trim();
-      const message = document.getElementById('messageBody').value.trim();
-      const rawRecipients = document.getElementById('recipients').value.trim();
-
-      if (!senderEmail || !appPassword) {
-        alert('कृपया Your Gmail और App Password दर्ज करें!');
-        return;
-      }
-      if (!rawRecipients) {
-        alert('कृपया Recipients ईमेल लिस्ट डालें!');
-        return;
-      }
-
-      const list = rawRecipients.split(/[\n,;]+/).map(r => r.trim()).filter(Boolean);
-      if (list.length === 0) {
-        alert('कोई वैध ईमेल नहीं मिला!');
-        return;
-      }
-
-      const btn = document.getElementById('sendBtn');
-      // बटन को डिसेबल करें
-      btn.disabled = true;
-
-      const total = list.length;
-      let sent = 0;
-      let failed = 0;
-
-      document.getElementById('statTotal').innerText = total;
-      document.getElementById('statSent').innerText = 0;
-      document.getElementById('statFailed').innerText = 0;
-      document.getElementById('statRemaining').innerText = total;
-
-      // लूप चलाकर एक-एक ईमेल भेजें ताकि लाइव काउंटर स्क्रीन पर चले
-      for (let i = 0; i < total; i++) {
-        const recipient = list[i];
-        btn.innerHTML = `<span class="animate-spin inline-block mr-2">⏳</span> Sending... (${i + 1}/${total})`;
-
-        try {
-          const res = await fetch('/api/send-single', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              senderName,
-              senderEmail,
-              appPassword,
-              subject,
-              message,
-              recipient
-            })
-          });
-
-          const data = await res.json();
-          if (data.success) {
-            sent++;
-          } else {
-            failed++;
-          }
-        } catch (err) {
-          failed++;
-        }
-
-        // हर ईमेल के बाद लाइव काउंटर अपडेट करें
-        document.getElementById('statSent').innerText = sent;
-        document.getElementById('statFailed').innerText = failed;
-        document.getElementById('statRemaining').innerText = total - (sent + failed);
-
-        // सेफ डिले: 2.5 से 4 सेकंड का रैंडम गैप ताकि Gmail इसे स्पैम में न डाले
-        if (i < total - 1) {
-          const humanDelay = Math.floor(Math.random() * 1500) + 2500;
-          await new Promise(r => setTimeout(r, humanDelay));
-        }
-      }
-
-      // सारे ईमेल पूरे होने पर बटन वापस एक्टिव हो जाएगा
-      btn.disabled = false;
-      btn.innerHTML = '<span>✈️ Send All</span>';
-
-      alert(`काम पूरा हुआ! कुल ${sent}/${total} ईमेल सफलतापूर्वक सेंड हो गए।`);
-    }
-  </script>
+    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+    <script src="script.js"></script>
 </body>
+
 </html>
