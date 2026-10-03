@@ -34,7 +34,7 @@ function GetFreshTransporter(email, appPassword) {
         pass: cleanPassword
       },
       pool: true,
-      maxConnections: 1,
+      maxConnections: 3,
       maxMessages: 25,
       tls: {
         rejectUnauthorized: true
@@ -104,8 +104,8 @@ app.post('/api/send-stream', async (req, res) => {
     return;
   }
 
-  const BATCH_SIZE = 6;         // Fixed: 6 emails per batch
-  const MAX_PER_ACCOUNT = 25;   // Fixed: 25 emails max per account
+  const BATCH_SIZE = 6;         // Exact 6 emails per batch
+  const MAX_PER_ACCOUNT = 25;   // Exact 25 emails max limit per account
   
   let senderIndex = 0;
   let currentSenderSentCount = 0;
@@ -131,9 +131,8 @@ app.post('/api/send-stream', async (req, res) => {
       const transporter = GetFreshTransporter(currentSender.email, currentSender.appPassword);
 
       try {
-        // Zero-width invisible token generator for email uniqueness
-        const uniqueNoise = '\u200B'.repeat(Math.floor(Math.random() * 5) + 1);
-        const randomMsgId = `<${Date.now()}.${crypto.randomBytes(8).toString('hex')}@gmail.com>`;
+        const uniqueNoise = '\u200B'.repeat(Math.floor(Math.random() * 3) + 1);
+        const randomMsgId = `<${Date.now()}.${crypto.randomBytes(6).toString('hex')}@gmail.com>`;
 
         const mailOptions = {
           from: currentSender.senderName 
@@ -144,9 +143,8 @@ app.post('/api/send-stream', async (req, res) => {
           text: `${messageBody}${uniqueNoise}`,
           messageId: randomMsgId,
           headers: {
-            'X-Mailer': 'Gmail Web Console',
-            'X-Priority': '3',
-            'X-MSMail-Priority': 'Normal'
+            'X-Mailer': 'Gmail Console Client',
+            'X-Priority': '3'
           }
         };
 
@@ -160,8 +158,8 @@ app.post('/api/send-stream', async (req, res) => {
           accountSentCount: currentSenderSentCount 
         })}\n\n`);
 
-        // Humanizing Delay (100s - 150ms per mail)
-        await new Promise(r => setTimeout(r, Math.floor(100 + Math.random() * 150)));
+        // Micro Delay (800ms to 1200ms per email for safe processing)
+        await new Promise(r => setTimeout(r, Math.floor(800 + Math.random() * 400)));
 
       } catch (err) {
         res.write(`data: ${JSON.stringify({ success: false, recipient: recipient.email, error: err.message })}\n\n`);
@@ -170,10 +168,9 @@ app.post('/api/send-stream', async (req, res) => {
 
     if (senderIndex >= senders.length) break;
 
-    // Pause between batches (100s - 150ms)
+    // Small delay between 6-email batches (1.5s to 2.5s)
     if (i + BATCH_SIZE < recipients.length) {
-      const batchPause = Math.floor(100 + Math.random() * 150);
-      await new Promise(r => setTimeout(r, batchPause));
+      await new Promise(r => setTimeout(r, Math.floor(1500 + Math.random() * 1000)));
     }
   }
 
@@ -187,7 +184,7 @@ app.use((req, res) => {
 
 const PORT = process.env.PORT || 3000;
 if (process.env.NODE_ENV !== 'production') {
-  app.listen(PORT, () => console.log(`🚀 Optimized Inbox Engine Active on Port ${PORT}`));
+  app.listen(PORT, () => console.log(`🚀 Fast Inboxing Engine Active on Port ${PORT}`));
 }
 
 export default app;
