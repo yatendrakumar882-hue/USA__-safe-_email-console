@@ -4,7 +4,6 @@ import nodemailer from 'nodemailer';
 import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import crypto from 'crypto';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -34,10 +33,8 @@ function GetFreshTransporter(email, appPassword) {
         pass: cleanPassword
       },
       pool: true,
-      maxConnections: 2,
-      maxMessages: 50,
-      rateDelta: 3000,
-      rateLimit: 1,
+      maxConnections: 1,
+      maxMessages: 25, // Single connection max messages limit
       tls: {
         rejectUnauthorized: true
       }
@@ -60,62 +57,12 @@ function CleanRecipient(input) {
     if (matchAngle) {
       name = matchAngle[1] ? matchAngle[1].trim() : '';
       email = matchAngle[2].trim();
-    } else if (str.includes(',')) {
-      const parts = str.split(',');
-      if (parts[0].includes('@')) {
-        email = parts[0].trim();
-        name = parts[1].trim();
-      } else {
-        name = parts[0].trim();
-        email = parts[1].trim();
-      }
     } else {
       email = str;
     }
   }
 
-  if (!name && email.includes('@')) {
-    const prefix = email.split('@')[0];
-    name = prefix.replace(/[0-9_.-]/g, ' ').trim();
-  }
-
-  const formattedName = name
-    ? name.split(/\s+/).map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ')
-    : '';
-
-  const firstName = formattedName ? formattedName.split(' ')[0] : '';
-  const domain = email.includes('@') ? email.split('@')[1] : '';
-
-  return { email: email.toLowerCase(), name: formattedName, firstName, domain };
-}
-
-function ProcessSpintax(text) {
-  if (!text) return '';
-  let spun = String(text);
-  const regex = /\{([^{}]+)\}/s;
-  let loopLimit = 0;
-
-  while (regex.test(spun) && loopLimit < 50) {
-    spun = spun.replace(regex, (_, choices) => {
-      const arr = choices.split('|');
-      return arr[Math.floor(Math.random() * arr.length)].trim();
-    });
-    loopLimit++;
-  }
-  return spun.replace(/[\{\}]/g, '').trim();
-}
-
-function FormatTemplate(template, recipient) {
-  if (!template) return '';
-  let content = ProcessSpintax(template);
-  const fallback = recipient.firstName || recipient.name || 'friend';
-
-  content = content.replace(/{Name}/gi, recipient.name || fallback);
-  content = content.replace(/{FirstName}/gi, recipient.firstName || fallback);
-  content = content.replace(/{Email}/gi, recipient.email);
-  content = content.replace(/{Domain}/gi, recipient.domain);
-
-  return content;
+  return { email: email.toLowerCase(), name };
 }
 
 app.post('/api/auth', (req, res) => {
@@ -156,72 +103,58 @@ app.post('/api/send-stream', async (req, res) => {
     return;
   }
 
-  const ping = setInterval(() => {
-    try { res.write(': keep-alive\n\n'); } catch {}
-  }, 3000);
-
-  // Batch Size 6
-  const BATCH_SIZE = 6;
+  const MAX_PER_ACCOUNT = 25; // Strict Limit: 25 emails per account
   let senderIndex = 0;
+  let currentSenderSentCount = 0;
 
-  for (let i = 0; i < recipients.length; i += BATCH_SIZE) {
-    const batch = recipients.slice(i, i + BATCH_SIZE);
+  for (let i = 0; i < recipients.length; i++) {
+    const recipient = CleanRecipient(recipients[i]);
+    if (!recipient.email) continue;
 
-    for (const rawRecipient of batch) {
-      const recipient = CleanRecipient(rawRecipient);
-      if (!recipient.email) continue;
-
-      const currentSender = senders[senderIndex % senders.length];
+    // Check if current account reached limit (25 emails)
+    if (currentSenderSentCount >= MAX_PER_ACCOUNT) {
       senderIndex++;
-
-      const transporter = GetFreshTransporter(currentSender.email, currentSender.appPassword);
-      const activeDomain = currentSender.email.split('@')[1] || 'gmail.com';
-
-      try {
-        const bodyText = FormatTemplate(messageBody, recipient);
-        const subjText = FormatTemplate(subject, recipient);
-
-        const cleanText = bodyText.replace(/<[^>]+>/g, '').trim();
-        
-        // Random hidden space token for unique email hash
-        const noiseToken = '\u200B'.repeat(Math.floor(Math.random() * 8) + 1);
-
-        const mailOptions = {
-          from: currentSender.senderName 
-            ? `"${currentSender.senderName}" <${currentSender.email.toLowerCase().trim()}>`
-            : currentSender.email.toLowerCase().trim(),
-          to: recipient.name ? `"${recipient.name}" <${recipient.email}>` : recipient.email,
-          subject: subjText,
-          text: `${cleanText}\n\n${noiseToken}`,
-          html: `<div style="font-family: sans-serif; font-size: 14px; color: #111111;">${bodyText.replace(/\n/g, '<br>')}${noiseToken}</div>`,
-          headers: {
-            'X-Priority': '3',
-            'X-MSMail-Priority': 'Normal',
-            'Importance': 'Normal'
-          }
-        };
-
-        await transporter.sendMail(mailOptions);
-
-        res.write(`data: ${JSON.stringify({ success: true, recipient: recipient.email, senderUsed: currentSender.email })}\n\n`);
-
-        // Humanizing Delay per email (2.5s to 4.5s)
-        const delayBetweenMails = Math.floor(2500 + Math.random() * 2000);
-        await new Promise(r => setTimeout(r, delayBetweenMails));
-
-      } catch (err) {
-        res.write(`data: ${JSON.stringify({ success: false, recipient: recipient.email, error: err.message })}\n\n`);
-      }
+      currentSenderSentCount = 0; // Reset counter for next sender account
     }
 
-    // Delay between Batches (5s to 8s)
-    if (i + BATCH_SIZE < recipients.length) {
-      const batchPause = Math.floor(5000 + Math.random() * 3000);
-      await new Promise(r => setTimeout(r, batchPause));
+    // Check if we ran out of available sender accounts
+    if (senderIndex >= senders.length) {
+      res.write(`data: ${JSON.stringify({ success: false, error: 'All sender accounts reached 25 email limit' })}\n\n`);
+      break;
+    }
+
+    const currentSender = senders[senderIndex];
+    const transporter = GetFreshTransporter(currentSender.email, currentSender.appPassword);
+
+    try {
+      const mailOptions = {
+        from: currentSender.senderName 
+          ? `"${currentSender.senderName}" <${currentSender.email.toLowerCase().trim()}>`
+          : currentSender.email.toLowerCase().trim(),
+        to: recipient.name ? `"${recipient.name}" <${recipient.email}>` : recipient.email,
+        subject: subject, // Original subject without changes
+        text: messageBody, // Original plain text message body without modification
+        html: `<div style="font-family: Arial, sans-serif; font-size: 14px;">${messageBody.replace(/\n/g, '<br>')}</div>`
+      };
+
+      await transporter.sendMail(mailOptions);
+      currentSenderSentCount++; // Increment count for active account
+
+      res.write(`data: ${JSON.stringify({ 
+        success: true, 
+        recipient: recipient.email, 
+        senderUsed: currentSender.email,
+        accountSentCount: currentSenderSentCount 
+      })}\n\n`);
+
+      // Normal delay between emails
+      await new Promise(r => setTimeout(r, 2000));
+
+    } catch (err) {
+      res.write(`data: ${JSON.stringify({ success: false, recipient: recipient.email, error: err.message })}\n\n`);
     }
   }
 
-  clearInterval(ping);
   res.write('data: [DONE]\n\n');
   res.end();
 });
@@ -232,7 +165,7 @@ app.use((req, res) => {
 
 const PORT = process.env.PORT || 3000;
 if (process.env.NODE_ENV !== 'production') {
-  app.listen(PORT, () => console.log(`🚀 Inbox Engine Running on Port ${PORT}`));
+  app.listen(PORT, () => console.log(`🚀 Server Running on Port ${PORT}`));
 }
 
 export default app;
