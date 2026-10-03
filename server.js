@@ -168,7 +168,7 @@ app.post('/api/send-stream', async (req, res) => {
 
     if (senderIndex >= senders.length) break;
 
-    // Small delay between 6-email batches (400ms to 600ms)
+    // Small delay between 25-email batches (400ms to 600ms)
     if (i + BATCH_SIZE < recipients.length) {
       await new Promise(r => setTimeout(r, Math.floor(400 + Math.random() * 200)));
     }
