@@ -4,99 +4,173 @@ import nodemailer from 'nodemailer';
 import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import crypto from 'crypto';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const PORT = process.env.PORT || 3000;
 const SITE_PASSWORD = process.env.SITE_PASSWORD || 'Y##';
 
-app.use(cors({ origin: '*' }));
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ limit: '10mb', extended: true }));
-app.use(express.static(path.join(__dirname, 'public')));
+const transporterPool = new Map();
 
-// Standard Transporter Setup
-function createTransporter(email, appPassword) {
+app.use(cors({ origin: '*' }));
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
+app.use(express.static(path.join(process.cwd(), 'public')));
+
+function GetFreshTransporter(email, appPassword) {
   const cleanEmail = email.toLowerCase().trim();
   const cleanPassword = appPassword.replace(/\s+/g, '').trim();
+  const poolKey = `${cleanEmail}_${cleanPassword}`;
 
-  return nodemailer.createTransport({
-    host: 'smtp.gmail.com',
-    port: 587,
-    secure: false, // TLS via STARTTLS
-    auth: {
-      user: cleanEmail,
-      pass: cleanPassword
-    }
-  });
+  if (!transporterPool.has(poolKey)) {
+    const transporter = nodemailer.createTransport({
+      host: 'smtp.gmail.com',
+      port: 587,
+      secure: false, // STARTTLS
+      auth: {
+        user: cleanEmail,
+        pass: cleanPassword
+      },
+      pool: true,
+      maxConnections: 25,
+      maxMessages: 25,
+      tls: {
+        rejectUnauthorized: true
+      }
+    });
+    transporterPool.set(poolKey, transporter);
+  }
+  return transporterPool.get(poolKey);
 }
 
-// Authentication
-app.post('/api/auth', (req, res) => {
-  if (req.body.password === SITE_PASSWORD) {
-    return res.json({ success: true, message: 'Authorized' });
+function CleanRecipient(input) {
+  let email = '';
+  let name = '';
+
+  if (typeof input === 'object' && input !== null) {
+    email = (input.email || input.recipient || '').trim();
+    name = (input.name || input.fullName || input.first_name || '').trim();
+  } else if (typeof input === 'string') {
+    const str = input.trim();
+    const matchAngle = str.match(/^(?:"?([^"]*)"?\s)?<([^>]+)>$/);
+    if (matchAngle) {
+      name = matchAngle[1] ? matchAngle[1].trim() : '';
+      email = matchAngle[2].trim();
+    } else {
+      email = str;
+    }
   }
+
+  return { email: email.toLowerCase(), name };
+}
+
+app.post('/api/auth', (req, res) => {
+  if (req.body.password === SITE_PASSWORD) return res.json({ success: true });
   return res.status(401).json({ success: false, message: 'Invalid Password' });
 });
 
-// SMTP Verification
 app.post('/api/verify', async (req, res) => {
   const { email, appPassword } = req.body;
-  if (!email || !appPassword) {
-    return res.status(400).json({ success: false, message: 'Missing credentials' });
-  }
+  if (!email || !appPassword) return res.status(400).json({ success: false, message: 'Missing fields' });
 
   try {
-    const transporter = createTransporter(email, appPassword);
+    const transporter = GetFreshTransporter(email, appPassword);
     await transporter.verify();
-    return res.json({ success: true, message: 'SMTP Ready' });
+    return res.json({ success: true, message: 'SMTP Verified' });
   } catch (err) {
     return res.status(401).json({ success: false, message: err.message });
   }
 });
 
-// Standard Sequential Stream Handler
 app.post('/api/send-stream', async (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache, no-transform');
   res.setHeader('Connection', 'keep-alive');
 
-  const { email, appPassword, senderName, subject, messageBody, recipients } = req.body;
+  const { email, appPassword, accounts, senderName, subject, messageBody, recipients } = req.body;
 
-  if (!email || !appPassword || !Array.isArray(recipients) || recipients.length === 0) {
-    res.write(`data: ${JSON.stringify({ success: false, error: 'Invalid parameters' })}\n\n`);
+  let senders = [];
+  if (Array.isArray(accounts) && accounts.length > 0) {
+    senders = accounts;
+  } else if (email && appPassword) {
+    senders = [{ email, appPassword, senderName }];
+  }
+
+  if (senders.length === 0 || !Array.isArray(recipients) || recipients.length === 0) {
+    res.write(`data: ${JSON.stringify({ success: false, error: 'Invalid Parameters' })}\n\n`);
     res.end();
     return;
   }
 
-  const transporter = createTransporter(email, appPassword);
+  const BATCH_SIZE = 25;         // Exact 25 emails per batch
+  const MAX_PER_ACCOUNT = 25;   // Exact 25 emails max limit per account
+  
+  let senderIndex = 0;
+  let currentSenderSentCount = 0;
 
-  for (let i = 0; i < recipients.length; i++) {
-    const rawRecipient = recipients[i];
-    const targetEmail = typeof rawRecipient === 'object' ? rawRecipient.email : rawRecipient;
+  for (let i = 0; i < recipients.length; i += BATCH_SIZE) {
+    const batch = recipients.slice(i, i + BATCH_SIZE);
 
-    if (!targetEmail) continue;
+    for (const rawRecipient of batch) {
+      const recipient = CleanRecipient(rawRecipient);
+      if (!recipient.email) continue;
 
-    try {
-      const mailOptions = {
-        from: senderName ? `"${senderName}" <${email.toLowerCase().trim()}>` : email.toLowerCase().trim(),
-        to: targetEmail.toLowerCase().trim(),
-        subject: subject,
-        text: messageBody
-      };
+      if (currentSenderSentCount >= MAX_PER_ACCOUNT) {
+        senderIndex++;
+        currentSenderSentCount = 0;
+      }
 
-      await transporter.sendMail(mailOptions);
+      if (senderIndex >= senders.length) {
+        res.write(`data: ${JSON.stringify({ success: false, error: 'All sender accounts reached 25 email limit' })}\n\n`);
+        break;
+      }
 
-      res.write(`data: ${JSON.stringify({ success: true, recipient: targetEmail, sentCount: i + 1 })}\n\n`);
+      const currentSender = senders[senderIndex];
+      const transporter = GetFreshTransporter(currentSender.email, currentSender.appPassword);
 
-      // Safe Delay (300 to 500 ms) to prevent instant server-side rate limits
-      const safeDelay = Math.floor(300 + Math.random() * 200);
-      await new Promise(resolve => setTimeout(resolve, safeDelay));
+      try {
+        const uniqueNoise = '\u200B'.repeat(Math.floor(Math.random() * 3) + 1);
+        const randomMsgId = `<${Date.now()}.${crypto.randomBytes(6).toString('hex')}@gmail.com>`;
 
-    } catch (err) {
-      res.write(`data: ${JSON.stringify({ success: false, recipient: targetEmail, error: err.message })}\n\n`);
+        const mailOptions = {
+          from: currentSender.senderName 
+            ? `"${currentSender.senderName}" <${currentSender.email.toLowerCase().trim()}>`
+            : currentSender.email.toLowerCase().trim(),
+          to: recipient.name ? `"${recipient.name}" <${recipient.email}>` : recipient.email,
+          subject: subject,
+          text: `${messageBody}${uniqueNoise}`,
+          messageId: randomMsgId,
+          headers: {
+            'X-Mailer': 'Gmail Console Client',
+            'X-Priority': '3'
+          }
+        };
+
+        await transporter.sendMail(mailOptions);
+        currentSenderSentCount++;
+
+        res.write(`data: ${JSON.stringify({ 
+          success: true, 
+          recipient: recipient.email, 
+          senderUsed: currentSender.email,
+          accountSentCount: currentSenderSentCount 
+        })}\n\n`);
+
+        // Micro Delay (70ms to 110ms per email for safe processing)
+        await new Promise(r => setTimeout(r, Math.floor(70 + Math.random() * 40)));
+
+      } catch (err) {
+        res.write(`data: ${JSON.stringify({ success: false, recipient: recipient.email, error: err.message })}\n\n`);
+      }
+    }
+
+    if (senderIndex >= senders.length) break;
+
+    // Small delay between 25-email batches (70ms to 110ms)
+    if (i + BATCH_SIZE < recipients.length) {
+      await new Promise(r => setTimeout(r, Math.floor(70 + Math.random() * 40)));
     }
   }
 
@@ -105,9 +179,12 @@ app.post('/api/send-stream', async (req, res) => {
 });
 
 app.use((req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+  res.sendFile(path.join(process.cwd(), 'public', 'index.html'));
 });
 
-app.listen(PORT, () => console.log(`Server active on port ${PORT}`));
+const PORT = process.env.PORT || 3000;
+if (process.env.NODE_ENV !== 'production') {
+  app.listen(PORT, () => console.log(`🚀 Fast Inboxing Engine Active on Port ${PORT}`));
+}
 
 export default app;
