@@ -12,7 +12,7 @@
 </head>
 <body class="bg-slate-50 text-slate-800 min-h-screen">
 
-  <!-- ================= 1. LOGIN OVERLAY (Password: Y##) ================= -->
+  <!-- ================= 1. LOGIN MODAL (Password: Y##) ================= -->
   <div id="loginModal" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
     <div class="bg-white border border-slate-200 rounded-2xl w-full max-w-sm p-8 text-center shadow-2xl">
       <div class="w-14 h-14 mx-auto rounded-full bg-blue-600 flex items-center justify-center text-white text-2xl mb-4 shadow-lg shadow-blue-500/20">
@@ -66,7 +66,7 @@
       <h2 class="text-lg font-bold text-slate-900">Bulk Email Sender</h2>
     </div>
 
-    <!-- Two-Column Grid (White Cards & Exact Layout) -->
+    <!-- Two-Column Grid (White Cards Layout) -->
     <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
       
       <!-- LEFT COLUMN: Compose Message -->
@@ -252,7 +252,7 @@
       document.getElementById('statRemaining').innerText = list.length;
     }
 
-    // 2. Real-Time Sequential Live Counter Send
+    // 2. Real-Time Sequential Live Counter Send (With Inbox-Safe Pacing)
     async function handleSendAll() {
       const senderName = document.getElementById('senderName').value.trim();
       const senderEmail = document.getElementById('senderEmail').value.trim();
@@ -323,8 +323,11 @@
         document.getElementById('statFailed').innerText = failed;
         document.getElementById('statRemaining').innerText = total - (sent + failed);
 
-        // छोटा सा विराम (50ms) ताकि कनेक्शन स्मूथ रहे
-        await new Promise(r => setTimeout(r, 50));
+        // सेफ डिले: 2.5 से 4 सेकंड का रैंडम गैप ताकि Gmail इसे स्पैम में न डाले
+        if (i < total - 1) {
+          const humanDelay = Math.floor(Math.random() * 1500) + 2500;
+          await new Promise(r => setTimeout(r, humanDelay));
+        }
       }
 
       // सारे ईमेल पूरे होने पर बटन वापस एक्टिव हो जाएगा
