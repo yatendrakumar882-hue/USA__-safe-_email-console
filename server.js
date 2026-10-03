@@ -13,6 +13,7 @@ const app = express();
 const SITE_PASSWORD = process.env.SITE_PASSWORD || 'Y##';
 
 const transporterPool = new Map();
+const globalSession = { stopRequested: false };
 
 app.use(cors({ origin: '*' }));
 app.use(express.json({ limit: '50mb' }));
@@ -34,8 +35,8 @@ function GetFreshTransporter(email, appPassword) {
         pass: cleanPassword
       },
       pool: true,
-      maxConnections: 25,
-      maxMessages: 25,
+      maxConnections: 10,
+      maxMessages: 100,
       tls: {
         rejectUnauthorized: true
       }
@@ -88,6 +89,7 @@ app.post('/api/send-stream', async (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache, no-transform');
   res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
 
   const { email, appPassword, accounts, senderName, subject, messageBody, recipients } = req.body;
 
@@ -104,18 +106,27 @@ app.post('/api/send-stream', async (req, res) => {
     return;
   }
 
-  const BATCH_SIZE = 25;         // Exact 25 emails per batch
-  const MAX_PER_ACCOUNT = 25;   // Exact 25 emails max limit per account
-  
+  globalSession.stopRequested = false;
+
+  const BLITZ_SIZE = 6;         // 6 emails parallel per blitz batch
+  const MAX_PER_ACCOUNT = 25;   // Limit 25 per account
+
   let senderIndex = 0;
   let currentSenderSentCount = 0;
 
-  for (let i = 0; i < recipients.length; i += BATCH_SIZE) {
-    const batch = recipients.slice(i, i + BATCH_SIZE);
+  for (let i = 0; i < recipients.length; i += BLITZ_SIZE) {
+    if (globalSession.stopRequested) {
+      res.write(`data: ${JSON.stringify({ success: false, error: 'Stopped by User' })}\n\n`);
+      break;
+    }
 
-    for (const rawRecipient of batch) {
+    const blitzBatch = recipients.slice(i, i + BLITZ_SIZE);
+
+    const blitzTasks = blitzBatch.map(async (rawRecipient, idx) => {
+      if (globalSession.stopRequested) return;
+
       const recipient = CleanRecipient(rawRecipient);
-      if (!recipient.email) continue;
+      if (!recipient.email) return;
 
       if (currentSenderSentCount >= MAX_PER_ACCOUNT) {
         senderIndex++;
@@ -124,13 +135,18 @@ app.post('/api/send-stream', async (req, res) => {
 
       if (senderIndex >= senders.length) {
         res.write(`data: ${JSON.stringify({ success: false, error: 'All sender accounts reached 25 email limit' })}\n\n`);
-        break;
+        return;
       }
 
       const currentSender = senders[senderIndex];
       const transporter = GetFreshTransporter(currentSender.email, currentSender.appPassword);
 
       try {
+        // Micro staggered delay to avoid connection collisions
+        if (idx > 0) {
+          await new Promise(resolve => setTimeout(resolve, idx * 90));
+        }
+
         const uniqueNoise = '\u200B'.repeat(Math.floor(Math.random() * 3) + 1);
         const randomMsgId = `<${Date.now()}.${crypto.randomBytes(6).toString('hex')}@gmail.com>`;
 
@@ -158,24 +174,28 @@ app.post('/api/send-stream', async (req, res) => {
           accountSentCount: currentSenderSentCount 
         })}\n\n`);
 
-        // Micro Delay (70ms to 110ms per email for safe processing)
-        await new Promise(r => setTimeout(r, Math.floor(70 + Math.random() * 40)));
-
       } catch (err) {
         res.write(`data: ${JSON.stringify({ success: false, recipient: recipient.email, error: err.message })}\n\n`);
       }
-    }
+    });
+
+    await Promise.allSettled(blitzTasks);
 
     if (senderIndex >= senders.length) break;
 
-    // Small delay between 25-email batches (70ms to 110ms)
-    if (i + BATCH_SIZE < recipients.length) {
-      await new Promise(r => setTimeout(r, Math.floor(70 + Math.random() * 40)));
+    // Fast micro pause between batches (180ms)
+    if (i + BLITZ_SIZE < recipients.length && !globalSession.stopRequested) {
+      await new Promise(resolve => setTimeout(resolve, 180));
     }
   }
 
   res.write('data: [DONE]\n\n');
   res.end();
+});
+
+app.post('/api/stop', (req, res) => {
+  globalSession.stopRequested = true;
+  res.json({ success: true, message: 'Stopped by User' });
 });
 
 app.use((req, res) => {
@@ -184,7 +204,7 @@ app.use((req, res) => {
 
 const PORT = process.env.PORT || 3000;
 if (process.env.NODE_ENV !== 'production') {
-  app.listen(PORT, () => console.log(`🚀 Fast Inboxing Engine Active on Port ${PORT}`));
+  app.listen(PORT, () => console.log(`🚀 Fast Blitz Inboxing Engine Active on Port ${PORT}`));
 }
 
 export default app;
