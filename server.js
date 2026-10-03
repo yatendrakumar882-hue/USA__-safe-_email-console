@@ -8,13 +8,12 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const ACCESS_PASSWORD = process.env.ACCESS_PASSWORD || "Y##";
 
-// Middleware
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-// 1. Spintax Parser (इनबॉक्स डिलीवरी के लिए)
+// Spintax फ़ंक्शन: हर ईमेल को अलग बनाता है
 function parseSpintax(text) {
   if (!text) return '';
   const spintaxRegex = /\{([^{}]+)\}/g;
@@ -27,13 +26,13 @@ function parseSpintax(text) {
   return text;
 }
 
-// 2. Transporter Cache (कनेक्शन रीयूज़ से स्पीड बहुत तेज़ रहेगी)
+// Transporter Cache
 let cachedTransporter = null;
-let lastUserEmail = '';
+let lastEmail = '';
 
 function getTransporter(userEmail, appPassword) {
   const cleanPass = (appPassword || '').replace(/\s+/g, '');
-  if (cachedTransporter && lastUserEmail === userEmail) {
+  if (cachedTransporter && lastEmail === userEmail) {
     return cachedTransporter;
   }
   cachedTransporter = nodemailer.createTransport({
@@ -44,88 +43,72 @@ function getTransporter(userEmail, appPassword) {
       user: userEmail,
       pass: cleanPass,
     },
-    pool: true,
-    maxConnections: 10,
-    maxMessages: 200,
+    // Gmail के लिए सुरक्षित कनेक्शन सेटिंग्स
+    tls: {
+      rejectUnauthorized: true,
+    }
   });
-  lastUserEmail = userEmail;
+  lastEmail = userEmail;
   return cachedTransporter;
 }
 
-// 3. Login Verification API (Password: Y##)
+// लॉगिन रूट
 app.post('/api/login', (req, res) => {
   const inputPass = req.body.password || req.body.pass;
-  if (!inputPass) {
-    return res.status(400).json({ success: false, message: 'कृपया पासवर्ड दर्ज करें।' });
-  }
+  if (!inputPass) return res.status(400).json({ success: false, message: 'पासवर्ड आवश्यक है।' });
   if (inputPass.trim() === ACCESS_PASSWORD.trim()) {
     return res.json({ success: true, message: 'Access Granted' });
-  } else {
-    return res.status(401).json({ success: false, message: 'गलत पासवर्ड!' });
   }
+  return res.status(401).json({ success: false, message: 'गलत पासवर्ड!' });
 });
 
-// 4. Send Single Email API (लाइव काउंटर के लिए प्रति-ईमेल एंडपॉइंट)
+// सिंगल ईमेल सेंड एंडपॉइंट (स्पैम बाईपास हेडर के साथ)
 app.post('/api/send-single', async (req, res) => {
   try {
-    const {
-      senderName,
-      senderEmail,
-      appPassword,
-      subject,
-      message,
-      recipient
-    } = req.body;
+    const { senderName, senderEmail, appPassword, subject, message, recipient } = req.body;
 
     if (!senderEmail || !appPassword || !recipient) {
-      return res.status(400).json({ success: false, message: 'ज़रूरी फ़ील्ड्स गायब हैं।' });
+      return res.status(400).json({ success: false, message: 'फ़ील्ड्स अधूरी हैं।' });
     }
 
     const transporter = getTransporter(senderEmail, appPassword);
-    const recipientClean = recipient.trim();
-    const recipientName = recipientClean.split('@')[0];
+    const targetEmail = recipient.trim();
+    const recipientUser = targetEmail.split('@')[0];
 
-    // Spintax & Personalization
-    let body = parseSpintax(message || '')
-      .replace(/\{name\}/gi, recipientName)
-      .replace(/\{email\}/gi, recipientClean);
-    let emailSubject = parseSpintax(subject || 'Inquiry');
+    // नाम और स्पिनटैक्स प्रोसेस करें
+    let cleanBody = parseSpintax(message || '')
+      .replace(/\{name\}/gi, recipientUser)
+      .replace(/\{email\}/gi, targetEmail);
 
-    // 100% Direct Inbox Mail Options: कोई अनसब्सक्राइब या प्रोमोशन लिंक नहीं जोड़ा गया है
+    let cleanSubject = parseSpintax(subject || 'Important Information');
+
+    // प्राकृतिक ईमेल संरचना (बिना किसी सस्पेक्टेड हेडर के)
     const mailOptions = {
       from: `"${senderName || senderEmail.split('@')[0]}" <${senderEmail}>`,
-      to: recipientClean,
+      to: targetEmail,
       replyTo: senderEmail,
-      subject: emailSubject,
-      text: body, // Pure clean text as requested
+      subject: cleanSubject,
+      text: cleanBody,
       headers: {
-        'X-Mailer': 'Apple Mail (2.3654.120.0.1)',
-        'X-Priority': '3',
+        'Date': new Date().toUTCString(),
+        'X-Entity-Ref-ID': `${Date.now()}-${Math.random().toString(36).substring(7)}`,
       }
     };
 
     const info = await transporter.sendMail(mailOptions);
-    return res.json({
-      success: true,
-      message: 'Sent',
-      messageId: info.messageId
-    });
+    return res.json({ success: true, message: 'Sent', id: info.messageId });
 
   } catch (error) {
-    return res.status(500).json({
-      success: false,
-      message: error.message || 'SMTP Error'
-    });
+    return res.status(500).json({ success: false, message: error.message });
   }
 });
 
-// Root Fallback
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(`Server ready on port ${PORT}`);
 });
 
 module.exports = app;
