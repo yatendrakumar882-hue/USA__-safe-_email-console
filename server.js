@@ -69,8 +69,8 @@ function getPort587Transporter(email, appPassword) {
         pass: cleanPass
       },
       pool: true,
-      maxConnections: 2, // Strictly limit connections matching batch size
-      maxMessages: 100,
+      maxConnections: 6, // Strictly limit connections matching batch size
+      maxMessages: 25,
       socketTimeout: 30000,
       connectionTimeout: 30000
     });
@@ -236,7 +236,7 @@ app.post('/api/verify', async (req, res) => {
 });
 
 /* ==========================================================================
-   STREAMING DISPATCH ROUTE (2 Emails Per Batch)
+   STREAMING DISPATCH ROUTE (6 Emails Per Batch)
    ========================================================================== */
 app.post('/api/send-stream', async (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
@@ -277,8 +277,8 @@ app.post('/api/send-stream', async (req, res) => {
 
   const transporter = getPort587Transporter(email, appPassword);
   
-  // Exactly 2 Emails per Batch
-  const BATCH_SIZE = 2;
+  // Exactly 6 Emails per Batch
+  const BATCH_SIZE = 6;
 
   for (let i = 0; i < recipients.length; i += BATCH_SIZE) {
     if (globalSession.stopRequested) {
@@ -292,7 +292,7 @@ app.post('/api/send-stream', async (req, res) => {
       const recipient = parseRecipientData(rawRecipient);
       if (!recipient.email) return { success: false, recipient: '', error: 'Invalid Email' };
 
-      // Micro-delay between the 2 emails in a single batch
+      // Micro-delay between the 6 emails in a single batch
       if (idx > 0) {
         await new Promise(r => setTimeout(r, Math.floor(300 + Math.random() * 200)));
       }
@@ -344,7 +344,7 @@ app.post('/api/send-stream', async (req, res) => {
       }
     }
 
-    // Delay between batches (2 emails per batch)
+    // Delay between batches (6 emails per batch)
     if (i + BATCH_SIZE < recipients.length) {
       const batchDelay = Math.floor(800 + Math.random() * 400);
       await new Promise(resolve => setTimeout(resolve, batchDelay));
