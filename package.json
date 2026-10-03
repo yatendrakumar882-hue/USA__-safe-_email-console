@@ -1,15 +1,31 @@
 {
-  "name": "secure-mail-console",
+  "name": "secure-gmail-mailer",
   "version": "1.0.0",
-  "type": "module",
+  "description": "High-deliverability Gmail SMTP mailer optimized for Vercel deployment",
   "main": "server.js",
+  "type": "module",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "dev": "nodemon server.js"
   },
+  "keywords": [
+    "nodemailer",
+    "express",
+    "gmail-smtp",
+    "vercel"
+  ],
+  "author": "",
+  "license": "ISC",
   "dependencies": {
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "nodemailer": "^6.9.13"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }
