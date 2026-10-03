@@ -10,90 +10,90 @@
     body { font-family: 'Plus Jakarta Sans', sans-serif; }
   </style>
 </head>
-<body class="bg-[#0f172a] text-slate-100 min-h-screen">
+<body class="bg-slate-50 text-slate-800 min-h-screen">
 
   <!-- ================= 1. LOGIN OVERLAY (Password: Y##) ================= -->
-  <div id="loginModal" class="fixed inset-0 z-50 flex items-center justify-center bg-[#0b1120]/90 backdrop-blur-md p-4">
-    <div class="bg-[#1e293b] border border-slate-700/60 rounded-2xl w-full max-w-sm p-8 text-center shadow-2xl">
-      <div class="w-14 h-14 mx-auto rounded-full bg-blue-600 flex items-center justify-center text-white text-2xl mb-4 shadow-lg shadow-blue-500/30">
+  <div id="loginModal" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+    <div class="bg-white border border-slate-200 rounded-2xl w-full max-w-sm p-8 text-center shadow-2xl">
+      <div class="w-14 h-14 mx-auto rounded-full bg-blue-600 flex items-center justify-center text-white text-2xl mb-4 shadow-lg shadow-blue-500/20">
         🔒
       </div>
-      <h2 class="text-xl font-bold text-white mb-1">Access Protected</h2>
-      <p class="text-xs text-slate-400 mb-6">Enter the password to continue</p>
+      <h2 class="text-xl font-bold text-slate-900 mb-1">Access Protected</h2>
+      <p class="text-xs text-slate-500 mb-6">Enter the password to continue</p>
 
       <input
         type="password"
         id="loginPassInput"
         placeholder="Password"
-        class="w-full px-4 py-3 bg-[#0f172a] border border-slate-700 rounded-xl text-sm text-white mb-3 focus:outline-none focus:border-blue-500"
+        class="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-xl text-sm text-slate-900 mb-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
       />
 
-      <div id="loginError" class="hidden mb-3 text-xs text-rose-400 bg-rose-950/40 p-2.5 rounded-lg border border-rose-800/50">
+      <div id="loginError" class="hidden mb-3 text-xs text-rose-600 bg-rose-50 p-2.5 rounded-lg border border-rose-200">
         ⚠️ Connection error. Try again.
       </div>
 
       <button
         onclick="submitLogin()"
-        class="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded-xl text-sm transition shadow-lg shadow-blue-600/30"
+        class="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl text-sm transition shadow-lg shadow-blue-600/20"
       >
         ➜ Enter
       </button>
     </div>
   </div>
 
-  <!-- ================= 2. MAIN CONSOLE INTERFACE ================= -->
+  <!-- ================= 2. MAIN CONSOLE INTERFACE (WHITE THEME) ================= -->
   <div class="max-w-6xl mx-auto px-4 py-8">
     
     <!-- Top Header -->
-    <div class="flex items-center justify-between pb-6 mb-6 border-b border-slate-800">
+    <div class="flex items-center justify-between pb-6 mb-6 border-b border-slate-200">
       <div class="flex items-center gap-3">
-        <div class="w-9 h-9 rounded-xl bg-blue-600/20 text-blue-400 border border-blue-500/30 flex items-center justify-center font-bold">
-          🛡️
+        <div class="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center font-bold text-lg shadow-md shadow-blue-500/20">
+          ✈️
         </div>
         <div>
-          <h1 class="text-2xl font-bold text-white tracking-tight">Secure Mail Console</h1>
-          <p class="text-xs text-slate-400">Direct Inbox Placement Engine</p>
+          <h1 class="text-2xl font-bold text-slate-900 tracking-tight">Secure Mail Console</h1>
+          <p class="text-xs text-slate-500">Direct Primary Inbox Sender</p>
         </div>
       </div>
-      <button onclick="handleLogout()" class="text-xs text-rose-400 hover:text-rose-300 font-semibold px-3 py-1.5 rounded-lg bg-rose-950/30 border border-rose-800/40">
+      <button onclick="handleLogout()" class="text-xs text-rose-600 hover:text-rose-700 font-semibold px-3 py-1.5 rounded-lg bg-rose-50 border border-rose-200 transition">
         [➜ Logout]
       </button>
     </div>
 
     <!-- Section Title -->
     <div class="flex items-center gap-2 mb-6">
-      <span class="text-blue-400 text-lg">✈️</span>
-      <h2 class="text-lg font-bold text-white">Bulk Email Sender</h2>
+      <span class="text-blue-600 text-lg">✈️</span>
+      <h2 class="text-lg font-bold text-slate-900">Bulk Email Sender</h2>
     </div>
 
-    <!-- Two-Column Grid (Exactly Like Your 2nd Screenshot) -->
+    <!-- Two-Column Grid (White Cards & Exact Layout) -->
     <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
       
       <!-- LEFT COLUMN: Compose Message -->
-      <div class="lg:col-span-7 bg-[#1e293b]/70 border border-slate-800 rounded-2xl p-6 shadow-xl">
+      <div class="lg:col-span-7 bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
         <div class="flex items-center gap-2 mb-4">
-          <span class="text-slate-300">📝</span>
-          <h3 class="text-sm font-bold text-slate-200 uppercase tracking-wide">Compose Message</h3>
+          <span class="text-slate-500">📝</span>
+          <h3 class="text-xs font-bold text-slate-700 uppercase tracking-wider">COMPOSE MESSAGE</h3>
         </div>
 
         <!-- Sender Name & Your Gmail -->
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
           <div>
-            <label class="block text-xs font-semibold text-slate-400 mb-1">Sender Name</label>
+            <label class="block text-xs font-semibold text-slate-600 mb-1">Sender Name</label>
             <input
               type="text"
               id="senderName"
-              placeholder="E.g., John Doe"
-              class="w-full px-3.5 py-2.5 bg-[#0f172a] border border-slate-700/80 rounded-xl text-sm text-white focus:outline-none focus:border-blue-500"
+              placeholder="Olive"
+              class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
           <div>
-            <label class="block text-xs font-semibold text-slate-400 mb-1">Your Gmail</label>
+            <label class="block text-xs font-semibold text-slate-600 mb-1">Your Gmail</label>
             <input
               type="email"
               id="senderEmail"
               placeholder="you@gmail.com"
-              class="w-full px-3.5 py-2.5 bg-[#0f172a] border border-slate-700/80 rounded-xl text-sm text-white focus:outline-none focus:border-blue-500"
+              class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
         </div>
@@ -101,59 +101,59 @@
         <!-- App Password & Email Subject -->
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
           <div>
-            <label class="block text-xs font-semibold text-slate-400 mb-1">App Password (16-chars)</label>
+            <label class="block text-xs font-semibold text-slate-600 mb-1">App Password (16-chars)</label>
             <div class="relative">
               <input
                 type="password"
                 id="appPassword"
                 placeholder="16-char app password"
-                class="w-full px-3.5 py-2.5 bg-[#0f172a] border border-slate-700/80 rounded-xl text-sm text-white focus:outline-none focus:border-blue-500"
+                class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
-              <button type="button" onclick="togglePass()" class="absolute right-3 top-2.5 text-slate-400 hover:text-white text-xs">
+              <button type="button" onclick="togglePass()" class="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600 text-xs">
                 👁️
               </button>
             </div>
           </div>
           <div>
-            <label class="block text-xs font-semibold text-slate-400 mb-1">Email Subject</label>
+            <label class="block text-xs font-semibold text-slate-600 mb-1">Email Subject</label>
             <input
               type="text"
               id="subject"
-              placeholder="Enter subject line..."
-              class="w-full px-3.5 py-2.5 bg-[#0f172a] border border-slate-700/80 rounded-xl text-sm text-white focus:outline-none focus:border-blue-500"
+              placeholder="quote"
+              class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
         </div>
 
         <!-- Message Body -->
         <div class="mb-4">
-          <label class="block text-xs font-semibold text-slate-400 mb-1">Message Body (Plain Text / HTML)</label>
+          <label class="block text-xs font-semibold text-slate-600 mb-1">Message Body (Plain Text / HTML)</label>
           <textarea
             id="messageBody"
             rows="8"
-            placeholder="Write your email here... Spintax supported: {Hi|Hello} {name}"
-            class="w-full px-3.5 py-2.5 bg-[#0f172a] border border-slate-700/80 rounded-xl text-sm text-white focus:outline-none focus:border-blue-500 font-mono text-xs leading-relaxed"
+            placeholder="Hello! I reviewed your webpage; it looks impressive but isn't showing within first-page results. &quot;May I share the quote?&quot;"
+            class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-xs leading-relaxed"
           ></textarea>
         </div>
 
-        <!-- Spam Protection Badge -->
-        <div class="p-3 bg-emerald-950/20 border border-emerald-800/40 rounded-xl flex items-center gap-2 text-xs text-emerald-400">
+        <!-- Clean Status Indicator (No Unsubscribe Links Added) -->
+        <div class="p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center gap-2 text-xs text-emerald-700">
           <span>🛡️</span>
-          <span><b>Anti-Spam Filter Active:</b> RFC 8058 One-Click Unsubscribe & Auto-Spintax Enabled</span>
+          <span><b>Clean Personal Delivery:</b> No footer or promo links attached. Directly lands in Primary Inbox.</span>
         </div>
       </div>
 
-      <!-- RIGHT COLUMN: Recipients & Progress Monitor -->
+      <!-- RIGHT COLUMN: Recipients & Live Progress Monitor -->
       <div class="lg:col-span-5 flex flex-col gap-6">
         
         <!-- Recipients Box -->
-        <div class="bg-[#1e293b]/70 border border-slate-800 rounded-2xl p-6 shadow-xl">
+        <div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
           <div class="flex items-center justify-between mb-2">
             <div class="flex items-center gap-2">
-              <span class="text-slate-300">👥</span>
-              <h3 class="text-sm font-bold text-slate-200">Recipients</h3>
+              <span class="text-slate-500">👥</span>
+              <h3 class="text-xs font-bold text-slate-700 uppercase tracking-wider">Recipients</h3>
             </div>
-            <span id="recipientCount" class="text-xs px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 font-bold">
+            <span id="recipientCount" class="text-xs px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-200 font-bold">
               0 found
             </span>
           </div>
@@ -163,33 +163,33 @@
             rows="6"
             oninput="updateCount()"
             placeholder="recipient1@example.com&#10;recipient2@example.com"
-            class="w-full px-3.5 py-2 bg-[#0f172a] border border-slate-700/80 rounded-xl text-xs text-white focus:outline-none focus:border-blue-500 font-mono"
+            class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
           ></textarea>
         </div>
 
-        <!-- Progress Monitor (4 Boxes Exactly like 2nd screenshot) -->
-        <div class="bg-[#1e293b]/70 border border-slate-800 rounded-2xl p-6 shadow-xl">
+        <!-- Progress Monitor (Live Real-Time Counter) -->
+        <div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
           <div class="flex items-center gap-2 mb-4">
-            <span class="text-slate-300">📊</span>
-            <h3 class="text-sm font-bold text-slate-200">Progress Monitor</h3>
+            <span class="text-slate-500">📊</span>
+            <h3 class="text-xs font-bold text-slate-700 uppercase tracking-wider">Progress Monitor</h3>
           </div>
 
           <div class="grid grid-cols-2 gap-3 mb-6">
-            <div class="bg-[#0f172a] p-3.5 rounded-xl border border-slate-800 text-center">
-              <div class="text-[11px] font-semibold text-slate-400 uppercase">TOTAL</div>
-              <div id="statTotal" class="text-2xl font-black text-blue-400 mt-1">0</div>
+            <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 text-center">
+              <div class="text-[11px] font-semibold text-slate-500 uppercase">TOTAL</div>
+              <div id="statTotal" class="text-2xl font-black text-blue-600 mt-1">0</div>
             </div>
-            <div class="bg-[#0f172a] p-3.5 rounded-xl border border-slate-800 text-center">
-              <div class="text-[11px] font-semibold text-slate-400 uppercase">SENT</div>
-              <div id="statSent" class="text-2xl font-black text-emerald-400 mt-1">0</div>
+            <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 text-center">
+              <div class="text-[11px] font-semibold text-slate-500 uppercase">SENT</div>
+              <div id="statSent" class="text-2xl font-black text-emerald-600 mt-1">0</div>
             </div>
-            <div class="bg-[#0f172a] p-3.5 rounded-xl border border-slate-800 text-center">
-              <div class="text-[11px] font-semibold text-slate-400 uppercase">FAILED</div>
-              <div id="statFailed" class="text-2xl font-black text-rose-400 mt-1">0</div>
+            <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 text-center">
+              <div class="text-[11px] font-semibold text-slate-500 uppercase">FAILED</div>
+              <div id="statFailed" class="text-2xl font-black text-rose-600 mt-1">0</div>
             </div>
-            <div class="bg-[#0f172a] p-3.5 rounded-xl border border-slate-800 text-center">
-              <div class="text-[11px] font-semibold text-slate-400 uppercase">REMAINING</div>
-              <div id="statRemaining" class="text-2xl font-black text-amber-400 mt-1">0</div>
+            <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 text-center">
+              <div class="text-[11px] font-semibold text-slate-500 uppercase">REMAINING</div>
+              <div id="statRemaining" class="text-2xl font-black text-amber-600 mt-1">0</div>
             </div>
           </div>
 
@@ -197,7 +197,7 @@
           <button
             id="sendBtn"
             onclick="handleSendAll()"
-            class="w-full py-3.5 px-4 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm rounded-xl transition shadow-lg shadow-emerald-600/20 flex items-center justify-center gap-2"
+            class="w-full py-3.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm rounded-xl transition shadow-lg shadow-emerald-600/20 flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
           >
             <span>✈️ Send All</span>
           </button>
@@ -210,7 +210,7 @@
 
   <!-- SCRIPT -->
   <script>
-    // 1. Password Login
+    // 1. Login with Y##
     function submitLogin() {
       const pass = document.getElementById('loginPassInput').value.trim();
       const errBox = document.getElementById('loginError');
@@ -221,7 +221,6 @@
         return;
       }
 
-      // Check Master Password 'Y##'
       if (pass === 'Y##') {
         document.getElementById('loginModal').classList.add('hidden');
         sessionStorage.setItem('isLoggedIn', 'true');
@@ -253,7 +252,7 @@
       document.getElementById('statRemaining').innerText = list.length;
     }
 
-    // 2. Send All Action
+    // 2. Real-Time Sequential Live Counter Send
     async function handleSendAll() {
       const senderName = document.getElementById('senderName').value.trim();
       const senderEmail = document.getElementById('senderEmail').value.trim();
@@ -278,45 +277,61 @@
       }
 
       const btn = document.getElementById('sendBtn');
+      // बटन को डिसेबल करें
       btn.disabled = true;
-      btn.innerText = 'Sending Emails...';
 
+      const total = list.length;
       let sent = 0;
       let failed = 0;
 
-      try {
-        const response = await fetch('/api/send', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            senderName,
-            senderEmail,
-            appPassword,
-            subject,
-            message,
-            recipients: list
-          })
-        });
+      document.getElementById('statTotal').innerText = total;
+      document.getElementById('statSent').innerText = 0;
+      document.getElementById('statFailed').innerText = 0;
+      document.getElementById('statRemaining').innerText = total;
 
-        const data = await response.json();
+      // लूप चलाकर एक-एक ईमेल भेजें ताकि लाइव काउंटर स्क्रीन पर चले
+      for (let i = 0; i < total; i++) {
+        const recipient = list[i];
+        btn.innerHTML = `<span class="animate-spin inline-block mr-2">⏳</span> Sending... (${i + 1}/${total})`;
 
-        if (data.success) {
-          const details = data.details || [];
-          sent = details.filter(d => d.status === 'Sent').length;
-          failed = details.filter(d => d.status === 'Failed').length;
-          alert('✓ ' + data.message);
-        } else {
-          alert('त्रुटि: ' + data.message);
+        try {
+          const res = await fetch('/api/send-single', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              senderName,
+              senderEmail,
+              appPassword,
+              subject,
+              message,
+              recipient
+            })
+          });
+
+          const data = await res.json();
+          if (data.success) {
+            sent++;
+          } else {
+            failed++;
+          }
+        } catch (err) {
+          failed++;
         }
-      } catch (err) {
-        alert('Network / Server Error: ' + err.message);
-      } finally {
+
+        // हर ईमेल के बाद लाइव काउंटर अपडेट करें
         document.getElementById('statSent').innerText = sent;
         document.getElementById('statFailed').innerText = failed;
-        document.getElementById('statRemaining').innerText = Math.max(0, list.length - (sent + failed));
-        btn.disabled = false;
-        btn.innerText = '✈️ Send All';
+        document.getElementById('statRemaining').innerText = total - (sent + failed);
+
+        // छोटा सा विराम (50ms) ताकि कनेक्शन स्मूथ रहे
+        await new Promise(r => setTimeout(r, 50));
       }
+
+      // सारे ईमेल पूरे होने पर बटन वापस एक्टिव हो जाएगा
+      btn.disabled = false;
+      btn.innerHTML = '<span>✈️ Send All</span>';
+
+      alert(`काम पूरा हुआ! कुल ${sent}/${total} ईमेल सफलतापूर्वक सेंड हो गए।`);
     }
   </script>
 </body>
