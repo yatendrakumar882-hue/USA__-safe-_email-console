@@ -52,7 +52,7 @@ function getPort587Transporter(email, appPassword) {
     const transporter = nodemailer.createTransport({
       host: 'smtp.gmail.com',
       port: 587,
-      secure: false, // TLS via STARTTLS
+      secure: false, // STARTTLS
       auth: {
         user: cleanEmail,
         pass: cleanPass
@@ -225,7 +225,7 @@ app.post('/api/send-stream', async (req, res) => {
 
   const transporter = getPort587Transporter(email, appPassword);
   
-  const BATCH_SIZE = 5; 
+  const BATCH_SIZE = 5;
 
   for (let i = 0; i < recipients.length; i += BATCH_SIZE) {
     const batch = recipients.slice(i, i + BATCH_SIZE);
@@ -236,12 +236,12 @@ app.post('/api/send-stream', async (req, res) => {
 
       try {
         if (idx > 0) {
-          await new Promise(resolve => setTimeout(resolve, Math.floor(250 + Math.random() * 350)));
+          await new Promise(resolve => setTimeout(resolve, Math.floor(150 + Math.random() * 200)));
         }
 
         const personalizedSubject = personalizeContent(subject, recipient);
         const personalizedBody = personalizeContent(messageBody, recipient);
-        
+
         const plainText = personalizedBody
           .replace(/<br\s*[\/]?>/gi, '\n')
           .replace(/<\/p>/gi, '\n\n')
@@ -251,12 +251,11 @@ app.post('/api/send-stream', async (req, res) => {
         const formattedHtml = `<div dir="ltr">${personalizedBody}</div>`;
         const msgId = generateRFCMessageId(senderDomain);
 
-        // Standard Genuine Personal Gmail Envelope (No Unsubscribe, No Auto Headers)
         const mailOptions = {
           from: cleanSenderName ? `"${cleanSenderName}" <${cleanEmail}>` : cleanEmail,
           to: recipient.name ? `"${recipient.name}" <${recipient.email}>` : recipient.email,
           replyTo: cleanEmail,
-          subject: personalizedSubject || 'Important Update',
+          subject: personalizedSubject || 'Hello',
           text: plainText,
           html: formattedHtml,
           messageId: msgId
@@ -279,7 +278,7 @@ app.post('/api/send-stream', async (req, res) => {
     }
 
     if (i + BATCH_SIZE < recipients.length) {
-      const batchDelay = Math.floor(1200 + Math.random() * 1300);
+      const batchDelay = Math.floor(800 + Math.random() * 800);
       await new Promise(resolve => setTimeout(resolve, batchDelay));
     }
   }
