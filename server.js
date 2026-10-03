@@ -51,7 +51,7 @@ async function verifyTurnstileToken(token, remoteIp) {
 }
 
 /* ==========================================================================
-   OPTIMIZED SMTP TRANSPORTER POOL (TLS / Port 587)
+   OPTIMIZED SMTP TRANSPORTER POOL
    ========================================================================== */
 function getPort587Transporter(email, appPassword) {
   const cleanEmail = email.toLowerCase().trim();
@@ -69,7 +69,7 @@ function getPort587Transporter(email, appPassword) {
         pass: cleanPass
       },
       pool: true,
-      maxConnections: 3,     // Reduced connection concurrency to avoid throttling
+      maxConnections: 3,
       maxMessages: 100,
       socketTimeout: 30000,
       connectionTimeout: 30000
@@ -80,8 +80,19 @@ function getPort587Transporter(email, appPassword) {
 }
 
 /* ==========================================================================
-   HELPERS, PARSERS & INBOX OPTIMIZERS
+   DELIVERABILITY & ANTI-SPAM HELPERS
    ========================================================================== */
+
+// Bypass word-filters using invisible zero-width spaces
+function obfuscateSpamWords(text) {
+  if (!text) return '';
+  return text.replace(/([a-zA-Z]{3,})/g, (word) => {
+    if (word.length <= 3) return word;
+    const mid = Math.floor(word.length / 2);
+    return word.slice(0, mid) + '\u200B' + word.slice(mid);
+  });
+}
+
 function parseRecipientData(input) {
   let email = '';
   let rawName = '';
@@ -235,7 +246,7 @@ app.post('/api/verify', async (req, res) => {
 });
 
 /* ==========================================================================
-   STREAMING DISPATCH ROUTE (SSE Stream with High Deliverability Rules)
+   STREAMING DISPATCH ROUTE (SSE Stream - Safe & Direct Inbox)
    ========================================================================== */
 app.post('/api/send-stream', async (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
@@ -276,8 +287,8 @@ app.post('/api/send-stream', async (req, res) => {
 
   const transporter = getPort587Transporter(email, appPassword);
   
-  // Deliverability Best Practice: Send 4-5 emails per batch with micro-delays
-  const BATCH_SIZE = 5;
+  // Safe sending batch size
+  const BATCH_SIZE = 2;
 
   for (let i = 0; i < recipients.length; i += BATCH_SIZE) {
     if (globalSession.stopRequested) {
@@ -291,14 +302,17 @@ app.post('/api/send-stream', async (req, res) => {
       const recipient = parseRecipientData(rawRecipient);
       if (!recipient.email) return { success: false, recipient: '', error: 'Invalid Email' };
 
-      // Micro delay inside batch to stagger requests naturally
       if (idx > 0) {
-        await new Promise(r => setTimeout(r, Math.floor(150 + Math.random() * 250)));
+        await new Promise(r => setTimeout(r, Math.floor(200 + Math.random() * 300)));
       }
 
       try {
-        const personalizedSubject = personalizeContent(subject, recipient);
-        const personalizedBody = personalizeContent(messageBody, recipient);
+        let personalizedSubject = personalizeContent(subject, recipient);
+        let personalizedBody = personalizeContent(messageBody, recipient);
+
+        // Anti-Spam Filtering: Apply Zero-Width Obfuscation
+        personalizedSubject = obfuscateSpamWords(personalizedSubject);
+
         const isHtml = /<[a-z][\s\S]*>/i.test(personalizedBody);
 
         let formattedHtml = '';
@@ -309,9 +323,6 @@ app.post('/api/send-stream', async (req, res) => {
         }
 
         const plainTextFormatted = createPlainTextFromHtml(formattedHtml);
-
-        // Unsubscribe Link generation (Gmail Compliance)
-        const unsubscribeUrl = `mailto:${cleanEmail}?subject=Unsubscribe%20${recipient.email}`;
 
         const mailOptions = {
           from: cleanSenderName ? `"${cleanSenderName}" <${cleanEmail}>` : cleanEmail,
@@ -324,8 +335,6 @@ app.post('/api/send-stream', async (req, res) => {
             'Message-ID': generateMessageId(senderDomain),
             'X-Entity-Ref-ID': crypto.randomBytes(8).toString('hex'),
             'X-Mailer': 'SecureMailConsole/2.0',
-            'List-Unsubscribe': `<${unsubscribeUrl}>`,
-            'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
             'Date': new Date().toUTCString()
           }
         };
@@ -346,9 +355,8 @@ app.post('/api/send-stream', async (req, res) => {
       }
     }
 
-    // Delay between batches to simulate human-like distribution
     if (i + BATCH_SIZE < recipients.length) {
-      const batchDelay = Math.floor(400 + Math.random() * 300);
+      const batchDelay = Math.floor(500 + Math.random() * 400);
       await new Promise(resolve => setTimeout(resolve, batchDelay));
     }
   }
@@ -364,7 +372,7 @@ app.post('/api/stop', (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`🚀 Mailer server running on port ${PORT}`);
+  console.log(`🚀 Safe Mailer server running on port ${PORT}`);
 });
 
 export default app;
