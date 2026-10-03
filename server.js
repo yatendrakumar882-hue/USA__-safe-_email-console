@@ -8,12 +8,13 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const ACCESS_PASSWORD = process.env.ACCESS_PASSWORD || "Y##";
 
+// Middleware
 app.use(cors());
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '15mb' }));
+app.use(express.urlencoded({ extended: true, limit: '15mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Spintax फ़ंक्शन: हर ईमेल को अलग बनाता है
+// 1. Spintax Parser (Inbox Placement के लिए - हर ईमेल को अलग टेक्स्ट बनाता है)
 function parseSpintax(text) {
   if (!text) return '';
   const spintaxRegex = /\{([^{}]+)\}/g;
@@ -26,7 +27,7 @@ function parseSpintax(text) {
   return text;
 }
 
-// Transporter Cache
+// 2. Gmail Transporter
 let cachedTransporter = null;
 let lastEmail = '';
 
@@ -38,12 +39,11 @@ function getTransporter(userEmail, appPassword) {
   cachedTransporter = nodemailer.createTransport({
     host: 'smtp.gmail.com',
     port: 465,
-    secure: true,
+    secure: true, // SSL Direct
     auth: {
       user: userEmail,
       pass: cleanPass,
     },
-    // Gmail के लिए सुरक्षित कनेक्शन सेटिंग्स
     tls: {
       rejectUnauthorized: true,
     }
@@ -52,20 +52,30 @@ function getTransporter(userEmail, appPassword) {
   return cachedTransporter;
 }
 
-// लॉगिन रूट
+// 3. Login API Route (Password: Y##)
 app.post('/api/login', (req, res) => {
   const inputPass = req.body.password || req.body.pass;
-  if (!inputPass) return res.status(400).json({ success: false, message: 'पासवर्ड आवश्यक है।' });
+  if (!inputPass) {
+    return res.status(400).json({ success: false, message: 'कृपया पासवर्ड दर्ज करें।' });
+  }
   if (inputPass.trim() === ACCESS_PASSWORD.trim()) {
     return res.json({ success: true, message: 'Access Granted' });
+  } else {
+    return res.status(401).json({ success: false, message: 'गलत पासवर्ड!' });
   }
-  return res.status(401).json({ success: false, message: 'गलत पासवर्ड!' });
 });
 
-// सिंगल ईमेल सेंड एंडपॉइंट (स्पैम बाईपास हेडर के साथ)
+// 4. Send Single Email API (Live Counter & Direct Inbox Optimized)
 app.post('/api/send-single', async (req, res) => {
   try {
-    const { senderName, senderEmail, appPassword, subject, message, recipient } = req.body;
+    const {
+      senderName,
+      senderEmail,
+      appPassword,
+      subject,
+      message,
+      recipient
+    } = req.body;
 
     if (!senderEmail || !appPassword || !recipient) {
       return res.status(400).json({ success: false, message: 'फ़ील्ड्स अधूरी हैं।' });
@@ -75,14 +85,14 @@ app.post('/api/send-single', async (req, res) => {
     const targetEmail = recipient.trim();
     const recipientUser = targetEmail.split('@')[0];
 
-    // नाम और स्पिनटैक्स प्रोसेस करें
+    // Spintax & Name Personalization
     let cleanBody = parseSpintax(message || '')
       .replace(/\{name\}/gi, recipientUser)
       .replace(/\{email\}/gi, targetEmail);
 
-    let cleanSubject = parseSpintax(subject || 'Important Information');
+    let cleanSubject = parseSpintax(subject || 'Inquiry');
 
-    // प्राकृतिक ईमेल संरचना (बिना किसी सस्पेक्टेड हेडर के)
+    // Clean 1-on-1 Personal Mail Format (कोई अनसब्सक्राइब या प्रोमोशन लिंक नहीं)
     const mailOptions = {
       from: `"${senderName || senderEmail.split('@')[0]}" <${senderEmail}>`,
       to: targetEmail,
@@ -91,24 +101,34 @@ app.post('/api/send-single', async (req, res) => {
       text: cleanBody,
       headers: {
         'Date': new Date().toUTCString(),
-        'X-Entity-Ref-ID': `${Date.now()}-${Math.random().toString(36).substring(7)}`,
+        'X-Mailer': 'Apple Mail (2.3654.120.0.1)',
+        'X-Priority': '3',
       }
     };
 
     const info = await transporter.sendMail(mailOptions);
-    return res.json({ success: true, message: 'Sent', id: info.messageId });
+    return res.json({
+      success: true,
+      message: 'Sent',
+      id: info.messageId
+    });
 
   } catch (error) {
-    return res.status(500).json({ success: false, message: error.message });
+    console.error('Send error:', error.message);
+    return res.status(500).json({
+      success: false,
+      message: error.message || 'SMTP Error'
+    });
   }
 });
 
+// Root Fallback
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 app.listen(PORT, () => {
-  console.log(`Server ready on port ${PORT}`);
+  console.log(`[✓] Server is running on port ${PORT}`);
 });
 
 module.exports = app;
