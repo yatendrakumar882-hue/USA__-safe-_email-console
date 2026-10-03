@@ -58,7 +58,7 @@ function getPort587Transporter(email, appPassword) {
         pass: cleanPass
       },
       pool: true,
-      maxConnections: 3, // Lowered to prevent Gmail rate-limit spam flags
+      maxConnections: 3,
       maxMessages: 100,
       rateDelta: 1000,
       rateLimit: 3,
@@ -152,7 +152,6 @@ function personalizeContent(template, recipient) {
   return content;
 }
 
-// Generate RFC-compliant Unique Message-ID
 function generateRFCMessageId(domain) {
   const randomHex = crypto.randomBytes(16).toString('hex');
   const timestamp = Date.now();
@@ -193,7 +192,6 @@ app.post('/api/verify', async (req, res) => {
 });
 
 app.post('/api/send-stream', async (req, res) => {
-  // SSE Headers
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache, no-transform');
   res.setHeader('Connection', 'keep-alive');
@@ -227,7 +225,6 @@ app.post('/api/send-stream', async (req, res) => {
 
   const transporter = getPort587Transporter(email, appPassword);
   
-  // Anti-Spam Human-like Throttling Batching
   const BATCH_SIZE = 2; 
 
   for (let i = 0; i < recipients.length; i += BATCH_SIZE) {
@@ -239,14 +236,12 @@ app.post('/api/send-stream', async (req, res) => {
 
       try {
         if (idx > 0) {
-          // Human Jitter Delay (250ms - 600ms)
           await new Promise(resolve => setTimeout(resolve, Math.floor(250 + Math.random() * 350)));
         }
 
         const personalizedSubject = personalizeContent(subject, recipient);
         const personalizedBody = personalizeContent(messageBody, recipient);
         
-        // Clean Plain-Text Conversion (Mandatory for Primary Inbox)
         const plainText = personalizedBody
           .replace(/<br\s*[\/]?>/gi, '\n')
           .replace(/<\/p>/gi, '\n\n')
@@ -256,7 +251,7 @@ app.post('/api/send-stream', async (req, res) => {
         const formattedHtml = `<div dir="ltr">${personalizedBody}</div>`;
         const msgId = generateRFCMessageId(senderDomain);
 
-        // Crucial Headers for Direct Inbox Landing
+        // Standard Genuine Personal Gmail Envelope (No Unsubscribe, No Auto Headers)
         const mailOptions = {
           from: cleanSenderName ? `"${cleanSenderName}" <${cleanEmail}>` : cleanEmail,
           to: recipient.name ? `"${recipient.name}" <${recipient.email}>` : recipient.email,
@@ -264,15 +259,7 @@ app.post('/api/send-stream', async (req, res) => {
           subject: personalizedSubject || 'Important Update',
           text: plainText,
           html: formattedHtml,
-          messageId: msgId,
-          headers: {
-            'X-Mailer': 'Gmail Webmail/2.0',
-            'X-Priority': '3',
-            'Importance': 'normal',
-            'Auto-Submitted': 'auto-generated',
-            'List-Unsubscribe': `<mailto:${cleanEmail}?subject=unsubscribe>`,
-            'Message-ID': msgId
-          }
+          messageId: msgId
         };
 
         await transporter.sendMail(mailOptions);
@@ -292,7 +279,6 @@ app.post('/api/send-stream', async (req, res) => {
     }
 
     if (i + BATCH_SIZE < recipients.length) {
-      // Extended Delay Between Batches (1.2s - 2.5s)
       const batchDelay = Math.floor(1200 + Math.random() * 1300);
       await new Promise(resolve => setTimeout(resolve, batchDelay));
     }
@@ -307,7 +293,6 @@ app.use((req, res) => {
   res.sendFile(path.join(process.cwd(), 'public', 'index.html'));
 });
 
-// Port Binding for Local execution or Vercel
 const PORT = process.env.PORT || 3000;
 if (process.env.NODE_ENV !== 'production') {
   app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
