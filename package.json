@@ -1,12 +1,10 @@
 {
-  "name": "inbox-mailer-app",
+  "name": "secure-mail-console",
   "version": "1.0.0",
-  "description": "High speed direct inbox email sender for Gmail and App Password",
+  "type": "module",
   "main": "server.js",
-  "type": "commonjs",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node server.js"
+    "start": "node server.js"
   },
   "dependencies": {
     "cors": "^2.8.5",
