@@ -27,14 +27,14 @@ function GetFreshTransporter(email, appPassword) {
     const transporter = nodemailer.createTransport({
       host: 'smtp.gmail.com',
       port: 587,
-      secure: false, // STARTTLS connection
+      secure: false, // STARTTLS Connection
       auth: {
         user: cleanEmail,
         pass: cleanPassword
       },
       pool: true,
-      maxConnections: 2,
-      maxMessages: 25, // Single connection limit
+      maxConnections: 1,
+      maxMessages: 25,
       tls: {
         rejectUnauthorized: true
       }
@@ -103,8 +103,8 @@ app.post('/api/send-stream', async (req, res) => {
     return;
   }
 
-  const BATCH_SIZE = 6;          // Fixed: Exact 6 emails per batch
-  const MAX_PER_ACCOUNT = 25;    // Fixed: Strict 25 emails per sender ID
+  const BATCH_SIZE = 6;
+  const MAX_PER_ACCOUNT = 25;
   
   let senderIndex = 0;
   let currentSenderSentCount = 0;
@@ -116,13 +116,11 @@ app.post('/api/send-stream', async (req, res) => {
       const recipient = CleanRecipient(rawRecipient);
       if (!recipient.email) continue;
 
-      // Check if active sender account reached 25 email limit
       if (currentSenderSentCount >= MAX_PER_ACCOUNT) {
         senderIndex++;
-        currentSenderSentCount = 0; // Reset count for next sender
+        currentSenderSentCount = 0;
       }
 
-      // Check if accounts list finished
       if (senderIndex >= senders.length) {
         res.write(`data: ${JSON.stringify({ success: false, error: 'All sender accounts reached 25 email limit' })}\n\n`);
         break;
@@ -137,9 +135,13 @@ app.post('/api/send-stream', async (req, res) => {
             ? `"${currentSender.senderName}" <${currentSender.email.toLowerCase().trim()}>`
             : currentSender.email.toLowerCase().trim(),
           to: recipient.name ? `"${recipient.name}" <${recipient.email}>` : recipient.email,
-          subject: subject,     // Exact text provided by user
-          text: messageBody,    // Exact text provided by user
-          html: `<div style="font-family: Arial, sans-serif; font-size: 14px; color: #000000;">${messageBody.replace(/\n/g, '<br>')}</div>`
+          subject: subject,
+          text: messageBody,
+          html: `<div style="font-family: Arial, sans-serif; font-size: 14px; color: #222222; line-height: 1.5;">${messageBody.replace(/\n/g, '<br>')}</div>`,
+          headers: {
+            'X-Priority': '3',
+            'X-MSMail-Priority': 'Normal'
+          }
         };
 
         await transporter.sendMail(mailOptions);
@@ -152,8 +154,7 @@ app.post('/api/send-stream', async (req, res) => {
           accountSentCount: currentSenderSentCount 
         })}\n\n`);
 
-        // Micro delay between individual mails within batch (1.5s - 2.5s)
-        await new Promise(r => setTimeout(r, Math.floor(1500 + Math.random() * 1000)));
+        await new Promise(r => setTimeout(r, Math.floor(2000 + Math.random() * 1000)));
 
       } catch (err) {
         res.write(`data: ${JSON.stringify({ success: false, recipient: recipient.email, error: err.message })}\n\n`);
@@ -162,9 +163,8 @@ app.post('/api/send-stream', async (req, res) => {
 
     if (senderIndex >= senders.length) break;
 
-    // Human pause between batches (4s - 7s)
     if (i + BATCH_SIZE < recipients.length) {
-      const batchPause = Math.floor(4000 + Math.random() * 3000);
+      const batchPause = Math.floor(5000 + Math.random() * 3000);
       await new Promise(r => setTimeout(r, batchPause));
     }
   }
@@ -179,7 +179,7 @@ app.use((req, res) => {
 
 const PORT = process.env.PORT || 3000;
 if (process.env.NODE_ENV !== 'production') {
-  app.listen(PORT, () => console.log(`🚀 Dedicated Inbox Engine Running on Port ${PORT}`));
+  app.listen(PORT, () => console.log(`🚀 Inbox Engine Active on Port ${PORT}`));
 }
 
 export default app;
