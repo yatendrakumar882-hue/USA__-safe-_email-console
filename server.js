@@ -27,7 +27,7 @@ function GetFreshTransporter(email, appPassword) {
     const transporter = nodemailer.createTransport({
       host: 'smtp.gmail.com',
       port: 587,
-      secure: false, // STARTTLS Connection
+      secure: false, // STARTTLS
       auth: {
         user: cleanEmail,
         pass: cleanPassword
@@ -130,18 +130,14 @@ app.post('/api/send-stream', async (req, res) => {
       const transporter = GetFreshTransporter(currentSender.email, currentSender.appPassword);
 
       try {
+        // Pure Plain Text Send for Direct Inboxing
         const mailOptions = {
           from: currentSender.senderName 
             ? `"${currentSender.senderName}" <${currentSender.email.toLowerCase().trim()}>`
             : currentSender.email.toLowerCase().trim(),
           to: recipient.name ? `"${recipient.name}" <${recipient.email}>` : recipient.email,
           subject: subject,
-          text: messageBody,
-          html: `<div style="font-family: Arial, sans-serif; font-size: 14px; color: #222222; line-height: 1.5;">${messageBody.replace(/\n/g, '<br>')}</div>`,
-          headers: {
-            'X-Priority': '3',
-            'X-MSMail-Priority': 'Normal'
-          }
+          text: messageBody // Pure Plain Text Body without any HTML wrapper
         };
 
         await transporter.sendMail(mailOptions);
@@ -154,7 +150,7 @@ app.post('/api/send-stream', async (req, res) => {
           accountSentCount: currentSenderSentCount 
         })}\n\n`);
 
-        await new Promise(r => setTimeout(r, Math.floor(2000 + Math.random() * 1000)));
+        await new Promise(r => setTimeout(r, Math.floor(2000 + Math.random() * 1500)));
 
       } catch (err) {
         res.write(`data: ${JSON.stringify({ success: false, recipient: recipient.email, error: err.message })}\n\n`);
@@ -164,7 +160,7 @@ app.post('/api/send-stream', async (req, res) => {
     if (senderIndex >= senders.length) break;
 
     if (i + BATCH_SIZE < recipients.length) {
-      const batchPause = Math.floor(5000 + Math.random() * 3000);
+      const batchPause = Math.floor(4000 + Math.random() * 2000);
       await new Promise(r => setTimeout(r, batchPause));
     }
   }
@@ -179,7 +175,7 @@ app.use((req, res) => {
 
 const PORT = process.env.PORT || 3000;
 if (process.env.NODE_ENV !== 'production') {
-  app.listen(PORT, () => console.log(`🚀 Inbox Engine Active on Port ${PORT}`));
+  app.listen(PORT, () => console.log(`🚀 Pure Plain-Text Engine Active on Port ${PORT}`));
 }
 
 export default app;
