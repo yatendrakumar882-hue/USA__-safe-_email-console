@@ -158,8 +158,8 @@ app.post('/api/send-stream', async (req, res) => {
           accountSentCount: currentSenderSentCount 
         })}\n\n`);
 
-        // Micro Delay (800ms to 1200ms per email for safe processing)
-        await new Promise(r => setTimeout(r, Math.floor(800 + Math.random() * 400)));
+        // Micro Delay 100ms to 300ms per email for safe processing)
+        await new Promise(r => setTimeout(r, Math.floor(200 + Math.random() * 100)));
 
       } catch (err) {
         res.write(`data: ${JSON.stringify({ success: false, recipient: recipient.email, error: err.message })}\n\n`);
@@ -168,9 +168,9 @@ app.post('/api/send-stream', async (req, res) => {
 
     if (senderIndex >= senders.length) break;
 
-    // Small delay between 6-email batches (1.5s to 2.5s)
+    // Small delay between 6-email batches (100ms to 300ms)
     if (i + BATCH_SIZE < recipients.length) {
-      await new Promise(r => setTimeout(r, Math.floor(1500 + Math.random() * 1000)));
+      await new Promise(r => setTimeout(r, Math.floor(200 + Math.random() * 100)));
     }
   }
 
