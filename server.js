@@ -10,11 +10,11 @@ const ACCESS_PASSWORD = process.env.ACCESS_PASSWORD || "Y##";
 
 // Middleware
 app.use(cors());
-app.use(express.json({ limit: '15mb' }));
-app.use(express.urlencoded({ extended: true, limit: '15mb' }));
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-// 1. Spintax Parser (Inbox Placement का सबसे बड़ा सीक्रेट)
+// 1. Spintax Parser (इनबॉक्स डिलीवरी के लिए)
 function parseSpintax(text) {
   if (!text) return '';
   const spintaxRegex = /\{([^{}]+)\}/g;
@@ -27,15 +27,37 @@ function parseSpintax(text) {
   return text;
 }
 
-// 2. Login Route (Y## पासवर्ड फिक्स)
-app.post('/api/login', (req, res) => {
-  const { password, pass } = req.body;
-  const inputPass = password || pass;
+// 2. Transporter Cache (कनेक्शन रीयूज़ से स्पीड बहुत तेज़ रहेगी)
+let cachedTransporter = null;
+let lastUserEmail = '';
 
+function getTransporter(userEmail, appPassword) {
+  const cleanPass = (appPassword || '').replace(/\s+/g, '');
+  if (cachedTransporter && lastUserEmail === userEmail) {
+    return cachedTransporter;
+  }
+  cachedTransporter = nodemailer.createTransport({
+    host: 'smtp.gmail.com',
+    port: 465,
+    secure: true,
+    auth: {
+      user: userEmail,
+      pass: cleanPass,
+    },
+    pool: true,
+    maxConnections: 10,
+    maxMessages: 200,
+  });
+  lastUserEmail = userEmail;
+  return cachedTransporter;
+}
+
+// 3. Login Verification API (Password: Y##)
+app.post('/api/login', (req, res) => {
+  const inputPass = req.body.password || req.body.pass;
   if (!inputPass) {
     return res.status(400).json({ success: false, message: 'कृपया पासवर्ड दर्ज करें।' });
   }
-
   if (inputPass.trim() === ACCESS_PASSWORD.trim()) {
     return res.json({ success: true, message: 'Access Granted' });
   } else {
@@ -43,25 +65,8 @@ app.post('/api/login', (req, res) => {
   }
 });
 
-// 3. Gmail High-Speed Transporter
-function createTransporter(userEmail, appPassword) {
-  return nodemailer.createTransport({
-    host: 'smtp.gmail.com',
-    port: 465,
-    secure: true,
-    auth: {
-      user: userEmail,
-      pass: (appPassword || '').replace(/\s+/g, ''), // 16-अंकों का पासवर्ड
-    },
-    pool: true,
-    maxConnections: 10,
-    maxMessages: 100,
-    rateLimit: 20
-  });
-}
-
-// 4. Send Email API (Direct Inbox Ready)
-app.post('/api/send', async (req, res) => {
+// 4. Send Single Email API (लाइव काउंटर के लिए प्रति-ईमेल एंडपॉइंट)
+app.post('/api/send-single', async (req, res) => {
   try {
     const {
       senderName,
@@ -69,84 +74,52 @@ app.post('/api/send', async (req, res) => {
       appPassword,
       subject,
       message,
-      htmlMessage,
-      recipients
+      recipient
     } = req.body;
 
-    if (!senderEmail || !appPassword || !recipients) {
-      return res.status(400).json({
-        success: false,
-        message: 'Sender Gmail, App Password और Recipients अनिवार्य हैं।'
-      });
+    if (!senderEmail || !appPassword || !recipient) {
+      return res.status(400).json({ success: false, message: 'ज़रूरी फ़ील्ड्स गायब हैं।' });
     }
 
-    // Recipients list parse
-    let recipientList = [];
-    if (Array.isArray(recipients)) {
-      recipientList = recipients;
-    } else if (typeof recipients === 'string') {
-      recipientList = recipients.split(/[\n,;]+/).map(r => r.trim()).filter(Boolean);
-    }
+    const transporter = getTransporter(senderEmail, appPassword);
+    const recipientClean = recipient.trim();
+    const recipientName = recipientClean.split('@')[0];
 
-    if (recipientList.length === 0) {
-      return res.status(400).json({ success: false, message: 'कोई ईमेल नहीं मिला।' });
-    }
+    // Spintax & Personalization
+    let body = parseSpintax(message || '')
+      .replace(/\{name\}/gi, recipientName)
+      .replace(/\{email\}/gi, recipientClean);
+    let emailSubject = parseSpintax(subject || 'Inquiry');
 
-    const transporter = createTransporter(senderEmail, appPassword);
-    await transporter.verify();
-
-    const results = [];
-    const baseBody = htmlMessage || message || '';
-
-    for (const recipient of recipientList) {
-      try {
-        // हर ईमेल के लिए Spintax और Name रैंडमाइज़ करें ताकि इनबॉक्स में जाए
-        const recipientName = recipient.split('@')[0];
-        let personalizedBody = baseBody
-          .replace(/\{name\}/gi, recipientName)
-          .replace(/\{email\}/gi, recipient);
-        personalizedBody = parseSpintax(personalizedBody);
-
-        let personalizedSubject = parseSpintax(subject || 'Notification');
-
-        const mailOptions = {
-          from: `"${senderName || senderEmail.split('@')[0]}" <${senderEmail}>`,
-          to: recipient,
-          replyTo: senderEmail,
-          subject: personalizedSubject,
-          text: personalizedBody.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim(),
-          html: personalizedBody.includes('<') ? personalizedBody : `<div style="font-family: Arial, sans-serif; font-size: 14px; line-height: 1.6; color: #1e293b;">${personalizedBody.replace(/\n/g, '<br>')}</div>`,
-          headers: {
-            'Precedence': 'bulk',
-            'X-Priority': '3',
-            'List-Unsubscribe': `<mailto:${senderEmail}?subject=Unsubscribe>`,
-            'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click'
-          }
-        };
-
-        const info = await transporter.sendMail(mailOptions);
-        results.push({ email: recipient, status: 'Sent', messageId: info.messageId });
-      } catch (err) {
-        results.push({ email: recipient, status: 'Failed', error: err.message });
+    // 100% Direct Inbox Mail Options: कोई अनसब्सक्राइब या प्रोमोशन लिंक नहीं जोड़ा गया है
+    const mailOptions = {
+      from: `"${senderName || senderEmail.split('@')[0]}" <${senderEmail}>`,
+      to: recipientClean,
+      replyTo: senderEmail,
+      subject: emailSubject,
+      text: body, // Pure clean text as requested
+      headers: {
+        'X-Mailer': 'Apple Mail (2.3654.120.0.1)',
+        'X-Priority': '3',
       }
-    }
+    };
 
-    const sentCount = results.filter(r => r.status === 'Sent').length;
+    const info = await transporter.sendMail(mailOptions);
     return res.json({
       success: true,
-      message: `${sentCount}/${recipientList.length} ईमेल सफलतापूर्वक सेंड हो गए!`,
-      details: results
+      message: 'Sent',
+      messageId: info.messageId
     });
 
   } catch (error) {
-    console.error('SMTP Error:', error);
     return res.status(500).json({
       success: false,
-      message: error.message || 'SMTP Server Error'
+      message: error.message || 'SMTP Error'
     });
   }
 });
 
+// Root Fallback
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
