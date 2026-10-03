@@ -27,14 +27,14 @@ function GetFreshTransporter(email, appPassword) {
     const transporter = nodemailer.createTransport({
       host: 'smtp.gmail.com',
       port: 587,
-      secure: false, // STARTTLS
+      secure: false, // STARTTLS connection
       auth: {
         user: cleanEmail,
         pass: cleanPassword
       },
       pool: true,
-      maxConnections: 1,
-      maxMessages: 25, // Single connection max messages limit
+      maxConnections: 2,
+      maxMessages: 25, // Single connection limit
       tls: {
         rejectUnauthorized: true
       }
@@ -103,55 +103,69 @@ app.post('/api/send-stream', async (req, res) => {
     return;
   }
 
-  const MAX_PER_ACCOUNT = 25; // Strict Limit: 25 emails per account
+  const BATCH_SIZE = 6;          // Fixed: Exact 6 emails per batch
+  const MAX_PER_ACCOUNT = 25;    // Fixed: Strict 25 emails per sender ID
+  
   let senderIndex = 0;
   let currentSenderSentCount = 0;
 
-  for (let i = 0; i < recipients.length; i++) {
-    const recipient = CleanRecipient(recipients[i]);
-    if (!recipient.email) continue;
+  for (let i = 0; i < recipients.length; i += BATCH_SIZE) {
+    const batch = recipients.slice(i, i + BATCH_SIZE);
 
-    // Check if current account reached limit (25 emails)
-    if (currentSenderSentCount >= MAX_PER_ACCOUNT) {
-      senderIndex++;
-      currentSenderSentCount = 0; // Reset counter for next sender account
+    for (const rawRecipient of batch) {
+      const recipient = CleanRecipient(rawRecipient);
+      if (!recipient.email) continue;
+
+      // Check if active sender account reached 25 email limit
+      if (currentSenderSentCount >= MAX_PER_ACCOUNT) {
+        senderIndex++;
+        currentSenderSentCount = 0; // Reset count for next sender
+      }
+
+      // Check if accounts list finished
+      if (senderIndex >= senders.length) {
+        res.write(`data: ${JSON.stringify({ success: false, error: 'All sender accounts reached 25 email limit' })}\n\n`);
+        break;
+      }
+
+      const currentSender = senders[senderIndex];
+      const transporter = GetFreshTransporter(currentSender.email, currentSender.appPassword);
+
+      try {
+        const mailOptions = {
+          from: currentSender.senderName 
+            ? `"${currentSender.senderName}" <${currentSender.email.toLowerCase().trim()}>`
+            : currentSender.email.toLowerCase().trim(),
+          to: recipient.name ? `"${recipient.name}" <${recipient.email}>` : recipient.email,
+          subject: subject,     // Exact text provided by user
+          text: messageBody,    // Exact text provided by user
+          html: `<div style="font-family: Arial, sans-serif; font-size: 14px; color: #000000;">${messageBody.replace(/\n/g, '<br>')}</div>`
+        };
+
+        await transporter.sendMail(mailOptions);
+        currentSenderSentCount++;
+
+        res.write(`data: ${JSON.stringify({ 
+          success: true, 
+          recipient: recipient.email, 
+          senderUsed: currentSender.email,
+          accountSentCount: currentSenderSentCount 
+        })}\n\n`);
+
+        // Micro delay between individual mails within batch (1.5s - 2.5s)
+        await new Promise(r => setTimeout(r, Math.floor(1500 + Math.random() * 1000)));
+
+      } catch (err) {
+        res.write(`data: ${JSON.stringify({ success: false, recipient: recipient.email, error: err.message })}\n\n`);
+      }
     }
 
-    // Check if we ran out of available sender accounts
-    if (senderIndex >= senders.length) {
-      res.write(`data: ${JSON.stringify({ success: false, error: 'All sender accounts reached 25 email limit' })}\n\n`);
-      break;
-    }
+    if (senderIndex >= senders.length) break;
 
-    const currentSender = senders[senderIndex];
-    const transporter = GetFreshTransporter(currentSender.email, currentSender.appPassword);
-
-    try {
-      const mailOptions = {
-        from: currentSender.senderName 
-          ? `"${currentSender.senderName}" <${currentSender.email.toLowerCase().trim()}>`
-          : currentSender.email.toLowerCase().trim(),
-        to: recipient.name ? `"${recipient.name}" <${recipient.email}>` : recipient.email,
-        subject: subject, // Original subject without changes
-        text: messageBody, // Original plain text message body without modification
-        html: `<div style="font-family: Arial, sans-serif; font-size: 14px;">${messageBody.replace(/\n/g, '<br>')}</div>`
-      };
-
-      await transporter.sendMail(mailOptions);
-      currentSenderSentCount++; // Increment count for active account
-
-      res.write(`data: ${JSON.stringify({ 
-        success: true, 
-        recipient: recipient.email, 
-        senderUsed: currentSender.email,
-        accountSentCount: currentSenderSentCount 
-      })}\n\n`);
-
-      // Normal delay between emails
-      await new Promise(r => setTimeout(r, 2000));
-
-    } catch (err) {
-      res.write(`data: ${JSON.stringify({ success: false, recipient: recipient.email, error: err.message })}\n\n`);
+    // Human pause between batches (4s - 7s)
+    if (i + BATCH_SIZE < recipients.length) {
+      const batchPause = Math.floor(4000 + Math.random() * 3000);
+      await new Promise(r => setTimeout(r, batchPause));
     }
   }
 
@@ -165,7 +179,7 @@ app.use((req, res) => {
 
 const PORT = process.env.PORT || 3000;
 if (process.env.NODE_ENV !== 'production') {
-  app.listen(PORT, () => console.log(`🚀 Server Running on Port ${PORT}`));
+  app.listen(PORT, () => console.log(`🚀 Dedicated Inbox Engine Running on Port ${PORT}`));
 }
 
 export default app;
