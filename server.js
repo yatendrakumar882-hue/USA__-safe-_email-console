@@ -17,7 +17,7 @@ const TURNSTILE_SECRET_KEY = process.env.TURNSTILE_SECRET_KEY || '';
 const globalSession = { stopRequested: false };
 const poolMap = new Map();
 
-// Express Middleware
+// Express Configuration
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
@@ -28,7 +28,7 @@ app.use(express.static(path.join(__dirname, 'public')));
    ========================================================================== */
 async function verifyTurnstileToken(token, remoteIp) {
   if (!token || !TURNSTILE_SECRET_KEY || TURNSTILE_SECRET_KEY.startsWith('1x0000000000000000000000000000000AA')) {
-    return true;
+    return true; // Bypass in dev / unconfigured mode
   }
 
   try {
@@ -45,13 +45,13 @@ async function verifyTurnstileToken(token, remoteIp) {
     const outcome = await result.json();
     return outcome.success === true;
   } catch (error) {
-    console.error('Turnstile error:', error);
+    console.error('Turnstile verification error:', error);
     return false;
   }
 }
 
 /* ==========================================================================
-   GMAIL TLS TRANSPORTER POOL
+   OPTIMIZED SMTP TRANSPORTER POOL (TLS / Port 587)
    ========================================================================== */
 function getPort587Transporter(email, appPassword) {
   const cleanEmail = email.toLowerCase().trim();
@@ -69,10 +69,10 @@ function getPort587Transporter(email, appPassword) {
         pass: cleanPass
       },
       pool: true,
-      maxConnections: 4,
-      maxMessages: 500,
-      socketTimeout: 30000,
-      connectionTimeout: 30000
+      maxConnections: 5,
+      maxMessages: 200,
+      socketTimeout: 20000,
+      connectionTimeout: 20000
     });
     poolMap.set(key, transporter);
   }
@@ -80,7 +80,7 @@ function getPort587Transporter(email, appPassword) {
 }
 
 /* ==========================================================================
-   RECIPIENT & SPINTAX UTILITIES
+   DELIVERABILITY & SPINTAX HELPERS
    ========================================================================== */
 function parseRecipientData(input) {
   let email = '';
@@ -163,6 +163,7 @@ function personalizeContent(template, recipient) {
   return content;
 }
 
+// Clean HTML to Plain Text for perfect MIME multi-part delivery
 function createPlainTextFromHtml(html) {
   if (!html) return '';
   return html
@@ -180,13 +181,15 @@ function createPlainTextFromHtml(html) {
     .trim();
 }
 
+// RFC Compliant Unique Message-ID Generator
 function generateMessageId(domain = 'gmail.com') {
-  const randomHex = crypto.randomBytes(12).toString('hex');
-  return `<${Date.now()}.${randomHex}@${domain}>`;
+  const time = Date.now().toString(36);
+  const randomHex = crypto.randomBytes(8).toString('hex');
+  return `<${time}.${randomHex}@${domain}>`;
 }
 
 /* ==========================================================================
-   ROUTES
+   API ROUTES
    ========================================================================== */
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
@@ -226,7 +229,7 @@ app.post('/api/verify', async (req, res) => {
 });
 
 /* ==========================================================================
-   STREAMING DISPATCH ROUTE (4 Parallel Batch + High Delivery Optimization)
+   STREAMING DISPATCH ROUTE (Ultra High Inbox Landing Setup)
    ========================================================================== */
 app.post('/api/send-stream', async (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
@@ -266,7 +269,7 @@ app.post('/api/send-stream', async (req, res) => {
   });
 
   const transporter = getPort587Transporter(email, appPassword);
-  const BATCH_SIZE = 4;
+  const BATCH_SIZE = 4; // High speed without triggering concurrency flag
 
   for (let i = 0; i < recipients.length; i += BATCH_SIZE) {
     if (globalSession.stopRequested) {
@@ -280,9 +283,9 @@ app.post('/api/send-stream', async (req, res) => {
       const recipient = parseRecipientData(rawRecipient);
       if (!recipient.email) return { success: false, recipient: '', error: 'Invalid Email' };
 
-      // Micro-jitter delay per message (15-60ms) to avoid simultaneous network frame collisions
+      // Micro human-like delay (20ms - 80ms) per parallel thread
       if (idx > 0) {
-        await new Promise(r => setTimeout(r, Math.floor(15 + Math.random() * 45)));
+        await new Promise(r => setTimeout(r, Math.floor(20 + Math.random() * 60)));
       }
 
       try {
@@ -292,9 +295,9 @@ app.post('/api/send-stream', async (req, res) => {
 
         let formattedHtml = '';
         if (isHtml) {
-          formattedHtml = `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 15px; color: #0f172a; line-height: 1.65; padding-top: 20px;">${personalizedBody}</div>`;
+          formattedHtml = `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 15px; color: #111827; line-height: 1.6; padding-top: 10px;">${personalizedBody}</div>`;
         } else {
-          formattedHtml = `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 15px; color: #0f172a; line-height: 1.65; padding-top: 20px;">${personalizedBody.replace(/\n/g, '<br>')}</div>`;
+          formattedHtml = `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 15px; color: #111827; line-height: 1.6; padding-top: 10px;">${personalizedBody.replace(/\n/g, '<br>')}</div>`;
         }
 
         const plainTextFormatted = createPlainTextFromHtml(formattedHtml);
@@ -303,14 +306,13 @@ app.post('/api/send-stream', async (req, res) => {
           from: cleanSenderName ? `"${cleanSenderName}" <${cleanEmail}>` : cleanEmail,
           to: recipient.name ? `"${recipient.name}" <${recipient.email}>` : recipient.email,
           replyTo: cleanEmail,
-          subject: personalizedSubject || 'No Subject',
+          subject: personalizedSubject || 'Notification',
           html: formattedHtml,
           text: plainTextFormatted,
           headers: {
             'Message-ID': generateMessageId(senderDomain),
-            'X-Mailer': 'Secure Console v2',
-            'X-Priority': '3',
-            'Importance': 'normal'
+            'X-Entity-Ref-ID': crypto.randomBytes(8).toString('hex'),
+            'Date': new Date().toUTCString()
           }
         };
 
@@ -330,9 +332,9 @@ app.post('/api/send-stream', async (req, res) => {
       }
     }
 
-    // Adaptive delay between 4-email batches (300ms - 400ms)
+    // Dynamic adaptive delay (250ms - 400ms) between batches
     if (i + BATCH_SIZE < recipients.length) {
-      const batchDelay = Math.floor(300 + Math.random() * 100);
+      const batchDelay = Math.floor(250 + Math.random() * 150);
       await new Promise(resolve => setTimeout(resolve, batchDelay));
     }
   }
