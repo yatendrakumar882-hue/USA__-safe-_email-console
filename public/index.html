@@ -1,168 +1,194 @@
 <!DOCTYPE html>
-<html lang="en">
-
+<html lang="hi">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Secure Mail Console</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Direct Inbox Email Sender - Gmail SMTP</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Plus Jakarta Sans', sans-serif; }
+  </style>
 </head>
+<body class="bg-slate-950 text-slate-100 min-h-screen p-4 sm:p-8">
 
-<body>
-    <!-- Password Gate Overlay -->
-    <div id="password-gate" class="password-gate">
-        <div class="gate-card fade-in">
-            <div class="gate-icon">
-                <i class="fa-solid fa-lock"></i>
-            </div>
-            <h2>Access Protected</h2>
-            <p>Enter the password to continue</p>
-            <form id="gate-form" autocomplete="off" onsubmit="return false;">
-                <div class="form-group">
-                    <div class="password-wrapper">
-                        <input type="password" id="gate-password" placeholder="Enter password..." autocomplete="current-password" required>
-                        <button type="button" id="toggle-gate-password" class="icon-button" aria-label="Toggle password visibility">
-                            <i class="fa-regular fa-eye"></i>
-                        </button>
-                    </div>
-                </div>
-                <div id="gate-error" class="gate-error hidden">
-                    <i class="fa-solid fa-triangle-exclamation"></i>
-                    <span>Incorrect password</span>
-                </div>
-                <button type="submit" id="gate-submit-btn" class="btn btn-primary btn-block">
-                    <i class="fa-solid fa-arrow-right-to-bracket"></i> Enter
-                </button>
-            </form>
+  <div class="max-w-3xl mx-auto bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-6 sm:p-8">
+    
+    <!-- Title -->
+    <div class="border-b border-slate-800 pb-5 mb-6">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-indigo-600 flex items-center justify-center font-bold text-lg text-white">
+          ✉️
         </div>
+        <div>
+          <h1 class="text-xl sm:text-2xl font-bold text-white tracking-tight">
+            Direct Inbox Mailer (Gmail SMTP)
+          </h1>
+          <p class="text-xs sm:text-sm text-slate-400">
+            100% Direct Primary Inbox Placement • Google App Password • High Sending Speed
+          </p>
+        </div>
+      </div>
     </div>
 
-    <!-- Main Dashboard Application -->
-    <div class="app-container hidden" id="main-app">
-        <header class="app-header">
-            <h1><i class="fa-solid fa-shield-halved"></i> Secure Mail Console</h1>
-            <button type="button" id="logout-btn" class="btn-logout" title="Double click to logout">
-                <i class="fa-solid fa-right-from-bracket"></i> Logout (Double Click)
-            </button>
-        </header>
+    <!-- Sender Credentials -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+      <div>
+        <label class="block text-xs font-semibold text-slate-300 mb-1">Your Gmail Address</label>
+        <input
+          type="email"
+          id="senderEmail"
+          placeholder="yourname@gmail.com"
+          class="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-sm text-white focus:outline-none focus:border-indigo-500"
+          required
+        />
+      </div>
 
-        <section id="dashboard-section">
-            <div class="dashboard-header fade-in">
-                <h2><i class="fa-solid fa-paper-plane"></i> Bulk Email Sender</h2>
-            </div>
-
-            <div class="dashboard-grid">
-                <!-- Composer Card -->
-                <div class="card composer-card fade-in delay-1">
-                    <h3><i class="fa-solid fa-pen-to-square"></i> Compose Message</h3>
-                    <form id="compose-form" onsubmit="return false;">
-                        
-                        <div class="form-row">
-                            <div class="form-group half">
-                                <label for="sender-name">Sender Name</label>
-                                <input type="text" id="sender-name" placeholder="E.g., John Doe" required spellcheck="false">
-                            </div>
-                            <div class="form-group half">
-                                <label for="dashboard-email">Your Gmail</label>
-                                <input type="email" id="dashboard-email" placeholder="you@gmail.com" required spellcheck="false" autocomplete="email">
-                            </div>
-                        </div>
-
-                        <div class="form-row">
-                            <div class="form-group half">
-                                <label for="dashboard-password">App Password</label>
-                                <div class="password-wrapper">
-                                    <input type="password" id="dashboard-password" placeholder="16-char app password" required autocomplete="off">
-                                    <button type="button" id="toggle-password" class="icon-button" aria-label="Toggle App Password">
-                                        <i class="fa-regular fa-eye"></i>
-                                    </button>
-                                </div>
-                            </div>
-                            <div class="form-group half">
-                                <label for="subject">Email Subject</label>
-                                <input type="text" id="subject" placeholder="Enter subject line..." required>
-                            </div>
-                        </div>
-
-                        <div class="form-group flex-grow">
-                            <label for="message-body">Message Body (Plain Text / HTML)</label>
-                            <textarea id="message-body" placeholder="Write your email here... Spintax supported: {Hi|Hello} {Name}" required></textarea>
-                        </div>
-                        
-                        <div class="form-group" style="margin-top: 0.5rem; margin-bottom: 0;">
-                            <label><i class="fa-solid fa-shield-cat"></i> Spam Protection</label>
-                            <div class="cf-turnstile" data-sitekey="1x00000000000000000000AA" data-theme="light"></div>
-                        </div>
-                    </form>
-                </div>
-
-                <!-- Recipients & Controls -->
-                <div class="right-column">
-                    <div class="card recipients-card fade-in delay-2">
-                        <div class="card-header-flex">
-                            <h3><i class="fa-solid fa-users"></i> Recipients</h3>
-                            <span class="badge" id="detected-count">0 found</span>
-                        </div>
-                        <p class="help-subtext">Paste emails (comma separated, new lines, or Excel copy)</p>
-                        <div class="form-group flex-grow" style="margin-bottom: 0;">
-                            <textarea id="recipients-input" placeholder="recipient1@example.com&#10;recipient2@example.com" spellcheck="false"></textarea>
-                        </div>
-                        <div id="email-validation-error" class="error-message hidden">
-                            <i class="fa-solid fa-triangle-exclamation"></i> <span>Please enter valid recipients.</span>
-                        </div>
-                    </div>
-
-                    <div class="card progress-card fade-in delay-3">
-                        <h3><i class="fa-solid fa-chart-pie"></i> Progress Monitor</h3>
-
-                        <div class="stats-grid">
-                            <div class="stat-box neutral">
-                                <span class="stat-label">Total</span>
-                                <span class="stat-value" id="stat-total">0</span>
-                            </div>
-                            <div class="stat-box success">
-                                <span class="stat-label">Sent</span>
-                                <span class="stat-value" id="stat-sent">0</span>
-                            </div>
-                            <div class="stat-box danger">
-                                <span class="stat-label">Failed</span>
-                                <span class="stat-value" id="stat-failed">0</span>
-                            </div>
-                            <div class="stat-box warning">
-                                <span class="stat-label">Remaining</span>
-                                <span class="stat-value" id="stat-remaining">0</span>
-                            </div>
-                        </div>
-
-                        <div class="progress-bar-container">
-                            <div class="progress-bar" id="progress-bar" style="width: 0%;"></div>
-                        </div>
-
-                        <div class="status-indicator">
-                            <i id="status-icon" class="fa-solid fa-circle-pause text-muted"></i>
-                            <span id="status-text">Ready to send</span>
-                        </div>
-
-                        <div class="control-buttons">
-                            <button type="button" id="send-btn" class="btn btn-success btn-lg flex-1">
-                                <i class="fa-solid fa-paper-plane"></i> Send All
-                            </button>
-                            <button type="button" id="stop-btn" class="btn btn-danger btn-lg flex-1 hidden">
-                                <i class="fa-solid fa-stop"></i> Stop Sending
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </section>
+      <div>
+        <label class="block text-xs font-semibold text-slate-300 mb-1">
+          Google 16-Digit App Password
+          <a href="https://myaccount.google.com/apppasswords" target="_blank" class="text-indigo-400 hover:underline font-normal ml-1">(यहाँ से लें)</a>
+        </label>
+        <input
+          type="password"
+          id="appPassword"
+          placeholder="xxxx xxxx xxxx xxxx"
+          class="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-sm text-white focus:outline-none focus:border-indigo-500"
+          required
+        />
+      </div>
     </div>
 
-    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
-    <script src="script.js"></script>
+    <!-- Sender Name & Subject -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+      <div>
+        <label class="block text-xs font-semibold text-slate-300 mb-1">Sender Name (प्रेषक का नाम)</label>
+        <input
+          type="text"
+          id="senderName"
+          placeholder="Yatendra Kumar"
+          class="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-sm text-white focus:outline-none focus:border-indigo-500"
+        />
+      </div>
+
+      <div>
+        <label class="block text-xs font-semibold text-slate-300 mb-1">Email Subject (विषय)</label>
+        <input
+          type="text"
+          id="subject"
+          placeholder="Your requested update and details"
+          class="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-sm text-white focus:outline-none focus:border-indigo-500"
+          required
+        />
+      </div>
+    </div>
+
+    <!-- Recipients -->
+    <div class="mb-4">
+      <label class="block text-xs font-semibold text-slate-300 mb-1">
+        Recipients (ईमेल लिस्ट - कॉमा लगाकर लिखें)
+      </label>
+      <textarea
+        id="recipients"
+        rows="2"
+        placeholder="user1@gmail.com, user2@yahoo.com, user3@outlook.com"
+        class="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-sm text-white focus:outline-none focus:border-indigo-500 font-mono text-xs"
+        required
+      ></textarea>
+    </div>
+
+    <!-- Email HTML Body -->
+    <div class="mb-5">
+      <label class="block text-xs font-semibold text-slate-300 mb-1">
+        HTML Message (Anti-Spam Formatted)
+      </label>
+      <textarea
+        id="htmlMessage"
+        rows="7"
+        class="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-sm text-slate-200 focus:outline-none focus:border-indigo-500 font-mono text-xs"
+      ><div style="font-family: Arial, sans-serif; max-width: 580px; margin: auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;">
+  <h2 style="color: #0f172a; margin-top: 0;">Important Update Regarding Your Request</h2>
+  <p style="color: #334155; line-height: 1.6;">Hello,</p>
+  <p style="color: #334155; line-height: 1.6;">Thank you for getting in touch. Here is the verified information you requested to proceed with your workflow.</p>
+  <p style="margin: 25px 0;"><a href="https://yourdomain.com" style="background: #2563eb; color: #fff; padding: 10px 20px; text-decoration: none; border-radius: 5px; font-weight: bold;">View Details &rarr;</a></p>
+  <p style="color: #64748b; font-size: 13px;">If you have any questions, feel free to reply directly to this email.</p>
+  <hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 20px 0;" />
+  <p style="color: #94a3b8; font-size: 11px; text-align: center;">New Delhi, India • <a href="https://yourdomain.com/unsubscribe" style="color: #64748b;">Unsubscribe</a></p>
+</div></textarea>
+    </div>
+
+    <!-- Send Button -->
+    <button
+      id="sendBtn"
+      onclick="handleSendEmails()"
+      class="w-full py-3.5 px-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold text-sm rounded-xl transition shadow-lg shadow-indigo-600/30 flex items-center justify-center gap-2"
+    >
+      <span>⚡ Send Emails Now (Direct Inbox & High Speed)</span>
+    </button>
+
+    <!-- Response Log -->
+    <div id="statusBox" class="mt-6 hidden p-4 rounded-xl text-xs font-mono"></div>
+
+  </div>
+
+  <script>
+    async function handleSendEmails() {
+      const btn = document.getElementById('sendBtn');
+      const statusBox = document.getElementById('statusBox');
+
+      const senderEmail = document.getElementById('senderEmail').value.trim();
+      const appPassword = document.getElementById('appPassword').value.trim();
+      const senderName = document.getElementById('senderName').value.trim();
+      const subject = document.getElementById('subject').value.trim();
+      const recipients = document.getElementById('recipients').value.trim();
+      const htmlMessage = document.getElementById('htmlMessage').value.trim();
+
+      if (!senderEmail || !appPassword || !recipients || !subject) {
+        alert('कृपया सभी अनिवार्य फ़ील्ड्स भरें!');
+        return;
+      }
+
+      btn.disabled = true;
+      btn.innerText = 'Sending... कृपया प्रतीक्षा करें (High Speed Connection)...';
+      statusBox.classList.remove('hidden', 'bg-rose-950/80', 'border-rose-800', 'text-rose-300', 'bg-emerald-950/80', 'border-emerald-800', 'text-emerald-300');
+      statusBox.classList.add('bg-slate-950', 'border', 'border-slate-800', 'text-slate-300');
+      statusBox.innerHTML = 'Connecting to Gmail SMTP via SSL Port 465...';
+
+      try {
+        const response = await fetch('/api/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            senderEmail,
+            appPassword,
+            senderName,
+            subject,
+            recipients,
+            htmlMessage
+          })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+          statusBox.className = 'mt-6 p-4 rounded-xl text-xs font-mono bg-emerald-950/80 border border-emerald-800 text-emerald-300';
+          let logHtml = `<b>✓ ${data.message}</b><br><br>`;
+          data.details.forEach(item => {
+            logHtml += `• ${item.email} -> <span class="font-bold text-white">${item.status}</span> ${item.messageId ? '(Message ID: ' + item.messageId + ')' : ''}<br>`;
+          });
+          statusBox.innerHTML = logHtml;
+        } else {
+          statusBox.className = 'mt-6 p-4 rounded-xl text-xs font-mono bg-rose-950/80 border border-rose-800 text-rose-300';
+          statusBox.innerHTML = `<b>Error:</b> ${data.message}`;
+        }
+      } catch (err) {
+        statusBox.className = 'mt-6 p-4 rounded-xl text-xs font-mono bg-rose-950/80 border border-rose-800 text-rose-300';
+        statusBox.innerHTML = `<b>Network / Server Error:</b> ${err.message}`;
+      } finally {
+        btn.disabled = false;
+        btn.innerText = '⚡ Send Emails Now (Direct Inbox & High Speed)';
+      }
+    }
+  </script>
 </body>
-
 </html>
