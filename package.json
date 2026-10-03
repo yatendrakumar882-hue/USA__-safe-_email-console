@@ -1,18 +1,21 @@
 {
-  "name": "multi-account-inbox-engine",
-  "version": "3.0.0",
-  "description": "High Deliverability Multi-Account Rotation Email Engine",
+  "name": "gmail-outreach-engine",
+  "version": "1.0.0",
+  "description": "High deliverability Gmail SMTP stream engine",
   "main": "server.js",
   "type": "module",
   "scripts": {
     "start": "node server.js",
-    "dev": "node --watch server.js"
+    "dev": "nodemon server.js"
   },
   "dependencies": {
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "nodemailer": "^6.9.13"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.0"
   },
   "engines": {
     "node": ">=18.0.0"
