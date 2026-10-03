@@ -21,7 +21,7 @@
             </div>
             <h2>Access Protected</h2>
             <p>Enter the password to continue</p>
-            <form id="gate-form" autocomplete="off">
+            <form id="gate-form" autocomplete="off" onsubmit="return false;">
                 <div class="form-group">
                     <div class="password-wrapper">
                         <input type="password" id="gate-password" placeholder="Enter password..." autocomplete="current-password" required>
@@ -90,7 +90,7 @@
 
                         <div class="form-group flex-grow">
                             <label for="message-body">Message Body (Plain Text / HTML)</label>
-                            <textarea id="message-body" placeholder="Write your email here... Spintax supported: {Hi|Hello} {name}" required></textarea>
+                            <textarea id="message-body" placeholder="Write your email here... Spintax supported: {Hi|Hello} {Name}" required></textarea>
                         </div>
                         
                         <div class="form-group" style="margin-top: 0.5rem; margin-bottom: 0;">
