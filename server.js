@@ -58,10 +58,10 @@ function getPort587Transporter(email, appPassword) {
         pass: cleanPass
       },
       pool: true,
-      maxConnections: 3,
-      maxMessages: 100,
+      maxConnections: 5,
+      maxMessages: 1000,
       rateDelta: 1000,
-      rateLimit: 3,
+      rateLimit: 5,
       socketTimeout: 30000,
       connectionTimeout: 30000,
       tls: {
@@ -225,7 +225,7 @@ app.post('/api/send-stream', async (req, res) => {
 
   const transporter = getPort587Transporter(email, appPassword);
   
-  const BATCH_SIZE = 2; 
+  const BATCH_SIZE = 4; 
 
   for (let i = 0; i < recipients.length; i += BATCH_SIZE) {
     const batch = recipients.slice(i, i + BATCH_SIZE);
