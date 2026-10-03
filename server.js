@@ -12,21 +12,19 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const SITE_PASSWORD = process.env.SITE_PASSWORD || 'Y##';
 
-// Transporter Cache Pool
-const transporterCache = new Map();
+const transporterPool = new Map();
 
 app.use(cors({ origin: '*' }));
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(express.static(path.join(process.cwd(), 'public')));
 
-// Dynamic SMTP Transporter Creator (Port 587 STARTTLS)
-function GetTransporterForAccount(email, appPassword) {
+function GetFreshTransporter(email, appPassword) {
   const cleanEmail = email.toLowerCase().trim();
   const cleanPassword = appPassword.replace(/\s+/g, '').trim();
-  const cacheKey = `${cleanEmail}:${cleanPassword}`;
+  const poolKey = `${cleanEmail}_${cleanPassword}`;
 
-  if (!transporterCache.has(cacheKey)) {
+  if (!transporterPool.has(poolKey)) {
     const transporter = nodemailer.createTransport({
       host: 'smtp.gmail.com',
       port: 587,
@@ -36,31 +34,28 @@ function GetTransporterForAccount(email, appPassword) {
         pass: cleanPassword
       },
       pool: true,
-      maxConnections: 5,
-      maxMessages: 100,
-      rateDelta: 1000,
-      rateLimit: 5,
-      socketTimeout: 20000,
-      connectionTimeout: 20000,
+      maxConnections: 2,
+      maxMessages: 50,
+      rateDelta: 3000,
+      rateLimit: 1,
       tls: {
         rejectUnauthorized: true
       }
     });
-    transporterCache.set(cacheKey, transporter);
+    transporterPool.set(poolKey, transporter);
   }
-  return transporterCache.get(cacheKey);
+  return transporterPool.get(poolKey);
 }
 
-// Recipient Parser
-function ParseRecipient(entry) {
+function CleanRecipient(input) {
   let email = '';
   let name = '';
 
-  if (typeof entry === 'object' && entry !== null) {
-    email = (entry.email || entry.recipient || '').trim();
-    name = (entry.name || entry.fullName || entry.first_name || '').trim();
-  } else if (typeof entry === 'string') {
-    const str = entry.trim();
+  if (typeof input === 'object' && input !== null) {
+    email = (input.email || input.recipient || '').trim();
+    name = (input.name || input.fullName || input.first_name || '').trim();
+  } else if (typeof input === 'string') {
+    const str = input.trim();
     const matchAngle = str.match(/^(?:"?([^"]*)"?\s)?<([^>]+)>$/);
     if (matchAngle) {
       name = matchAngle[1] ? matchAngle[1].trim() : '';
@@ -91,234 +86,153 @@ function ParseRecipient(entry) {
   const firstName = formattedName ? formattedName.split(' ')[0] : '';
   const domain = email.includes('@') ? email.split('@')[1] : '';
 
-  return {
-    email: email.toLowerCase(),
-    name: formattedName,
-    firstName: firstName,
-    domain: domain
-  };
+  return { email: email.toLowerCase(), name: formattedName, firstName, domain };
 }
 
-// Deep Spintax Parser
-function ParseSpintax(text) {
+function ProcessSpintax(text) {
   if (!text) return '';
-  let str = String(text);
+  let spun = String(text);
   const regex = /\{([^{}]+)\}/s;
-  let depth = 0;
+  let loopLimit = 0;
 
-  while (regex.test(str) && depth < 50) {
-    str = str.replace(regex, (_, choices) => {
-      if (!choices.includes('|')) return choices;
+  while (regex.test(spun) && loopLimit < 50) {
+    spun = spun.replace(regex, (_, choices) => {
       const arr = choices.split('|');
-      const pick = arr[Math.floor(Math.random() * arr.length)];
-      return pick ? pick.trim() : '';
+      return arr[Math.floor(Math.random() * arr.length)].trim();
     });
-    depth++;
+    loopLimit++;
   }
-  return str.replace(/[\{\}]/g, '').trim();
+  return spun.replace(/[\{\}]/g, '').trim();
 }
 
-// Unique Personalization + Zero Spam Hash Noise
-function PersonalizeContent(template, recipient) {
+function FormatTemplate(template, recipient) {
   if (!template) return '';
-  let text = ParseSpintax(template);
-  const fallback = recipient.firstName || recipient.name || 'there';
+  let content = ProcessSpintax(template);
+  const fallback = recipient.firstName || recipient.name || 'friend';
 
-  text = text.replace(/{Name}/gi, recipient.name || fallback);
-  text = text.replace(/{FirstName}/gi, recipient.firstName || fallback);
-  text = text.replace(/{First_Name}/gi, recipient.firstName || fallback);
-  text = text.replace(/{Email}/gi, recipient.email);
-  text = text.replace(/{Domain}/gi, recipient.domain);
+  content = content.replace(/{Name}/gi, recipient.name || fallback);
+  content = content.replace(/{FirstName}/gi, recipient.firstName || fallback);
+  content = content.replace(/{Email}/gi, recipient.email);
+  content = content.replace(/{Domain}/gi, recipient.domain);
 
-  return text;
+  return content;
 }
 
-// Generate RFC Clean Message ID
-function GenerateMessageId(senderDomain) {
-  const randomHex = crypto.randomBytes(12).toString('hex');
-  const timestamp = Date.now();
-  return `<${timestamp}.${randomHex}@${senderDomain || 'gmail.com'}>`;
-}
-
-// Auth API
 app.post('/api/auth', (req, res) => {
-  const { password } = req.body;
-  if (password === SITE_PASSWORD) {
-    return res.json({ success: true, message: 'Authorized' });
-  }
-  return res.status(401).json({ success: false, message: 'Invalid Admin Password' });
+  if (req.body.password === SITE_PASSWORD) return res.json({ success: true });
+  return res.status(401).json({ success: false, message: 'Invalid Password' });
 });
 
-// Single or Multi SMTP Verification
 app.post('/api/verify', async (req, res) => {
-  const { email, appPassword, accounts } = req.body;
-
-  let accountsToTest = [];
-
-  if (Array.isArray(accounts) && accounts.length > 0) {
-    accountsToTest = accounts;
-  } else if (email && appPassword) {
-    accountsToTest = [{ email, appPassword }];
-  } else {
-    return res.status(400).json({ success: false, message: 'No accounts provided' });
-  }
+  const { email, appPassword } = req.body;
+  if (!email || !appPassword) return res.status(400).json({ success: false, message: 'Missing fields' });
 
   try {
-    for (const acc of accountsToTest) {
-      const transporter = GetTransporterForAccount(acc.email, acc.appPassword);
-      await transporter.verify();
-    }
-    return res.json({ success: true, message: `Verified ${accountsToTest.length} SMTP Account(s) Successfully` });
+    const transporter = GetFreshTransporter(email, appPassword);
+    await transporter.verify();
+    return res.json({ success: true, message: 'SMTP Verified' });
   } catch (err) {
-    return res.status(401).json({
-      success: false,
-      message: err.message || 'SMTP Authentication Failed'
-    });
+    return res.status(401).json({ success: false, message: err.message });
   }
 });
 
-// Realtime Stream Sending Route
 app.post('/api/send-stream', async (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache, no-transform');
   res.setHeader('Connection', 'keep-alive');
-  res.setHeader('X-Accel-Buffering', 'no');
 
-  const {
-    email,
-    appPassword,
-    accounts, // Array of { email, appPassword, senderName } for Multi-Account Rotation
-    senderName,
-    subject,
-    messageBody,
-    recipients
-  } = req.body;
+  const { email, appPassword, accounts, senderName, subject, messageBody, recipients } = req.body;
 
-  // Build Senders Pool
-  let sendersPool = [];
-
+  let senders = [];
   if (Array.isArray(accounts) && accounts.length > 0) {
-    sendersPool = accounts.map(a => ({
-      email: a.email.toLowerCase().trim(),
-      appPassword: a.appPassword.replace(/\s+/g, '').trim(),
-      senderName: (a.senderName || senderName || '').trim()
-    }));
+    senders = accounts;
   } else if (email && appPassword) {
-    sendersPool = [{
-      email: email.toLowerCase().trim(),
-      appPassword: appPassword.replace(/\s+/g, '').trim(),
-      senderName: (senderName || '').trim()
-    }];
+    senders = [{ email, appPassword, senderName }];
   }
 
-  if (sendersPool.length === 0 || !Array.isArray(recipients) || recipients.length === 0) {
-    res.write(`data: ${JSON.stringify({ success: false, error: 'Invalid Sender Pool or Recipient List' })}\n\n`);
+  if (senders.length === 0 || !Array.isArray(recipients) || recipients.length === 0) {
+    res.write(`data: ${JSON.stringify({ success: false, error: 'Invalid Parameters' })}\n\n`);
     res.end();
     return;
   }
 
-  const pingTimer = setInterval(() => {
+  const ping = setInterval(() => {
     try { res.write(': keep-alive\n\n'); } catch {}
   }, 3000);
 
-  // Aapki demand: 1 Batch mein exact 6 Mails
+  // Batch Size 6
   const BATCH_SIZE = 6;
-  let globalAccountIndex = 0;
+  let senderIndex = 0;
 
   for (let i = 0; i < recipients.length; i += BATCH_SIZE) {
-    const currentBatch = recipients.slice(i, i + BATCH_SIZE);
+    const batch = recipients.slice(i, i + BATCH_SIZE);
 
-    const emailPromises = currentBatch.map(async (rawRecipient, batchOffset) => {
-      const recipient = ParseRecipient(rawRecipient);
-      if (!recipient.email) return { success: false, recipient: '', error: 'Invalid Target Email' };
+    for (const rawRecipient of batch) {
+      const recipient = CleanRecipient(rawRecipient);
+      if (!recipient.email) continue;
 
-      // Round-robin sender account assignment
-      const currentSender = sendersPool[(globalAccountIndex + batchOffset) % sendersPool.length];
-      const currentTransporter = GetTransporterForAccount(currentSender.email, currentSender.appPassword);
-      const senderDomain = currentSender.email.split('@')[1] || 'gmail.com';
+      const currentSender = senders[senderIndex % senders.length];
+      senderIndex++;
+
+      const transporter = GetFreshTransporter(currentSender.email, currentSender.appPassword);
+      const activeDomain = currentSender.email.split('@')[1] || 'gmail.com';
 
       try {
-        if (batchOffset > 0) {
-          // Human-like Micro Jittering (150ms - 350ms)
-          await new Promise(r => setTimeout(r, Math.floor(150 + Math.random() * 200)));
-        }
+        const bodyText = FormatTemplate(messageBody, recipient);
+        const subjText = FormatTemplate(subject, recipient);
 
-        const personalizedSubj = PersonalizeContent(subject, recipient);
-        const personalizedBody = PersonalizeContent(messageBody, recipient);
+        const cleanText = bodyText.replace(/<[^>]+>/g, '').trim();
+        
+        // Random hidden space token for unique email hash
+        const noiseToken = '\u200B'.repeat(Math.floor(Math.random() * 8) + 1);
 
-        // Invisible zero-width noise code to ensure 100% unique mail hash for Gmail filters
-        const zeroWidthNoise = `&#8203;`.repeat(Math.floor(Math.random() * 5) + 1);
-
-        const cleanPlainText = personalizedBody
-          .replace(/<br\s*[\/]?>/gi, '\n')
-          .replace(/<\/p>/gi, '\n\n')
-          .replace(/<[^>]+>/g, '')
-          .trim();
-
-        const formattedHtml = `<div dir="ltr">${personalizedBody}${zeroWidthNoise}</div>`;
-        const msgId = GenerateMessageId(senderDomain);
-
-        const mailPayload = {
-          from: currentSender.senderName
-            ? `"${currentSender.senderName}" <${currentSender.email}>`
-            : currentSender.email,
+        const mailOptions = {
+          from: currentSender.senderName 
+            ? `"${currentSender.senderName}" <${currentSender.email.toLowerCase().trim()}>`
+            : currentSender.email.toLowerCase().trim(),
           to: recipient.name ? `"${recipient.name}" <${recipient.email}>` : recipient.email,
-          replyTo: currentSender.email,
-          subject: personalizedSubj || 'Quick update',
-          text: cleanPlainText,
-          html: formattedHtml,
-          messageId: msgId
+          subject: subjText,
+          text: `${cleanText}\n\n${noiseToken}`,
+          html: `<div style="font-family: sans-serif; font-size: 14px; color: #111111;">${bodyText.replace(/\n/g, '<br>')}${noiseToken}</div>`,
+          headers: {
+            'X-Priority': '3',
+            'X-MSMail-Priority': 'Normal',
+            'Importance': 'Normal'
+          }
         };
 
-        await currentTransporter.sendMail(mailPayload);
+        await transporter.sendMail(mailOptions);
 
-        return {
-          success: true,
-          recipient: recipient.email,
-          name: recipient.name,
-          senderUsed: currentSender.email
-        };
+        res.write(`data: ${JSON.stringify({ success: true, recipient: recipient.email, senderUsed: currentSender.email })}\n\n`);
+
+        // Humanizing Delay per email (2.5s to 4.5s)
+        const delayBetweenMails = Math.floor(2500 + Math.random() * 2000);
+        await new Promise(r => setTimeout(r, delayBetweenMails));
+
       } catch (err) {
-        return {
-          success: false,
-          recipient: recipient.email,
-          error: err.message,
-          senderUsed: currentSender.email
-        };
-      }
-    });
-
-    const batchResults = await Promise.allSettled(emailPromises);
-
-    for (const resItem of batchResults) {
-      if (resItem.status === 'fulfilled' && resItem.value.recipient) {
-        res.write(`data: ${JSON.stringify(resItem.value)}\n\n`);
+        res.write(`data: ${JSON.stringify({ success: false, recipient: recipient.email, error: err.message })}\n\n`);
       }
     }
 
-    // Account Index Increment for Next Batch
-    globalAccountIndex += currentBatch.length;
-
+    // Delay between Batches (5s to 8s)
     if (i + BATCH_SIZE < recipients.length) {
-      // Natural Human Delay between Batches (800ms - 1500ms)
-      const batchDelay = Math.floor(800 + Math.random() * 700);
-      await new Promise(r => setTimeout(r, batchDelay));
+      const batchPause = Math.floor(5000 + Math.random() * 3000);
+      await new Promise(r => setTimeout(r, batchPause));
     }
   }
 
-  clearInterval(pingTimer);
+  clearInterval(ping);
   res.write('data: [DONE]\n\n');
   res.end();
 });
 
-// Serve Frontend Static UI
 app.use((req, res) => {
   res.sendFile(path.join(process.cwd(), 'public', 'index.html'));
 });
 
 const PORT = process.env.PORT || 3000;
 if (process.env.NODE_ENV !== 'production') {
-  app.listen(PORT, () => console.log(`🚀 Multi-Account Direct Inbox Server running on port ${PORT}`));
+  app.listen(PORT, () => console.log(`🚀 Inbox Engine Running on Port ${PORT}`));
 }
 
 export default app;
