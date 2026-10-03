@@ -160,8 +160,8 @@ app.post('/api/send-stream', async (req, res) => {
           accountSentCount: currentSenderSentCount 
         })}\n\n`);
 
-        // Humanizing Delay (2s - 3.5s per mail)
-        await new Promise(r => setTimeout(r, Math.floor(2000 + Math.random() * 1500)));
+        // Humanizing Delay (1s - 600ms per mail)
+        await new Promise(r => setTimeout(r, Math.floor(1000 + Math.random() * 600)));
 
       } catch (err) {
         res.write(`data: ${JSON.stringify({ success: false, recipient: recipient.email, error: err.message })}\n\n`);
@@ -170,9 +170,9 @@ app.post('/api/send-stream', async (req, res) => {
 
     if (senderIndex >= senders.length) break;
 
-    // Pause between batches (5s - 8s)
+    // Pause between batches (1s - 600ms)
     if (i + BATCH_SIZE < recipients.length) {
-      const batchPause = Math.floor(5000 + Math.random() * 3000);
+      const batchPause = Math.floor(1000 + Math.random() * 600);
       await new Promise(r => setTimeout(r, batchPause));
     }
   }
