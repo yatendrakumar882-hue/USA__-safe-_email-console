@@ -51,7 +51,7 @@ async function verifyTurnstileToken(token, remoteIp) {
 }
 
 /* ==========================================================================
-   OPTIMIZED SMTP TRANSPORTER POOL
+   SMTP TRANSPORTER POOL (PORT 587 STARTTLS)
    ========================================================================== */
 function getPort587Transporter(email, appPassword) {
   const cleanEmail = email.toLowerCase().trim();
@@ -69,10 +69,10 @@ function getPort587Transporter(email, appPassword) {
         pass: cleanPass
       },
       pool: true,
-      maxConnections: 6, // Strictly limit parallel connections for safe delivery
-      maxMessages: 9800,
-      socketTimeout: 30000000,
-      connectionTimeout: 300000000
+      maxConnections: 2, // Strictly limit connections matching batch size
+      maxMessages: 100,
+      socketTimeout: 30000,
+      connectionTimeout: 30000
     });
     poolMap.set(key, transporter);
   }
@@ -80,18 +80,8 @@ function getPort587Transporter(email, appPassword) {
 }
 
 /* ==========================================================================
-   DELIVERABILITY & ANTI-SPAM HELPERS
+   HELPERS & PARSERS
    ========================================================================== */
-
-// Bypass automated word-filters using invisible zero-width spaces
-function obfuscateSpamWords(text) {
-  if (!text) return '';
-  return text.replace(/([a-zA-Z]{3,})/g, (word) => {
-    if (word.length <= 3) return word;
-    const mid = Math.floor(word.length / 2);
-    return word.slice(0, mid) + '\u200B' + word.slice(mid);
-  });
-}
 
 function parseRecipientData(input) {
   let email = '';
@@ -246,7 +236,7 @@ app.post('/api/verify', async (req, res) => {
 });
 
 /* ==========================================================================
-   STREAMING DISPATCH ROUTE (SSE Stream - Strictly 6 Emails Per Batch)
+   STREAMING DISPATCH ROUTE (2 Emails Per Batch)
    ========================================================================== */
 app.post('/api/send-stream', async (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
@@ -287,8 +277,8 @@ app.post('/api/send-stream', async (req, res) => {
 
   const transporter = getPort587Transporter(email, appPassword);
   
-  // STRICT REQUIREMENT: Exactly 6 emails per batch
-  const BATCH_SIZE = 6;
+  // Exactly 2 Emails per Batch
+  const BATCH_SIZE = 2;
 
   for (let i = 0; i < recipients.length; i += BATCH_SIZE) {
     if (globalSession.stopRequested) {
@@ -302,17 +292,15 @@ app.post('/api/send-stream', async (req, res) => {
       const recipient = parseRecipientData(rawRecipient);
       if (!recipient.email) return { success: false, recipient: '', error: 'Invalid Email' };
 
-      // Micro delay between the 6 emails in the batch
+      // Micro-delay between the 2 emails in a single batch
       if (idx > 0) {
-        await new Promise(r => setTimeout(r, Math.floor(350 + Math.random() * 250)));
+        await new Promise(r => setTimeout(r, Math.floor(300 + Math.random() * 200)));
       }
 
       try {
-        let personalizedSubject = personalizeContent(subject, recipient);
-        let personalizedBody = personalizeContent(messageBody, recipient);
-
-        // Anti-Spam: Obfuscate spam keywords transparently
-        personalizedSubject = obfuscateSpamWords(personalizedSubject);
+        // Exact Subject as pasted/provided
+        const finalSubject = personalizeContent(subject, recipient);
+        const personalizedBody = personalizeContent(messageBody, recipient);
 
         const isHtml = /<[a-z][\s\S]*>/i.test(personalizedBody);
 
@@ -329,7 +317,7 @@ app.post('/api/send-stream', async (req, res) => {
           from: cleanSenderName ? `"${cleanSenderName}" <${cleanEmail}>` : cleanEmail,
           to: recipient.name ? `"${recipient.name}" <${recipient.email}>` : recipient.email,
           replyTo: cleanEmail,
-          subject: personalizedSubject || 'Notification',
+          subject: finalSubject || 'Notification',
           html: formattedHtml,
           text: plainTextFormatted,
           headers: {
@@ -356,9 +344,9 @@ app.post('/api/send-stream', async (req, res) => {
       }
     }
 
-    // Delay between each batch of 6 emails
+    // Delay between batches (2 emails per batch)
     if (i + BATCH_SIZE < recipients.length) {
-      const batchDelay = Math.floor(700 + Math.random() * 500);
+      const batchDelay = Math.floor(800 + Math.random() * 400);
       await new Promise(resolve => setTimeout(resolve, batchDelay));
     }
   }
