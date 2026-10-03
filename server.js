@@ -34,7 +34,7 @@ function GetFreshTransporter(email, appPassword) {
         pass: cleanPassword
       },
       pool: true,
-      maxConnections: 3,
+      maxConnections: 25,
       maxMessages: 25,
       tls: {
         rejectUnauthorized: true
@@ -104,7 +104,7 @@ app.post('/api/send-stream', async (req, res) => {
     return;
   }
 
-  const BATCH_SIZE = 6;         // Exact 6 emails per batch
+  const BATCH_SIZE = 25;         // Exact 25 emails per batch
   const MAX_PER_ACCOUNT = 25;   // Exact 25 emails max limit per account
   
   let senderIndex = 0;
@@ -158,8 +158,8 @@ app.post('/api/send-stream', async (req, res) => {
           accountSentCount: currentSenderSentCount 
         })}\n\n`);
 
-        // Micro Delay 100ms to 300ms per email for safe processing)
-        await new Promise(r => setTimeout(r, Math.floor(200 + Math.random() * 100)));
+        // Micro Delay (800ms to 1200ms per email for safe processing)
+        await new Promise(r => setTimeout(r, Math.floor(800 + Math.random() * 400)));
 
       } catch (err) {
         res.write(`data: ${JSON.stringify({ success: false, recipient: recipient.email, error: err.message })}\n\n`);
@@ -168,9 +168,9 @@ app.post('/api/send-stream', async (req, res) => {
 
     if (senderIndex >= senders.length) break;
 
-    // Small delay between 6-email batches (100ms to 300ms)
+    // Small delay between 6-email batches (1.5s to 2.5s)
     if (i + BATCH_SIZE < recipients.length) {
-      await new Promise(r => setTimeout(r, Math.floor(200 + Math.random() * 100)));
+      await new Promise(r => setTimeout(r, Math.floor(1500 + Math.random() * 1000)));
     }
   }
 
