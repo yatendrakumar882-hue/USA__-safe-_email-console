@@ -276,8 +276,8 @@ app.post('/api/send-stream', async (req, res) => {
 
   const transporter = getPort587Transporter(email, appPassword);
   
-  // Deliverability Best Practice: Send 2-3 emails per batch with micro-delays
-  const BATCH_SIZE = 2;
+  // Deliverability Best Practice: Send 4-5 emails per batch with micro-delays
+  const BATCH_SIZE = 5;
 
   for (let i = 0; i < recipients.length; i += BATCH_SIZE) {
     if (globalSession.stopRequested) {
