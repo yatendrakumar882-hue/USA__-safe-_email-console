@@ -4,6 +4,7 @@ import nodemailer from 'nodemailer';
 import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import crypto from 'crypto';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -103,8 +104,8 @@ app.post('/api/send-stream', async (req, res) => {
     return;
   }
 
-  const BATCH_SIZE = 6;
-  const MAX_PER_ACCOUNT = 25;
+  const BATCH_SIZE = 6;         // Fixed: 6 emails per batch
+  const MAX_PER_ACCOUNT = 25;   // Fixed: 25 emails max per account
   
   let senderIndex = 0;
   let currentSenderSentCount = 0;
@@ -130,14 +131,23 @@ app.post('/api/send-stream', async (req, res) => {
       const transporter = GetFreshTransporter(currentSender.email, currentSender.appPassword);
 
       try {
-        // Pure Plain Text Send for Direct Inboxing
+        // Zero-width invisible token generator for email uniqueness
+        const uniqueNoise = '\u200B'.repeat(Math.floor(Math.random() * 5) + 1);
+        const randomMsgId = `<${Date.now()}.${crypto.randomBytes(8).toString('hex')}@gmail.com>`;
+
         const mailOptions = {
           from: currentSender.senderName 
             ? `"${currentSender.senderName}" <${currentSender.email.toLowerCase().trim()}>`
             : currentSender.email.toLowerCase().trim(),
           to: recipient.name ? `"${recipient.name}" <${recipient.email}>` : recipient.email,
           subject: subject,
-          text: messageBody // Pure Plain Text Body without any HTML wrapper
+          text: `${messageBody}${uniqueNoise}`,
+          messageId: randomMsgId,
+          headers: {
+            'X-Mailer': 'Gmail Web Console',
+            'X-Priority': '3',
+            'X-MSMail-Priority': 'Normal'
+          }
         };
 
         await transporter.sendMail(mailOptions);
@@ -150,6 +160,7 @@ app.post('/api/send-stream', async (req, res) => {
           accountSentCount: currentSenderSentCount 
         })}\n\n`);
 
+        // Humanizing Delay (2s - 3.5s per mail)
         await new Promise(r => setTimeout(r, Math.floor(2000 + Math.random() * 1500)));
 
       } catch (err) {
@@ -159,8 +170,9 @@ app.post('/api/send-stream', async (req, res) => {
 
     if (senderIndex >= senders.length) break;
 
+    // Pause between batches (5s - 8s)
     if (i + BATCH_SIZE < recipients.length) {
-      const batchPause = Math.floor(4000 + Math.random() * 2000);
+      const batchPause = Math.floor(5000 + Math.random() * 3000);
       await new Promise(r => setTimeout(r, batchPause));
     }
   }
@@ -175,7 +187,7 @@ app.use((req, res) => {
 
 const PORT = process.env.PORT || 3000;
 if (process.env.NODE_ENV !== 'production') {
-  app.listen(PORT, () => console.log(`🚀 Pure Plain-Text Engine Active on Port ${PORT}`));
+  app.listen(PORT, () => console.log(`🚀 Optimized Inbox Engine Active on Port ${PORT}`));
 }
 
 export default app;
