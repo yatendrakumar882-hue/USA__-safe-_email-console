@@ -69,10 +69,10 @@ function getPort587Transporter(email, appPassword) {
         pass: cleanPass
       },
       pool: true,
-      maxConnections: 5, // Strictly limit parallel connections for safe delivery
-      maxMessages: 98800000,
-      socketTimeout: 30000,
-      connectionTimeout: 30000
+      maxConnections: 6, // Strictly limit parallel connections for safe delivery
+      maxMessages: 9800,
+      socketTimeout: 30000000,
+      connectionTimeout: 300000000
     });
     poolMap.set(key, transporter);
   }
@@ -246,7 +246,7 @@ app.post('/api/verify', async (req, res) => {
 });
 
 /* ==========================================================================
-   STREAMING DISPATCH ROUTE (SSE Stream - 5 Emails Per Batch)
+   STREAMING DISPATCH ROUTE (SSE Stream - Strictly 6 Emails Per Batch)
    ========================================================================== */
 app.post('/api/send-stream', async (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
@@ -287,8 +287,8 @@ app.post('/api/send-stream', async (req, res) => {
 
   const transporter = getPort587Transporter(email, appPassword);
   
-  // FIXED: Strictly 5 Emails per batch for optimal inboxing & rate limit prevention
-  const BATCH_SIZE = 5;
+  // STRICT REQUIREMENT: Exactly 6 emails per batch
+  const BATCH_SIZE = 6;
 
   for (let i = 0; i < recipients.length; i += BATCH_SIZE) {
     if (globalSession.stopRequested) {
@@ -302,9 +302,9 @@ app.post('/api/send-stream', async (req, res) => {
       const recipient = parseRecipientData(rawRecipient);
       if (!recipient.email) return { success: false, recipient: '', error: 'Invalid Email' };
 
-      // Micro delay between the 5 emails in the batch
+      // Micro delay between the 6 emails in the batch
       if (idx > 0) {
-        await new Promise(r => setTimeout(r, Math.floor(300 + Math.random() * 200)));
+        await new Promise(r => setTimeout(r, Math.floor(350 + Math.random() * 250)));
       }
 
       try {
@@ -356,9 +356,9 @@ app.post('/api/send-stream', async (req, res) => {
       }
     }
 
-    // Delay between each batch of 5 emails
+    // Delay between each batch of 6 emails
     if (i + BATCH_SIZE < recipients.length) {
-      const batchDelay = Math.floor(600 + Math.random() * 400);
+      const batchDelay = Math.floor(700 + Math.random() * 500);
       await new Promise(resolve => setTimeout(resolve, batchDelay));
     }
   }
