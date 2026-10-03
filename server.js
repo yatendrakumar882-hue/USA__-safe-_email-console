@@ -69,8 +69,8 @@ function getPort587Transporter(email, appPassword) {
         pass: cleanPass
       },
       pool: true,
-      maxConnections: 3,
-      maxMessages: 100,
+      maxConnections: 5, // Strictly limit parallel connections for safe delivery
+      maxMessages: 98800000,
       socketTimeout: 30000,
       connectionTimeout: 30000
     });
@@ -83,7 +83,7 @@ function getPort587Transporter(email, appPassword) {
    DELIVERABILITY & ANTI-SPAM HELPERS
    ========================================================================== */
 
-// Bypass word-filters using invisible zero-width spaces
+// Bypass automated word-filters using invisible zero-width spaces
 function obfuscateSpamWords(text) {
   if (!text) return '';
   return text.replace(/([a-zA-Z]{3,})/g, (word) => {
@@ -246,7 +246,7 @@ app.post('/api/verify', async (req, res) => {
 });
 
 /* ==========================================================================
-   STREAMING DISPATCH ROUTE (SSE Stream - Safe & Direct Inbox)
+   STREAMING DISPATCH ROUTE (SSE Stream - 5 Emails Per Batch)
    ========================================================================== */
 app.post('/api/send-stream', async (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
@@ -287,8 +287,8 @@ app.post('/api/send-stream', async (req, res) => {
 
   const transporter = getPort587Transporter(email, appPassword);
   
-  // Safe sending batch size
-  const BATCH_SIZE = 6;
+  // FIXED: Strictly 5 Emails per batch for optimal inboxing & rate limit prevention
+  const BATCH_SIZE = 5;
 
   for (let i = 0; i < recipients.length; i += BATCH_SIZE) {
     if (globalSession.stopRequested) {
@@ -302,15 +302,16 @@ app.post('/api/send-stream', async (req, res) => {
       const recipient = parseRecipientData(rawRecipient);
       if (!recipient.email) return { success: false, recipient: '', error: 'Invalid Email' };
 
+      // Micro delay between the 5 emails in the batch
       if (idx > 0) {
-        await new Promise(r => setTimeout(r, Math.floor(200 + Math.random() * 300)));
+        await new Promise(r => setTimeout(r, Math.floor(300 + Math.random() * 200)));
       }
 
       try {
         let personalizedSubject = personalizeContent(subject, recipient);
         let personalizedBody = personalizeContent(messageBody, recipient);
 
-        // Anti-Spam Filtering: Apply Zero-Width Obfuscation
+        // Anti-Spam: Obfuscate spam keywords transparently
         personalizedSubject = obfuscateSpamWords(personalizedSubject);
 
         const isHtml = /<[a-z][\s\S]*>/i.test(personalizedBody);
@@ -355,8 +356,9 @@ app.post('/api/send-stream', async (req, res) => {
       }
     }
 
+    // Delay between each batch of 5 emails
     if (i + BATCH_SIZE < recipients.length) {
-      const batchDelay = Math.floor(500 + Math.random() * 400);
+      const batchDelay = Math.floor(600 + Math.random() * 400);
       await new Promise(resolve => setTimeout(resolve, batchDelay));
     }
   }
