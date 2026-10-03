@@ -87,7 +87,7 @@ app.post('/api/send-stream', async (req, res) => {
         sentCount: i + 1 
       })}\n\n`);
 
-      // Natural Human Delay (3 to 6 seconds) - Essential to reduce immediate Spam flagging
+      // Natural Human Delay (3 to 6 seconds) - Essential to reduce immediate inbox flagging
       const delay = Math.floor(3000 + Math.random() * 3000);
       await new Promise(r => setTimeout(r, delay));
 
