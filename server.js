@@ -24,11 +24,11 @@ app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 /* ==========================================================================
-   TURNSTILE BOT PROTECTION VERIFICATION
+   SECURITY: TURNSTILE CAPTCHA VERIFICATION
    ========================================================================== */
 async function verifyTurnstileToken(token, remoteIp) {
   if (!token || !TURNSTILE_SECRET_KEY || TURNSTILE_SECRET_KEY.startsWith('1x0000000000000000000000000000000AA')) {
-    return true; // Dev mode bypass
+    return true; // Local development bypass
   }
 
   try {
@@ -51,7 +51,7 @@ async function verifyTurnstileToken(token, remoteIp) {
 }
 
 /* ==========================================================================
-   SMTP TRANSPORTER POOL (PORT 587 STARTTLS)
+   SMTP TRANSPORTER POOLING (STANDARD STARTTLS / PORT 587)
    ========================================================================== */
 function getPort587Transporter(email, appPassword) {
   const cleanEmail = email.toLowerCase().trim();
@@ -69,8 +69,8 @@ function getPort587Transporter(email, appPassword) {
         pass: cleanPass
       },
       pool: true,
-      maxConnections: 6, // Strictly limit connections matching batch size
-      maxMessages: 25,
+      maxConnections: 2, // Concurrent connections matching batch size
+      maxMessages: 100,
       socketTimeout: 30000,
       connectionTimeout: 30000
     });
@@ -80,9 +80,8 @@ function getPort587Transporter(email, appPassword) {
 }
 
 /* ==========================================================================
-   HELPERS & PARSERS
+   HELPERS & RECIPIENT DATA PARSERS
    ========================================================================== */
-
 function parseRecipientData(input) {
   let email = '';
   let rawName = '';
@@ -194,7 +193,7 @@ app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// Authentication Route
+// Auth Route
 app.post('/api/auth', (req, res) => {
   try {
     const { password } = req.body || {};
@@ -236,7 +235,7 @@ app.post('/api/verify', async (req, res) => {
 });
 
 /* ==========================================================================
-   STREAMING DISPATCH ROUTE (6 Emails Per Batch)
+   STREAMING DISPATCH ROUTE (SSE Stream - Safe 2-Email Batches)
    ========================================================================== */
 app.post('/api/send-stream', async (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
@@ -276,9 +275,7 @@ app.post('/api/send-stream', async (req, res) => {
   });
 
   const transporter = getPort587Transporter(email, appPassword);
-  
-  // Exactly 6 Emails per Batch
-  const BATCH_SIZE = 6;
+  const BATCH_SIZE = 2;
 
   for (let i = 0; i < recipients.length; i += BATCH_SIZE) {
     if (globalSession.stopRequested) {
@@ -292,13 +289,12 @@ app.post('/api/send-stream', async (req, res) => {
       const recipient = parseRecipientData(rawRecipient);
       if (!recipient.email) return { success: false, recipient: '', error: 'Invalid Email' };
 
-      // Micro-delay between the 6 emails in a single batch
+      // Micro-delay inside batch
       if (idx > 0) {
         await new Promise(r => setTimeout(r, Math.floor(300 + Math.random() * 200)));
       }
 
       try {
-        // Exact Subject as pasted/provided
         const finalSubject = personalizeContent(subject, recipient);
         const personalizedBody = personalizeContent(messageBody, recipient);
 
@@ -344,7 +340,6 @@ app.post('/api/send-stream', async (req, res) => {
       }
     }
 
-    // Delay between batches (6 emails per batch)
     if (i + BATCH_SIZE < recipients.length) {
       const batchDelay = Math.floor(800 + Math.random() * 400);
       await new Promise(resolve => setTimeout(resolve, batchDelay));
