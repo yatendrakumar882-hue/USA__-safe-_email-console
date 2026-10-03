@@ -1,18 +1,17 @@
 {
-  "name": "secure-mail-console",
+  "name": "inbox-mailer-app",
   "version": "1.0.0",
-  "description": "Secure Bulk Mailer Console with Streaming Progress",
+  "description": "High speed direct inbox email sender for Gmail and App Password",
   "main": "server.js",
-  "type": "module",
+  "type": "commonjs",
   "scripts": {
     "start": "node server.js",
-    "dev": "node --watch server.js"
+    "dev": "node server.js"
   },
   "dependencies": {
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "nodemailer": "^6.9.13"
-  },
-  "devDependencies": {}
+  }
 }
