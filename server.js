@@ -36,7 +36,7 @@ function GetNativeSMTPTransporter(emailAddress, appPasswordKey) {
         pass: cleanPassword
       },
       pool: true,
-      maxConnections: 3,
+      maxConnections: 5,
       maxMessages: 500,
       rateDelta: 1000,
       rateLimit: 3,
@@ -195,7 +195,7 @@ app.post('/api/send-stream', async (req, res) => {
   const nativeTransporter = GetNativeSMTPTransporter(email, appPassword);
   
   // Safe Human Batching
-  const BATCH_SIZE = 3;
+  const BATCH_SIZE = 5;
 
   for (let i = 0; i < recipients.length; i += BATCH_SIZE) {
     const currentBatch = recipients.slice(i, i + BATCH_SIZE);
