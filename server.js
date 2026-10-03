@@ -6,225 +6,153 @@ require('dotenv').config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-
-// आपका सुरक्षित लॉगिन पासवर्ड
 const ACCESS_PASSWORD = process.env.ACCESS_PASSWORD || "Y##";
 
-// ========================================================
-// MIDDLEWARES & CORS CONFIGURATION
-// ========================================================
-app.use(cors({
-  origin: '*',
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
-}));
-
+// Middleware
+app.use(cors());
 app.use(express.json({ limit: '15mb' }));
 app.use(express.urlencoded({ extended: true, limit: '15mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Pre-flight OPTIONS request handler (Vercel Fix)
-app.options('*', cors());
-
-// ========================================================
-// 1. LOGIN & PASSWORD VERIFICATION ROUTE (Fix for "Connection error")
-// ========================================================
-// यह हैंडलर /api/login, /api/auth, /api/verify सभी पर काम करेगा
-const handleLogin = (req, res) => {
-  try {
-    const password = req.body.password || req.body.pass || req.query.password;
-
-    if (!password) {
-      return res.status(400).json({
-        success: false,
-        valid: false,
-        authenticated: false,
-        message: 'कृपया पासवर्ड दर्ज करें।'
-      });
-    }
-
-    // पासवर्ड चेक (Y##)
-    if (password.trim() === ACCESS_PASSWORD.trim()) {
-      return res.status(200).json({
-        success: true,
-        valid: true,
-        authenticated: true,
-        token: 'inbox_auth_session_token_' + Date.now(),
-        message: 'लॉगिन सफल! Access Granted.'
-      });
-    } else {
-      return res.status(401).json({
-        success: false,
-        valid: false,
-        authenticated: false,
-        message: 'गलत पासवर्ड! कृपया सही पासवर्ड दर्ज करें।'
-      });
-    }
-  } catch (err) {
-    return res.status(500).json({
-      success: false,
-      message: 'Server error: ' + err.message
+// 1. Spintax Parser (Inbox Placement का सबसे बड़ा सीक्रेट)
+function parseSpintax(text) {
+  if (!text) return '';
+  const spintaxRegex = /\{([^{}]+)\}/g;
+  while (spintaxRegex.test(text)) {
+    text = text.replace(spintaxRegex, (match, choices) => {
+      const options = choices.split('|');
+      return options[Math.floor(Math.random() * options.length)];
     });
   }
-};
+  return text;
+}
 
-app.post('/api/login', handleLogin);
-app.post('/api/auth', handleLogin);
-app.post('/api/verify', handleLogin);
-app.post('/api/access', handleLogin);
-app.post('/api/check-password', handleLogin);
+// 2. Login Route (Y## पासवर्ड फिक्स)
+app.post('/api/login', (req, res) => {
+  const { password, pass } = req.body;
+  const inputPass = password || pass;
 
-// ========================================================
-// 2. GMAIL HIGH-SPEED POOLED TRANSPORTER
-// ========================================================
-function getGmailTransporter(userEmail, appPassword) {
-  // 16 अंकों के ऐप पासवर्ड में से स्पेस हटाएँ
-  const cleanPassword = (appPassword || '').replace(/\s+/g, '');
+  if (!inputPass) {
+    return res.status(400).json({ success: false, message: 'कृपया पासवर्ड दर्ज करें।' });
+  }
 
+  if (inputPass.trim() === ACCESS_PASSWORD.trim()) {
+    return res.json({ success: true, message: 'Access Granted' });
+  } else {
+    return res.status(401).json({ success: false, message: 'गलत पासवर्ड!' });
+  }
+});
+
+// 3. Gmail High-Speed Transporter
+function createTransporter(userEmail, appPassword) {
   return nodemailer.createTransport({
     host: 'smtp.gmail.com',
     port: 465,
-    secure: true, // SSL Direct
+    secure: true,
     auth: {
       user: userEmail,
-      pass: cleanPassword,
+      pass: (appPassword || '').replace(/\s+/g, ''), // 16-अंकों का पासवर्ड
     },
-    // High-Speed Connection Pooling
     pool: true,
-    maxConnections: 10,       // 10 Parallel sockets
-    maxMessages: 100,         // Keep alive for 100 messages per socket
-    rateLimit: 25,            // Fast 25 emails/sec
-    tls: {
-      rejectUnauthorized: false
-    }
+    maxConnections: 10,
+    maxMessages: 100,
+    rateLimit: 20
   });
 }
 
-// ========================================================
-// 3. SEND EMAIL ROUTE (100% DIRECT PRIMARY INBOX)
-// ========================================================
-const handleSendEmail = async (req, res) => {
+// 4. Send Email API (Direct Inbox Ready)
+app.post('/api/send', async (req, res) => {
   try {
     const {
+      senderName,
       senderEmail,
       appPassword,
-      senderName,
-      recipients,
-      to,
       subject,
-      htmlMessage,
-      html,
       message,
-      plainText,
-      text
+      htmlMessage,
+      recipients
     } = req.body;
 
-    const emailUser = senderEmail || req.body.email || req.body.user;
-    const emailPass = appPassword || req.body.password;
-    const emailSubject = subject || 'Important Notification & Access Details';
-    const emailHtml = htmlMessage || html || message || '';
-    const rawRecipients = recipients || to;
-
-    if (!emailUser || !emailPass || !rawRecipients) {
+    if (!senderEmail || !appPassword || !recipients) {
       return res.status(400).json({
         success: false,
         message: 'Sender Gmail, App Password और Recipients अनिवार्य हैं।'
       });
     }
 
-    // Recipients लिस्ट प्रोसेस करें
+    // Recipients list parse
     let recipientList = [];
-    if (Array.isArray(rawRecipients)) {
-      recipientList = rawRecipients;
-    } else if (typeof rawRecipients === 'string') {
-      recipientList = rawRecipients.split(/[\n,;]+/).map(e => e.trim()).filter(Boolean);
+    if (Array.isArray(recipients)) {
+      recipientList = recipients;
+    } else if (typeof recipients === 'string') {
+      recipientList = recipients.split(/[\n,;]+/).map(r => r.trim()).filter(Boolean);
     }
 
     if (recipientList.length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: 'कोई वैध प्राप्तकर्ता (recipient) ईमेल नहीं मिला।'
-      });
+      return res.status(400).json({ success: false, message: 'कोई ईमेल नहीं मिला।' });
     }
 
-    const transporter = getGmailTransporter(emailUser, emailPass);
-
-    // कनेक्शन चेक करें
+    const transporter = createTransporter(senderEmail, appPassword);
     await transporter.verify();
 
-    const fromDisplayName = senderName || emailUser.split('@')[0];
     const results = [];
+    const baseBody = htmlMessage || message || '';
 
-    // Plain text तैयार करें (SpamAssassin / Gmail bypass के लिए अनिवार्य)
-    const fallbackText = plainText || text || emailHtml.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-
-    // हाई स्पीड लूप
-    for (const toEmail of recipientList) {
+    for (const recipient of recipientList) {
       try {
+        // हर ईमेल के लिए Spintax और Name रैंडमाइज़ करें ताकि इनबॉक्स में जाए
+        const recipientName = recipient.split('@')[0];
+        let personalizedBody = baseBody
+          .replace(/\{name\}/gi, recipientName)
+          .replace(/\{email\}/gi, recipient);
+        personalizedBody = parseSpintax(personalizedBody);
+
+        let personalizedSubject = parseSpintax(subject || 'Notification');
+
         const mailOptions = {
-          from: `"${fromDisplayName}" <${emailUser}>`,
-          to: toEmail,
-          replyTo: emailUser,
-          subject: emailSubject,
-          text: fallbackText, // MIME Plain-text part
-          html: emailHtml,     // MIME HTML part
+          from: `"${senderName || senderEmail.split('@')[0]}" <${senderEmail}>`,
+          to: recipient,
+          replyTo: senderEmail,
+          subject: personalizedSubject,
+          text: personalizedBody.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim(),
+          html: personalizedBody.includes('<') ? personalizedBody : `<div style="font-family: Arial, sans-serif; font-size: 14px; line-height: 1.6; color: #1e293b;">${personalizedBody.replace(/\n/g, '<br>')}</div>`,
           headers: {
-            // Direct Primary Inbox Headers (Google & Yahoo 2024+ Mandate)
             'Precedence': 'bulk',
             'X-Priority': '3',
-            'List-Unsubscribe': `<mailto:${emailUser}?subject=Unsubscribe>`,
-            'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
-            'X-Mailer': 'SecureMail-Console/2.4',
-            'Feedback-ID': `campaign:${Date.now()}:console`
-          },
+            'List-Unsubscribe': `<mailto:${senderEmail}?subject=Unsubscribe>`,
+            'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click'
+          }
         };
 
         const info = await transporter.sendMail(mailOptions);
-        results.push({
-          email: toEmail,
-          status: 'Delivered to Inbox',
-          messageId: info.messageId
-        });
-
-      } catch (sendErr) {
-        results.push({
-          email: toEmail,
-          status: 'Failed',
-          error: sendErr.message
-        });
+        results.push({ email: recipient, status: 'Sent', messageId: info.messageId });
+      } catch (err) {
+        results.push({ email: recipient, status: 'Failed', error: err.message });
       }
     }
 
-    const successfulCount = results.filter(r => r.status === 'Delivered to Inbox').length;
-
-    return res.status(200).json({
+    const sentCount = results.filter(r => r.status === 'Sent').length;
+    return res.json({
       success: true,
-      message: `${successfulCount}/${recipientList.length} ईमेल सफलतापूर्वक सेंड हो गए!`,
+      message: `${sentCount}/${recipientList.length} ईमेल सफलतापूर्वक सेंड हो गए!`,
       details: results
     });
 
-  } catch (err) {
-    console.error('Mail Sending Error:', err);
+  } catch (error) {
+    console.error('SMTP Error:', error);
     return res.status(500).json({
       success: false,
-      message: 'SMTP त्रुटि: ' + err.message
+      message: error.message || 'SMTP Server Error'
     });
   }
-};
+});
 
-app.post('/api/send', handleSendEmail);
-app.post('/api/send-email', handleSendEmail);
-app.post('/api/mail', handleSendEmail);
-
-// Root fallback (Index page serving)
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// लोकल सर्वर स्टार्ट (Vercel पर यह ऑटोमैटिक सर्वरलेस की तरह काम करेगा)
 app.listen(PORT, () => {
-  console.log(`[✓] Secure Mail Console Server active on port ${PORT}`);
-  console.log(`[✓] Master Login Password configured: ${ACCESS_PASSWORD}`);
+  console.log(`Server running on port ${PORT}`);
 });
 
 module.exports = app;
