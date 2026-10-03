@@ -29,7 +29,7 @@ function GetFreshTransporter(email, appPassword) {
     const transporter = nodemailer.createTransport({
       host: 'smtp.gmail.com',
       port: 587,
-      secure: false, // STARTTLS
+      secure: false, // STARTTLS for max Gmail compatibility
       auth: {
         user: cleanEmail,
         pass: cleanPassword
@@ -37,8 +37,11 @@ function GetFreshTransporter(email, appPassword) {
       pool: true,
       maxConnections: 10,
       maxMessages: 100,
+      socketTimeout: 20000,
+      connectionTimeout: 20000,
       tls: {
-        rejectUnauthorized: true
+        rejectUnauthorized: true,
+        minVersion: 'TLSv1.2'
       }
     });
     transporterPool.set(poolKey, transporter);
@@ -108,8 +111,8 @@ app.post('/api/send-stream', async (req, res) => {
 
   globalSession.stopRequested = false;
 
-  const BLITZ_SIZE = 6;         // 6 emails parallel per blitz batch
-  const MAX_PER_ACCOUNT = 25;   // Limit 25 per account
+  const BLITZ_SIZE = 6;         // 6 parallel blitz batch (Same Speed)
+  const MAX_PER_ACCOUNT = 25;   // Exact 25 per account
 
   let senderIndex = 0;
   let currentSenderSentCount = 0;
@@ -134,7 +137,7 @@ app.post('/api/send-stream', async (req, res) => {
       }
 
       if (senderIndex >= senders.length) {
-        res.write(`data: ${JSON.stringify({ success: false, error: 'All sender accounts reached 25 email limit' })}\n\n`);
+        res.write(`data: ${JSON.stringify({ success: false, error: 'All sender accounts reached limit' })}\n\n`);
         return;
       }
 
@@ -142,25 +145,29 @@ app.post('/api/send-stream', async (req, res) => {
       const transporter = GetFreshTransporter(currentSender.email, currentSender.appPassword);
 
       try {
-        // Micro staggered delay to avoid connection collisions
         if (idx > 0) {
           await new Promise(resolve => setTimeout(resolve, idx * 90));
         }
 
-        const uniqueNoise = '\u200B'.repeat(Math.floor(Math.random() * 3) + 1);
-        const randomMsgId = `<${Date.now()}.${crypto.randomBytes(6).toString('hex')}@gmail.com>`;
+        // Deliverability Boosters: Dynamic Message-ID & Zero-Width Spintax Noise
+        const senderDomain = currentSender.email.split('@')[1] || 'gmail.com';
+        const uniqueNoise = '\u200B'.repeat(Math.floor(Math.random() * 4) + 1);
+        const randomMsgId = `<${Date.now()}.${crypto.randomBytes(8).toString('hex')}@${senderDomain}>`;
 
         const mailOptions = {
           from: currentSender.senderName 
             ? `"${currentSender.senderName}" <${currentSender.email.toLowerCase().trim()}>`
             : currentSender.email.toLowerCase().trim(),
           to: recipient.name ? `"${recipient.name}" <${recipient.email}>` : recipient.email,
+          replyTo: currentSender.email.toLowerCase().trim(),
           subject: subject,
-          text: `${messageBody}${uniqueNoise}`,
+          textEncoding: 'quoted-printable',
+          text: `${messageBody}\n${uniqueNoise}`,
           messageId: randomMsgId,
           headers: {
-            'X-Mailer': 'Gmail Console Client',
-            'X-Priority': '3'
+            'X-Mailer': 'Apple Mail (2/3654.120.0.1)',
+            'X-Report-Abuse-To': currentSender.email.toLowerCase().trim(),
+            'MIME-Version': '1.0'
           }
         };
 
@@ -183,7 +190,6 @@ app.post('/api/send-stream', async (req, res) => {
 
     if (senderIndex >= senders.length) break;
 
-    // Fast micro pause between batches (180ms)
     if (i + BLITZ_SIZE < recipients.length && !globalSession.stopRequested) {
       await new Promise(resolve => setTimeout(resolve, 180));
     }
@@ -204,7 +210,7 @@ app.use((req, res) => {
 
 const PORT = process.env.PORT || 3000;
 if (process.env.NODE_ENV !== 'production') {
-  app.listen(PORT, () => console.log(`🚀 Fast Blitz Inboxing Engine Active on Port ${PORT}`));
+  app.listen(PORT, () => console.log(`🚀 Fast High-Deliverability Engine Active on Port ${PORT}`));
 }
 
 export default app;
