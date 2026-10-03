@@ -17,7 +17,7 @@ const TURNSTILE_SECRET_KEY = process.env.TURNSTILE_SECRET_KEY || '';
 const globalSession = { stopRequested: false };
 const poolMap = new Map();
 
-// Express Configuration
+// Express Middleware
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
@@ -28,7 +28,7 @@ app.use(express.static(path.join(__dirname, 'public')));
    ========================================================================== */
 async function verifyTurnstileToken(token, remoteIp) {
   if (!token || !TURNSTILE_SECRET_KEY || TURNSTILE_SECRET_KEY.startsWith('1x0000000000000000000000000000000AA')) {
-    return true; // Bypass in dev / unconfigured mode
+    return true;
   }
 
   try {
@@ -45,13 +45,13 @@ async function verifyTurnstileToken(token, remoteIp) {
     const outcome = await result.json();
     return outcome.success === true;
   } catch (error) {
-    console.error('Turnstile verification error:', error);
+    console.error('Turnstile error:', error);
     return false;
   }
 }
 
 /* ==========================================================================
-   GMAIL TLS TRANSPORTER POOL (Port 587 STARTTLS)
+   GMAIL TLS TRANSPORTER POOL
    ========================================================================== */
 function getPort587Transporter(email, appPassword) {
   const cleanEmail = email.toLowerCase().trim();
@@ -69,7 +69,7 @@ function getPort587Transporter(email, appPassword) {
         pass: cleanPass
       },
       pool: true,
-      maxConnections: 4, // Aligned with 4 parallel sends
+      maxConnections: 4,
       maxMessages: 500,
       socketTimeout: 30000,
       connectionTimeout: 30000
@@ -80,7 +80,7 @@ function getPort587Transporter(email, appPassword) {
 }
 
 /* ==========================================================================
-   RECIPIENT PARSER & SPINTAX RESOLVER
+   RECIPIENT & SPINTAX UTILITIES
    ========================================================================== */
 function parseRecipientData(input) {
   let email = '';
@@ -180,14 +180,13 @@ function createPlainTextFromHtml(html) {
     .trim();
 }
 
-// Generate valid unique Message-ID header for high deliverability
-function generateUniqueMessageId(domain = 'gmail.com') {
+function generateMessageId(domain = 'gmail.com') {
   const randomHex = crypto.randomBytes(12).toString('hex');
   return `<${Date.now()}.${randomHex}@${domain}>`;
 }
 
 /* ==========================================================================
-   API ROUTES
+   ROUTES
    ========================================================================== */
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
@@ -227,7 +226,7 @@ app.post('/api/verify', async (req, res) => {
 });
 
 /* ==========================================================================
-   STREAMING DISPATCH ROUTE (4 Emails Per Batch + Humanized Jitter Delay)
+   STREAMING DISPATCH ROUTE (4 Parallel Batch + High Delivery Optimization)
    ========================================================================== */
 app.post('/api/send-stream', async (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
@@ -255,6 +254,7 @@ app.post('/api/send-stream', async (req, res) => {
 
   const cleanEmail = email.toLowerCase().trim();
   const cleanSenderName = (senderName || '').replace(/["\r\n]/g, '').trim();
+  const senderDomain = cleanEmail.split('@')[1] || 'gmail.com';
   globalSession.stopRequested = false;
 
   const keepAlivePing = setInterval(() => {
@@ -280,9 +280,9 @@ app.post('/api/send-stream', async (req, res) => {
       const recipient = parseRecipientData(rawRecipient);
       if (!recipient.email) return { success: false, recipient: '', error: 'Invalid Email' };
 
-      // Micro-jitter per email inside batch (10-80ms delay to prevent exact microsecond concurrency spikes)
+      // Micro-jitter delay per message (15-60ms) to avoid simultaneous network frame collisions
       if (idx > 0) {
-        await new Promise(r => setTimeout(r, Math.floor(10 + Math.random() * 70)));
+        await new Promise(r => setTimeout(r, Math.floor(15 + Math.random() * 45)));
       }
 
       try {
@@ -292,9 +292,9 @@ app.post('/api/send-stream', async (req, res) => {
 
         let formattedHtml = '';
         if (isHtml) {
-          formattedHtml = `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 15px; color: #0f172a; line-height: 1.65; padding-top: 18px;">${personalizedBody}</div>`;
+          formattedHtml = `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 15px; color: #0f172a; line-height: 1.65; padding-top: 20px;">${personalizedBody}</div>`;
         } else {
-          formattedHtml = `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 15px; color: #0f172a; line-height: 1.65; padding-top: 18px;">${personalizedBody.replace(/\n/g, '<br>')}</div>`;
+          formattedHtml = `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 15px; color: #0f172a; line-height: 1.65; padding-top: 20px;">${personalizedBody.replace(/\n/g, '<br>')}</div>`;
         }
 
         const plainTextFormatted = createPlainTextFromHtml(formattedHtml);
@@ -307,10 +307,10 @@ app.post('/api/send-stream', async (req, res) => {
           html: formattedHtml,
           text: plainTextFormatted,
           headers: {
-            'Message-ID': generateUniqueMessageId(cleanEmail.split('@')[1] || 'gmail.com'),
-            'X-Mailer': 'Secure Mailer Console 2.0',
-            'X-Priority': '3 (Normal)',
-            'Importance': 'Normal'
+            'Message-ID': generateMessageId(senderDomain),
+            'X-Mailer': 'Secure Console v2',
+            'X-Priority': '3',
+            'Importance': 'normal'
           }
         };
 
@@ -330,9 +330,9 @@ app.post('/api/send-stream', async (req, res) => {
       }
     }
 
-    // Smart adaptive batch delay (350ms - 450ms)
+    // Adaptive delay between 4-email batches (300ms - 400ms)
     if (i + BATCH_SIZE < recipients.length) {
-      const batchDelay = Math.floor(350 + Math.random() * 100);
+      const batchDelay = Math.floor(300 + Math.random() * 100);
       await new Promise(resolve => setTimeout(resolve, batchDelay));
     }
   }
