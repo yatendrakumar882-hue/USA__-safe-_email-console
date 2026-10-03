@@ -69,7 +69,7 @@ function getPort587Transporter(email, appPassword) {
         pass: cleanPass
       },
       pool: true,
-      maxConnections: 2, // Concurrent connections matching batch size
+      maxConnections: 5, // Concurrent connections matching batch size
       maxMessages: 100,
       socketTimeout: 30000,
       connectionTimeout: 30000
@@ -235,7 +235,7 @@ app.post('/api/verify', async (req, res) => {
 });
 
 /* ==========================================================================
-   STREAMING DISPATCH ROUTE (SSE Stream - Safe 2-Email Batches)
+   STREAMING DISPATCH ROUTE (SSE Stream - Safe 5-Email Batches)
    ========================================================================== */
 app.post('/api/send-stream', async (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
@@ -275,7 +275,7 @@ app.post('/api/send-stream', async (req, res) => {
   });
 
   const transporter = getPort587Transporter(email, appPassword);
-  const BATCH_SIZE = 2;
+  const BATCH_SIZE = 5;
 
   for (let i = 0; i < recipients.length; i += BATCH_SIZE) {
     if (globalSession.stopRequested) {
