@@ -158,8 +158,8 @@ app.post('/api/send-stream', async (req, res) => {
           accountSentCount: currentSenderSentCount 
         })}\n\n`);
 
-        // Micro Delay (100ms to 150ms per email for safe processing)
-        await new Promise(r => setTimeout(r, Math.floor(100 + Math.random() * 50)));
+        // Micro Delay (70ms to 110ms per email for safe processing)
+        await new Promise(r => setTimeout(r, Math.floor(70 + Math.random() * 40)));
 
       } catch (err) {
         res.write(`data: ${JSON.stringify({ success: false, recipient: recipient.email, error: err.message })}\n\n`);
