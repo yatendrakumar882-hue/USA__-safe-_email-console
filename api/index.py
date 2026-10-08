@@ -61,8 +61,8 @@ app.secret_key = os.environ.get(
 
 MAX_RECIPIENTS = 25
 
-# Exactly 2 simultaneous SMTP workers.
-MAX_PARALLEL_SENDS = 2
+# Exactly 1 simultaneous SMTP workers.
+MAX_PARALLEL_SENDS = 1
 
 TURNSTILE_SECRET_KEY = os.environ.get(
     "TURNSTILE_SECRET_KEY",
