@@ -21,7 +21,6 @@ from flask import (
     Flask,
     request,
     render_template,
-    render_template_string,
     redirect,
     url_for,
     jsonify,
@@ -34,7 +33,7 @@ from jinja2 import TemplateNotFound
 
 
 # =====================================================
-# FLASK APPLICATION
+# FLASK CONFIGURATION
 # =====================================================
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -53,31 +52,33 @@ logger = logging.getLogger(__name__)
 
 
 # =====================================================
-# ENVIRONMENT AND SESSION CONFIGURATION
+# SECURITY / ENVIRONMENT
 # =====================================================
 
-LOGIN_PASSWORD = os.environ.get("LOGIN_PASSWORD", "").strip()
 SESSION_SECRET = os.environ.get("SESSION_SECRET", "").strip()
+LOGIN_PASSWORD = os.environ.get("LOGIN_PASSWORD", "").strip()
 
-# Prefer a dedicated stable SESSION_SECRET.
-# If missing, derive a stable key from LOGIN_PASSWORD so that
-# a short/missing SESSION_SECRET does not block login.
+# IMPORTANT:
+# Never generate a new random session key on every server start.
+# A stable derived key prevents Vercel instances from signing
+# cookies with different secrets when SESSION_SECRET is absent.
 if SESSION_SECRET:
     SESSION_KEY = SESSION_SECRET
 elif LOGIN_PASSWORD:
     SESSION_KEY = hashlib.sha256(
-        ("bulk-email-sender-session:" + LOGIN_PASSWORD).encode("utf-8")
+        ("bulk-email-session:" + LOGIN_PASSWORD).encode("utf-8")
     ).hexdigest()
     logger.warning(
-        "SESSION_SECRET missing; using a key derived from LOGIN_PASSWORD. "
-        "Set a dedicated stable SESSION_SECRET in Vercel."
+        "SESSION_SECRET is missing. Using a stable key derived "
+        "from LOGIN_PASSWORD. Set a dedicated SESSION_SECRET."
     )
 else:
-    # App can start and show a useful configuration message.
     SESSION_KEY = None
-    logger.error("Both SESSION_SECRET and LOGIN_PASSWORD are missing.")
+    logger.error(
+        "SESSION_SECRET and LOGIN_PASSWORD are not configured."
+    )
 
-app.secret_key = SESSION_KEY or "temporary-unconfigured-key"
+app.secret_key = SESSION_KEY or "unconfigured-session-key"
 
 app.config.update(
     SESSION_COOKIE_SECURE=True,
@@ -94,13 +95,13 @@ app.config.update(
 
 SMTP_HOST = "smtp.gmail.com"
 SMTP_PORT = 465
-SMTP_TIMEOUT = 25
+SMTP_TIMEOUT = 20
 
 MAX_RECIPIENTS = 25
-MAX_PARALLEL_SENDS = 5
+MAX_PARALLEL_SENDS = 2
 
-# Slightly slower sending pace
-SEND_DELAY_SECONDS = 1.0
+# Original sending interval retained
+SEND_DELAY_SECONDS = 0.1
 
 _pacing_lock = threading.Lock()
 _last_send_started = 0.0
@@ -150,89 +151,6 @@ def event_line(data):
 
 
 # =====================================================
-# LOGIN FALLBACK TEMPLATE
-# =====================================================
-
-LOGIN_FALLBACK = """
-<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Bulk Email Sender - Login</title>
-<style>
-* { box-sizing: border-box; }
-body {
-    font-family: Arial, sans-serif;
-    background: #f4f5f7;
-    display: grid;
-    place-items: center;
-    min-height: 100vh;
-    margin: 0;
-}
-.box {
-    background: white;
-    padding: 30px;
-    border-radius: 12px;
-    width: min(380px, 90%);
-    box-shadow: 0 4px 20px #0001;
-}
-input, button {
-    width: 100%;
-    padding: 12px;
-    margin-top: 12px;
-    border-radius: 6px;
-}
-input { border: 1px solid #ccc; }
-button {
-    cursor: pointer;
-    border: none;
-    background: #222;
-    color: white;
-}
-.error { color: #b00020; }
-</style>
-</head>
-<body>
-<div class="box">
-    <h2>Bulk Email Sender</h2>
-    <p>Sign in to continue to your workspace.</p>
-    {% if error %}
-        <p class="error">{{ error }}</p>
-    {% endif %}
-    <form method="POST" action="/login">
-        <input
-            type="password"
-            name="password"
-            placeholder="Enter password"
-            autocomplete="current-password"
-            required
-        >
-        <button type="submit">Sign in</button>
-    </form>
-</div>
-</body>
-</html>
-"""
-
-
-def show_login(message=None, status=200):
-    try:
-        return render_template(
-            "login.html",
-            error=message
-        ), status
-
-    except TemplateNotFound:
-        logger.exception("login.html template missing")
-
-        return render_template_string(
-            LOGIN_FALLBACK,
-            error=message
-        ), status
-
-
-# =====================================================
 # HTML TO PLAIN TEXT
 # =====================================================
 
@@ -271,6 +189,7 @@ def html_to_text(value):
 # =====================================================
 
 def normalize_recipient(item):
+
     if isinstance(item, str):
         item = {"email": item}
 
@@ -306,6 +225,7 @@ def normalize_recipient(item):
 # =====================================================
 
 def personalize(value, recipient):
+
     result = str(value or "")
 
     replacements = {
@@ -324,13 +244,15 @@ def personalize(value, recipient):
 
 
 # =====================================================
-# SEND PACING
+# GLOBAL SEND PACING
 # =====================================================
 
 def wait_for_send_slot():
+
     global _last_send_started
 
     with _pacing_lock:
+
         now = time.monotonic()
 
         remaining = SEND_DELAY_SECONDS - (
@@ -355,6 +277,7 @@ def build_message(
     is_html,
     recipient
 ):
+
     msg = EmailMessage()
 
     msg["Subject"] = clean(
@@ -374,10 +297,11 @@ def build_message(
     content = personalize(body, recipient)
 
     if is_html:
-        plain_text = html_to_text(content)
+
+        plain = html_to_text(content)
 
         msg.set_content(
-            plain_text or
+            plain or
             "Please view this message in an HTML-capable email client."
         )
 
@@ -385,6 +309,7 @@ def build_message(
             content,
             subtype="html"
         )
+
     else:
         msg.set_content(content)
 
@@ -404,7 +329,6 @@ def send_one(
     is_html,
     recipient
 ):
-    wait_for_send_slot()
 
     message = build_message(
         gmail,
@@ -414,6 +338,8 @@ def send_one(
         is_html,
         recipient
     )
+
+    wait_for_send_slot()
 
     password = re.sub(
         r"\s+",
@@ -454,21 +380,24 @@ def login():
         return redirect(url_for("home"))
 
     if request.method == "GET":
-        return show_login()
+        return render_template(
+            "login.html",
+            error=None
+        )
 
     if not LOGIN_PASSWORD:
         logger.error("LOGIN_PASSWORD is missing.")
 
-        return show_login(
-            "LOGIN_PASSWORD is missing in Vercel Environment Variables.",
-            503
-        )
+        return render_template(
+            "login.html",
+            error="LOGIN_PASSWORD is missing in Vercel settings."
+        ), 503
 
     if not SESSION_KEY:
-        return show_login(
-            "Session configuration is missing. Set SESSION_SECRET in Vercel.",
-            503
-        )
+        return render_template(
+            "login.html",
+            error="Session configuration is missing. Set SESSION_SECRET."
+        ), 503
 
     submitted = str(
         request.form.get("password", "")
@@ -478,10 +407,11 @@ def login():
         submitted,
         LOGIN_PASSWORD
     ):
-        return show_login(
-            "Incorrect password.",
-            401
-        )
+
+        return render_template(
+            "login.html",
+            error="Incorrect password."
+        ), 401
 
     session.clear()
     session.permanent = True
@@ -496,7 +426,9 @@ def login():
 
 @app.route("/logout", methods=["GET", "POST"])
 def logout():
+
     session.clear()
+
     return redirect(url_for("login"))
 
 
@@ -506,6 +438,7 @@ def logout():
 
 @app.route("/")
 def home():
+
     if not logged_in():
         return redirect(url_for("login"))
 
@@ -513,21 +446,22 @@ def home():
         return render_template("index.html")
 
     except TemplateNotFound:
+
         logger.exception("index.html template missing")
 
         return (
-            "Login successful, but templates/index.html "
-            "was not found. Check your GitHub project.",
+            "templates/index.html was not found.",
             500
         )
 
 
 # =====================================================
-# HEALTH
+# HEALTH CHECK
 # =====================================================
 
 @app.route("/health")
 def health():
+
     return jsonify({
         "status": "ok",
         "smtp": "Gmail SMTP SSL",
@@ -551,7 +485,10 @@ def favicon():
 
 @app.route("/sw.js")
 def service_worker():
-    return Response("", mimetype="application/javascript")
+    return Response(
+        "",
+        mimetype="application/javascript"
+    )
 
 
 # =====================================================
@@ -562,6 +499,7 @@ def service_worker():
 def send_batch():
 
     if not logged_in():
+
         return jsonify({
             "success": False,
             "message": "Please log in again.",
@@ -593,6 +531,7 @@ def send_batch():
     )
 
     body = str(data.get("body", ""))
+
     is_html = data.get("is_html") is True
     incoming = data.get("recipients", [])
 
@@ -618,7 +557,7 @@ def send_batch():
 
     if data.get("consent_confirmed") is not True:
         return error(
-            "Confirm that all recipients agreed to receive these emails."
+            "Confirm that recipients agreed to receive these emails."
         )
 
     recipients = []
@@ -626,6 +565,7 @@ def send_batch():
     invalid = 0
 
     for item in incoming:
+
         recipient = normalize_recipient(item)
 
         if not recipient:
@@ -648,7 +588,12 @@ def send_batch():
             f"Maximum {MAX_RECIPIENTS} unique recipients per batch."
         )
 
+    # -------------------------------------------------
+    # STREAMING PROGRESS
+    # -------------------------------------------------
+
     def generate():
+
         total = len(recipients)
         sent = 0
         failed = 0
@@ -681,9 +626,11 @@ def send_batch():
             }
 
             for future in as_completed(jobs):
+
                 recipient = jobs[future]
 
                 try:
+
                     future.result()
                     sent += 1
 
@@ -694,6 +641,7 @@ def send_batch():
                     }
 
                 except smtplib.SMTPAuthenticationError:
+
                     failed += 1
 
                     item = {
@@ -707,6 +655,7 @@ def send_batch():
                     }
 
                 except smtplib.SMTPRecipientsRefused:
+
                     failed += 1
 
                     item = {
@@ -717,6 +666,7 @@ def send_batch():
                     }
 
                 except smtplib.SMTPResponseException as exc:
+
                     failed += 1
 
                     detail = (
@@ -743,6 +693,7 @@ def send_batch():
                     TimeoutError,
                     OSError
                 ) as exc:
+
                     failed += 1
 
                     item = {
@@ -755,8 +706,12 @@ def send_batch():
                     }
 
                 except Exception as exc:
+
                     failed += 1
-                    logger.exception("Unexpected sending error")
+
+                    logger.exception(
+                        "Unexpected email sending error"
+                    )
 
                     item = {
                         "type": "progress",
@@ -822,6 +777,7 @@ def not_found(exc):
 
 @app.errorhandler(500)
 def internal_error(exc):
+
     logger.exception("Application internal server error")
 
     return jsonify({
@@ -835,6 +791,7 @@ def internal_error(exc):
 # =====================================================
 
 if __name__ == "__main__":
+
     app.run(
         host="0.0.0.0",
         port=5000,
