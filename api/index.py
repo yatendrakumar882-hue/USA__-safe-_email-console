@@ -1,16 +1,14 @@
 
-# api/index.py
-
 import os
 import re
 import ssl
-import json
-import hmac
-import html
 import time
+import json
+import html
+import hmac
 import smtplib
-import logging
 import secrets
+import logging
 import threading
 
 from pathlib import Path
@@ -35,17 +33,15 @@ from jinja2 import TemplateNotFound
 
 
 # =====================================================
-# PATHS AND FLASK
+# FLASK APP
 # =====================================================
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-TEMPLATE_DIR = BASE_DIR / "templates"
-STATIC_DIR = BASE_DIR / "static"
 
 app = Flask(
     __name__,
-    template_folder=str(TEMPLATE_DIR),
-    static_folder=str(STATIC_DIR),
+    template_folder=str(BASE_DIR / "templates"),
+    static_folder=str(BASE_DIR / "static"),
     static_url_path="/static",
 )
 
@@ -56,19 +52,17 @@ logger = logging.getLogger(__name__)
 
 
 # =====================================================
-# ENVIRONMENT / SECURITY
+# SECURITY CONFIGURATION
 # =====================================================
 
 SESSION_SECRET = os.environ.get("SESSION_SECRET", "").strip()
 LOGIN_PASSWORD = os.environ.get("LOGIN_PASSWORD", "").strip()
 
 if len(SESSION_SECRET) < 32:
-    logger.error(
-        "SESSION_SECRET is missing or too short. "
-        "Set a stable secret of at least 32 characters in Vercel."
+    logger.warning(
+        "SESSION_SECRET missing or too short. "
+        "Configure a stable 32+ character value in Vercel."
     )
-    # Allows the application to start, but sessions may not
-    # survive across different serverless instances.
     SESSION_SECRET = secrets.token_hex(32)
 
 app.secret_key = SESSION_SECRET
@@ -83,18 +77,17 @@ app.config.update(
 
 
 # =====================================================
-# SMTP SETTINGS
+# SMTP CONFIGURATION
 # =====================================================
 
 SMTP_HOST = "smtp.gmail.com"
 SMTP_PORT = 465
-SMTP_TIMEOUT = 20
+SMTP_TIMEOUT = 25
 
 MAX_RECIPIENTS = 25
 MAX_PARALLEL_SENDS = 2
 
-# Original delay: 0.1 seconds
-# Slightly slower delay: 0.5 seconds
+# Slightly slower than the original 0.1 seconds
 SEND_DELAY_SECONDS = 0.5
 
 _pacing_lock = threading.Lock()
@@ -102,7 +95,7 @@ _last_send_started = 0.0
 
 
 # =====================================================
-# EMAIL VALIDATION
+# VALIDATION
 # =====================================================
 
 EMAIL_RE = re.compile(
@@ -145,84 +138,82 @@ def event_line(data):
 
 
 # =====================================================
-# TEMPLATE FALLBACKS
+# LOGIN TEMPLATE FALLBACK
 # =====================================================
 
 LOGIN_FALLBACK = """
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Login</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            background: #f4f5f7;
-            display: grid;
-            place-items: center;
-            min-height: 100vh;
-            margin: 0;
-        }
-        .box {
-            background: white;
-            padding: 30px;
-            border-radius: 12px;
-            width: min(360px, 85%);
-            box-shadow: 0 4px 20px #0001;
-        }
-        input, button {
-            box-sizing: border-box;
-            width: 100%;
-            padding: 12px;
-            margin-top: 12px;
-        }
-        button {
-            cursor: pointer;
-        }
-        .error {
-            color: #b00020;
-        }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Login</title>
+<style>
+body {
+    font-family: Arial, sans-serif;
+    background: #f4f5f7;
+    display: grid;
+    place-items: center;
+    min-height: 100vh;
+    margin: 0;
+}
+.box {
+    background: white;
+    padding: 30px;
+    border-radius: 12px;
+    width: min(360px, 85%);
+    box-shadow: 0 4px 20px #0001;
+}
+input, button {
+    box-sizing: border-box;
+    width: 100%;
+    padding: 12px;
+    margin-top: 12px;
+}
+button { cursor: pointer; }
+.error { color: #b00020; }
+</style>
 </head>
 <body>
-    <div class="box">
-        <h2>Login</h2>
-        {% if error %}<p class="error">{{ error }}</p>{% endif %}
-        <form method="POST" action="/login">
-            <input
-                type="password"
-                name="password"
-                placeholder="Enter login password"
-                required
-                autocomplete="current-password"
-            >
-            <button type="submit">Login</button>
-        </form>
-    </div>
+<div class="box">
+    <h2>Login</h2>
+    {% if error %}
+        <p class="error">{{ error }}</p>
+    {% endif %}
+    <form method="POST" action="/login">
+        <input
+            type="password"
+            name="password"
+            placeholder="Enter login password"
+            autocomplete="current-password"
+            required
+        >
+        <button type="submit">Login</button>
+    </form>
+</div>
 </body>
 </html>
 """
 
 
-def show_login(error_message=None, status=200):
+def show_login(message=None, status=200):
     try:
         return render_template(
             "login.html",
-            error=error_message
+            error=message
         ), status
 
     except TemplateNotFound:
-        logger.exception("templates/login.html was not found")
+        logger.exception("login.html template missing")
 
         return render_template_string(
             LOGIN_FALLBACK,
-            error=error_message
+            error=message
         ), status
 
 
 # =====================================================
-# HTML TO PLAIN TEXT
+# HTML TO TEXT
 # =====================================================
 
 def html_to_text(value):
@@ -237,7 +228,7 @@ def html_to_text(value):
     value = re.sub(
         r"(?i)</\s*(p|div|li|h[1-6]|tr)\s*>",
         "\n",
-        value,
+        value
     )
 
     value = re.sub(
@@ -260,21 +251,33 @@ def html_to_text(value):
 # =====================================================
 
 def normalize_recipient(item):
+
     if isinstance(item, str):
         item = {"email": item}
 
     if not isinstance(item, dict):
         return None
 
-    address = str(item.get("email", "")).strip().lower()
+    address = str(
+        item.get("email", "")
+    ).strip().lower()
 
     if not valid_email(address):
         return None
 
     recipient = {"email": address}
 
-    for key in ("name", "hi", "hello", "thanks", "ref_code"):
-        recipient[key] = clean(item.get(key, ""), 150)
+    for key in (
+        "name",
+        "hi",
+        "hello",
+        "thanks",
+        "ref_code",
+    ):
+        recipient[key] = clean(
+            item.get(key, ""),
+            150
+        )
 
     return recipient
 
@@ -284,6 +287,7 @@ def normalize_recipient(item):
 # =====================================================
 
 def personalize(value, recipient):
+
     result = str(value or "")
 
     replacements = {
@@ -302,13 +306,15 @@ def personalize(value, recipient):
 
 
 # =====================================================
-# GLOBAL SEND PACING
+# SEND PACING
 # =====================================================
 
 def wait_for_send_slot():
+
     global _last_send_started
 
     with _pacing_lock:
+
         now = time.monotonic()
 
         remaining = SEND_DELAY_SECONDS - (
@@ -333,6 +339,7 @@ def build_message(
     is_html,
     recipient
 ):
+
     msg = EmailMessage()
 
     msg["Subject"] = clean(
@@ -352,6 +359,7 @@ def build_message(
     content = personalize(body, recipient)
 
     if is_html:
+
         plain = html_to_text(content)
 
         msg.set_content(
@@ -382,6 +390,7 @@ def send_one(
     is_html,
     recipient
 ):
+
     wait_for_send_slot()
 
     msg = build_message(
@@ -393,7 +402,11 @@ def send_one(
         recipient
     )
 
-    password = re.sub(r"\s+", "", app_password)
+    password = re.sub(
+        r"\s+",
+        "",
+        app_password
+    )
 
     context = ssl.create_default_context()
 
@@ -401,7 +414,7 @@ def send_one(
         SMTP_HOST,
         SMTP_PORT,
         context=context,
-        timeout=SMTP_TIMEOUT,
+        timeout=SMTP_TIMEOUT
     ) as smtp:
 
         smtp.ehlo()
@@ -410,7 +423,7 @@ def send_one(
         refused = smtp.send_message(
             msg,
             from_addr=gmail,
-            to_addrs=[recipient["email"]],
+            to_addrs=[recipient["email"]]
         )
 
         if refused:
@@ -418,7 +431,7 @@ def send_one(
 
 
 # =====================================================
-# LOGIN
+# LOGIN ROUTE
 # =====================================================
 
 @app.route("/login", methods=["GET", "POST"])
@@ -431,20 +444,25 @@ def login():
         return show_login()
 
     if not LOGIN_PASSWORD:
-        logger.error("LOGIN_PASSWORD environment variable is missing.")
+
+        logger.error(
+            "LOGIN_PASSWORD environment variable is missing."
+        )
 
         return show_login(
-            "Server login configuration is incomplete. "
-            "Please configure LOGIN_PASSWORD in Vercel.",
+            "Server login configuration is incomplete.",
             503
         )
 
-    submitted = str(request.form.get("password", ""))
+    submitted = str(
+        request.form.get("password", "")
+    )
 
     if not hmac.compare_digest(
         submitted,
         LOGIN_PASSWORD
     ):
+
         return show_login(
             "Incorrect password.",
             401
@@ -463,7 +481,9 @@ def login():
 
 @app.route("/logout", methods=["GET", "POST"])
 def logout():
+
     session.clear()
+
     return redirect(url_for("login"))
 
 
@@ -481,21 +501,25 @@ def home():
         return render_template("index.html")
 
     except TemplateNotFound:
-        logger.exception("templates/index.html was not found")
+
+        logger.exception(
+            "templates/index.html is missing"
+        )
 
         return (
-            "Login successful, but templates/index.html is missing. "
-            "Please add the templates/index.html file to your project.",
+            "Login successful, but templates/index.html "
+            "was not found. Check your project files.",
             500
         )
 
 
 # =====================================================
-# HEALTH CHECK
+# HEALTH
 # =====================================================
 
 @app.route("/health")
 def health():
+
     return jsonify({
         "status": "ok",
         "smtp": "Gmail SMTP SSL",
@@ -510,7 +534,7 @@ def health():
 
 
 # =====================================================
-# FAVICON AND SERVICE WORKER
+# FAVICON / SERVICE WORKER
 # =====================================================
 
 @app.route("/favicon.ico")
@@ -534,6 +558,7 @@ def service_worker():
 def send_batch():
 
     if not logged_in():
+
         return jsonify({
             "success": False,
             "message": "Please log in again.",
@@ -565,7 +590,9 @@ def send_batch():
     )
 
     body = str(data.get("body", ""))
+
     is_html = data.get("is_html") is True
+
     incoming = data.get("recipients", [])
 
     if (
@@ -598,6 +625,7 @@ def send_batch():
     invalid = 0
 
     for item in incoming:
+
         recipient = normalize_recipient(item)
 
         if not recipient:
@@ -621,7 +649,7 @@ def send_batch():
         )
 
     # -------------------------------------------------
-    # STREAMING PROGRESS
+    # STREAMING RESPONSE
     # -------------------------------------------------
 
     def generate():
@@ -640,7 +668,10 @@ def send_batch():
         })
 
         with ThreadPoolExecutor(
-            max_workers=min(MAX_PARALLEL_SENDS, total)
+            max_workers=min(
+                MAX_PARALLEL_SENDS,
+                total
+            )
         ) as executor:
 
             jobs = {
@@ -662,6 +693,7 @@ def send_batch():
                 recipient = jobs[future]
 
                 try:
+
                     future.result()
 
                     sent += 1
@@ -682,7 +714,7 @@ def send_batch():
                         "result": "failed",
                         "error": (
                             "Gmail authentication failed. "
-                            "Check Gmail and App Password."
+                            "Check Gmail App Password."
                         ),
                     }
 
@@ -742,7 +774,7 @@ def send_batch():
                     failed += 1
 
                     logger.exception(
-                        "Unexpected email sending error"
+                        "Unexpected sending error"
                     )
 
                     item = {
@@ -778,7 +810,7 @@ def send_batch():
 
     response = Response(
         stream_with_context(generate()),
-        content_type="application/x-ndjson; charset=utf-8",
+        content_type="application/x-ndjson; charset=utf-8"
     )
 
     response.headers["Cache-Control"] = (
@@ -792,10 +824,39 @@ def send_batch():
 
 
 # =====================================================
+# ERROR HANDLERS
+# =====================================================
+
+@app.errorhandler(413)
+def request_too_large(exc):
+    return error("Request is too large.", 413)
+
+
+@app.errorhandler(404)
+def not_found(exc):
+    return jsonify({
+        "success": False,
+        "message": "Page not found."
+    }), 404
+
+
+@app.errorhandler(500)
+def internal_error(exc):
+
+    logger.exception("Application internal server error")
+
+    return jsonify({
+        "success": False,
+        "message": "Internal server error. Check Vercel Runtime Logs."
+    }), 500
+
+
+# =====================================================
 # LOCAL DEVELOPMENT
 # =====================================================
 
 if __name__ == "__main__":
+
     app.run(
         host="0.0.0.0",
         port=5000,
