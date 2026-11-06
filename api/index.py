@@ -7,15 +7,16 @@ import json
 import html
 import hmac
 import smtplib
-import secrets
 import logging
 import threading
+import secrets
 
 from pathlib import Path
 from datetime import timedelta
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from email.message import EmailMessage
 from email.utils import formataddr, make_msgid, formatdate
+
 from flask import (
     Flask,
     request,
@@ -28,11 +29,12 @@ from flask import (
     Response,
     stream_with_context,
 )
+
 from jinja2 import TemplateNotFound
 
 
 # =====================================================
-# APPLICATION
+# APPLICATION CONFIGURATION
 # =====================================================
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -51,22 +53,26 @@ logger = logging.getLogger(__name__)
 
 
 # =====================================================
-# SECURITY
+# SECURITY CONFIGURATION
 # =====================================================
 
 SESSION_SECRET = os.environ.get("SESSION_SECRET", "").strip()
 LOGIN_PASSWORD = os.environ.get("LOGIN_PASSWORD", "").strip()
 
-# A temporary fallback lets the application start so that
-# /health can report configuration problems. It is NOT suitable
-# for production sessions. Configure SESSION_SECRET in Vercel.
-SESSION_SECRET_CONFIGURED = len(SESSION_SECRET) >= 32
+# A stable, non-empty secret is required for sessions.
+# Short secrets are accepted for compatibility, but should
+# be replaced with a strong random value in Vercel.
+SESSION_SECRET_CONFIGURED = bool(SESSION_SECRET)
 
-if not SESSION_SECRET_CONFIGURED:
-    logger.error(
-        "SESSION_SECRET is missing or shorter than 32 characters."
-    )
+if not SESSION_SECRET:
+    logger.error("SESSION_SECRET environment variable is missing.")
     SESSION_SECRET = secrets.token_hex(32)
+
+elif len(SESSION_SECRET) < 32:
+    logger.warning(
+        "SESSION_SECRET is shorter than 32 characters. "
+        "Please replace it with a stronger stable secret."
+    )
 
 app.secret_key = SESSION_SECRET
 
@@ -90,7 +96,7 @@ SMTP_TIMEOUT = 25
 MAX_RECIPIENTS = 25
 MAX_PARALLEL_SENDS = 2
 
-# Slightly slower than the original 0.1-second interval.
+# Slightly slower than original 0.1 seconds
 SEND_DELAY_SECONDS = 0.5
 
 _pacing_lock = threading.Lock()
@@ -98,7 +104,7 @@ _last_send_started = 0.0
 
 
 # =====================================================
-# VALIDATION
+# EMAIL VALIDATION
 # =====================================================
 
 EMAIL_RE = re.compile(
@@ -141,7 +147,7 @@ def event_line(data):
 
 
 # =====================================================
-# LOGIN TEMPLATE FALLBACK
+# LOGIN FALLBACK TEMPLATE
 # =====================================================
 
 LOGIN_FALLBACK = """
@@ -150,8 +156,11 @@ LOGIN_FALLBACK = """
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Login</title>
+<title>Bulk Email Sender - Login</title>
 <style>
+* {
+    box-sizing: border-box;
+}
 body {
     font-family: Arial, sans-serif;
     background: #f4f5f7;
@@ -164,34 +173,47 @@ body {
     background: white;
     padding: 30px;
     border-radius: 12px;
-    width: min(360px, 85%);
+    width: min(380px, 90%);
     box-shadow: 0 4px 20px #0001;
 }
 input, button {
-    box-sizing: border-box;
     width: 100%;
     padding: 12px;
     margin-top: 12px;
+    border-radius: 6px;
 }
-button { cursor: pointer; }
-.error { color: #b00020; }
+input {
+    border: 1px solid #ccc;
+}
+button {
+    cursor: pointer;
+    border: none;
+    background: #222;
+    color: white;
+}
+.error {
+    color: #b00020;
+}
 </style>
 </head>
 <body>
 <div class="box">
-    <h2>Login</h2>
+    <h2>Bulk Email Sender</h2>
+    <p>Sign in to continue to your workspace.</p>
+
     {% if error %}
         <p class="error">{{ error }}</p>
     {% endif %}
+
     <form method="POST" action="/login">
         <input
             type="password"
             name="password"
-            placeholder="Enter login password"
+            placeholder="Enter password"
             autocomplete="current-password"
             required
         >
-        <button type="submit">Login</button>
+        <button type="submit">Sign in</button>
     </form>
 </div>
 </body>
@@ -207,7 +229,7 @@ def show_login(message=None, status=200):
         ), status
 
     except TemplateNotFound:
-        logger.exception("login.html template not found")
+        logger.exception("login.html was not found")
 
         return render_template_string(
             LOGIN_FALLBACK,
@@ -269,7 +291,7 @@ def normalize_recipient(item):
         return None
 
     recipient = {
-        "email": address,
+        "email": address
     }
 
     for key in (
@@ -333,7 +355,7 @@ def wait_for_send_slot():
 
 
 # =====================================================
-# BUILD MESSAGE
+# BUILD EMAIL
 # =====================================================
 
 def build_message(
@@ -365,10 +387,11 @@ def build_message(
 
     if is_html:
 
-        plain = html_to_text(content)
+        plain_text = html_to_text(content)
 
         msg.set_content(
-            plain or "Please view this message in an HTML-capable email client."
+            plain_text or
+            "Please view this message in an HTML-capable email client."
         )
 
         msg.add_alternative(
@@ -383,7 +406,7 @@ def build_message(
 
 
 # =====================================================
-# SEND ONE MESSAGE
+# SEND ONE EMAIL
 # =====================================================
 
 def send_one(
@@ -423,7 +446,11 @@ def send_one(
     ) as smtp:
 
         smtp.ehlo()
-        smtp.login(gmail, password)
+
+        smtp.login(
+            gmail,
+            password
+        )
 
         refused = smtp.send_message(
             message,
@@ -436,7 +463,7 @@ def send_one(
 
 
 # =====================================================
-# LOGIN
+# LOGIN ROUTE
 # =====================================================
 
 @app.route("/login", methods=["GET", "POST"])
@@ -450,13 +477,13 @@ def login():
 
     if not SESSION_SECRET_CONFIGURED:
         return show_login(
-            "Server configuration error: SESSION_SECRET is missing or too short.",
+            "SESSION_SECRET is missing in Vercel Environment Variables.",
             503
         )
 
     if not LOGIN_PASSWORD:
         return show_login(
-            "Server configuration error: LOGIN_PASSWORD is missing.",
+            "LOGIN_PASSWORD is missing in Vercel Environment Variables.",
             503
         )
 
@@ -511,13 +538,14 @@ def home():
         logger.exception("index.html template missing")
 
         return (
-            "Login successful, but templates/index.html was not found.",
+            "Login successful, but templates/index.html "
+            "was not found. Check your GitHub project.",
             500
         )
 
 
 # =====================================================
-# HEALTH
+# HEALTH CHECK
 # =====================================================
 
 @app.route("/health")
@@ -535,7 +563,7 @@ def health():
 
 
 # =====================================================
-# STATIC SUPPORT
+# FAVICON / SERVICE WORKER
 # =====================================================
 
 @app.route("/favicon.ico")
@@ -604,7 +632,7 @@ def send_batch():
         or not gmail.endswith("@gmail.com")
     ):
         return error(
-            "Enter a valid Gmail sender address and sender name."
+            "Enter a valid Gmail sender address and name."
         )
 
     if not password or not subject or not body.strip():
@@ -620,7 +648,7 @@ def send_batch():
 
     if data.get("consent_confirmed") is not True:
         return error(
-            "Confirm that every recipient agreed to receive these emails."
+            "Confirm that recipients have permission to receive these emails."
         )
 
     recipients = []
@@ -652,7 +680,7 @@ def send_batch():
         )
 
     # -------------------------------------------------
-    # PROGRESS STREAM
+    # STREAMING PROGRESS
     # -------------------------------------------------
 
     def generate():
@@ -803,7 +831,7 @@ def send_batch():
             "success": failed == 0,
             "message": (
                 "SMTP sending attempts finished. "
-                "SMTP acceptance does not prove Inbox delivery."
+                "SMTP acceptance does not confirm Inbox delivery."
             ),
             "total": total,
             "sent": sent,
