@@ -6,8 +6,8 @@ import time
 import json
 import html
 import hmac
+import hashlib
 import smtplib
-import secrets
 import logging
 import threading
 
@@ -34,7 +34,7 @@ from jinja2 import TemplateNotFound
 
 
 # =====================================================
-# APPLICATION CONFIGURATION
+# FLASK APPLICATION
 # =====================================================
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -53,21 +53,31 @@ logger = logging.getLogger(__name__)
 
 
 # =====================================================
-# ENVIRONMENT VARIABLES
+# ENVIRONMENT AND SESSION CONFIGURATION
 # =====================================================
 
-SESSION_SECRET = os.environ.get("SESSION_SECRET", "").strip()
 LOGIN_PASSWORD = os.environ.get("LOGIN_PASSWORD", "").strip()
+SESSION_SECRET = os.environ.get("SESSION_SECRET", "").strip()
 
-SESSION_CONFIGURED = len(SESSION_SECRET) >= 32
+# Prefer a dedicated stable SESSION_SECRET.
+# If missing, derive a stable key from LOGIN_PASSWORD so that
+# a short/missing SESSION_SECRET does not block login.
+if SESSION_SECRET:
+    SESSION_KEY = SESSION_SECRET
+elif LOGIN_PASSWORD:
+    SESSION_KEY = hashlib.sha256(
+        ("bulk-email-sender-session:" + LOGIN_PASSWORD).encode("utf-8")
+    ).hexdigest()
+    logger.warning(
+        "SESSION_SECRET missing; using a key derived from LOGIN_PASSWORD. "
+        "Set a dedicated stable SESSION_SECRET in Vercel."
+    )
+else:
+    # App can start and show a useful configuration message.
+    SESSION_KEY = None
+    logger.error("Both SESSION_SECRET and LOGIN_PASSWORD are missing.")
 
-# Temporary key only allows Flask to initialize.
-# Login is disabled until a proper SESSION_SECRET is configured.
-app.secret_key = (
-    SESSION_SECRET
-    if SESSION_CONFIGURED
-    else secrets.token_hex(32)
-)
+app.secret_key = SESSION_KEY or "temporary-unconfigured-key"
 
 app.config.update(
     SESSION_COOKIE_SECURE=True,
@@ -261,7 +271,6 @@ def html_to_text(value):
 # =====================================================
 
 def normalize_recipient(item):
-
     if isinstance(item, str):
         item = {"email": item}
 
@@ -275,9 +284,7 @@ def normalize_recipient(item):
     if not valid_email(address):
         return None
 
-    recipient = {
-        "email": address
-    }
+    recipient = {"email": address}
 
     for key in (
         "name",
@@ -299,7 +306,6 @@ def normalize_recipient(item):
 # =====================================================
 
 def personalize(value, recipient):
-
     result = str(value or "")
 
     replacements = {
@@ -318,15 +324,13 @@ def personalize(value, recipient):
 
 
 # =====================================================
-# GLOBAL SEND PACING
+# SEND PACING
 # =====================================================
 
 def wait_for_send_slot():
-
     global _last_send_started
 
     with _pacing_lock:
-
         now = time.monotonic()
 
         remaining = SEND_DELAY_SECONDS - (
@@ -351,7 +355,6 @@ def build_message(
     is_html,
     recipient
 ):
-
     msg = EmailMessage()
 
     msg["Subject"] = clean(
@@ -371,7 +374,6 @@ def build_message(
     content = personalize(body, recipient)
 
     if is_html:
-
         plain_text = html_to_text(content)
 
         msg.set_content(
@@ -383,7 +385,6 @@ def build_message(
             content,
             subtype="html"
         )
-
     else:
         msg.set_content(content)
 
@@ -403,7 +404,6 @@ def send_one(
     is_html,
     recipient
 ):
-
     wait_for_send_slot()
 
     message = build_message(
@@ -431,11 +431,7 @@ def send_one(
     ) as smtp:
 
         smtp.ehlo()
-
-        smtp.login(
-            gmail,
-            password
-        )
+        smtp.login(gmail, password)
 
         refused = smtp.send_message(
             message,
@@ -448,7 +444,7 @@ def send_one(
 
 
 # =====================================================
-# LOGIN ROUTE
+# LOGIN
 # =====================================================
 
 @app.route("/login", methods=["GET", "POST"])
@@ -460,16 +456,17 @@ def login():
     if request.method == "GET":
         return show_login()
 
-    if not SESSION_CONFIGURED:
+    if not LOGIN_PASSWORD:
+        logger.error("LOGIN_PASSWORD is missing.")
+
         return show_login(
-            "SESSION_SECRET is missing or too short. "
-            "Configure a stable 32+ character value in Vercel.",
+            "LOGIN_PASSWORD is missing in Vercel Environment Variables.",
             503
         )
 
-    if not LOGIN_PASSWORD:
+    if not SESSION_KEY:
         return show_login(
-            "LOGIN_PASSWORD is missing in Vercel Environment Variables.",
+            "Session configuration is missing. Set SESSION_SECRET in Vercel.",
             503
         )
 
@@ -481,7 +478,6 @@ def login():
         submitted,
         LOGIN_PASSWORD
     ):
-
         return show_login(
             "Incorrect password.",
             401
@@ -500,9 +496,7 @@ def login():
 
 @app.route("/logout", methods=["GET", "POST"])
 def logout():
-
     session.clear()
-
     return redirect(url_for("login"))
 
 
@@ -512,7 +506,6 @@ def logout():
 
 @app.route("/")
 def home():
-
     if not logged_in():
         return redirect(url_for("login"))
 
@@ -520,7 +513,6 @@ def home():
         return render_template("index.html")
 
     except TemplateNotFound:
-
         logger.exception("index.html template missing")
 
         return (
@@ -531,12 +523,11 @@ def home():
 
 
 # =====================================================
-# HEALTH CHECK
+# HEALTH
 # =====================================================
 
 @app.route("/health")
 def health():
-
     return jsonify({
         "status": "ok",
         "smtp": "Gmail SMTP SSL",
@@ -544,7 +535,8 @@ def health():
         "max_parallel_sends": MAX_PARALLEL_SENDS,
         "send_delay_seconds": SEND_DELAY_SECONDS,
         "login_password_configured": bool(LOGIN_PASSWORD),
-        "session_secret_configured": SESSION_CONFIGURED,
+        "session_secret_configured": bool(SESSION_SECRET),
+        "session_key_available": bool(SESSION_KEY),
     })
 
 
@@ -559,10 +551,7 @@ def favicon():
 
 @app.route("/sw.js")
 def service_worker():
-    return Response(
-        "",
-        mimetype="application/javascript"
-    )
+    return Response("", mimetype="application/javascript")
 
 
 # =====================================================
@@ -573,7 +562,6 @@ def service_worker():
 def send_batch():
 
     if not logged_in():
-
         return jsonify({
             "success": False,
             "message": "Please log in again.",
@@ -604,12 +592,8 @@ def send_batch():
         250
     )
 
-    body = str(
-        data.get("body", "")
-    )
-
+    body = str(data.get("body", ""))
     is_html = data.get("is_html") is True
-
     incoming = data.get("recipients", [])
 
     if (
@@ -642,7 +626,6 @@ def send_batch():
     invalid = 0
 
     for item in incoming:
-
         recipient = normalize_recipient(item)
 
         if not recipient:
@@ -665,12 +648,7 @@ def send_batch():
             f"Maximum {MAX_RECIPIENTS} unique recipients per batch."
         )
 
-    # -------------------------------------------------
-    # STREAMING PROGRESS
-    # -------------------------------------------------
-
     def generate():
-
         total = len(recipients)
         sent = 0
         failed = 0
@@ -685,10 +663,7 @@ def send_batch():
         })
 
         with ThreadPoolExecutor(
-            max_workers=min(
-                MAX_PARALLEL_SENDS,
-                total
-            )
+            max_workers=min(MAX_PARALLEL_SENDS, total)
         ) as executor:
 
             jobs = {
@@ -706,13 +681,10 @@ def send_batch():
             }
 
             for future in as_completed(jobs):
-
                 recipient = jobs[future]
 
                 try:
-
                     future.result()
-
                     sent += 1
 
                     item = {
@@ -722,7 +694,6 @@ def send_batch():
                     }
 
                 except smtplib.SMTPAuthenticationError:
-
                     failed += 1
 
                     item = {
@@ -731,12 +702,11 @@ def send_batch():
                         "result": "failed",
                         "error": (
                             "Gmail authentication failed. "
-                            "Check your Gmail App Password."
+                            "Check Gmail App Password."
                         ),
                     }
 
                 except smtplib.SMTPRecipientsRefused:
-
                     failed += 1
 
                     item = {
@@ -747,7 +717,6 @@ def send_batch():
                     }
 
                 except smtplib.SMTPResponseException as exc:
-
                     failed += 1
 
                     detail = (
@@ -774,7 +743,6 @@ def send_batch():
                     TimeoutError,
                     OSError
                 ) as exc:
-
                     failed += 1
 
                     item = {
@@ -787,12 +755,8 @@ def send_batch():
                     }
 
                 except Exception as exc:
-
                     failed += 1
-
-                    logger.exception(
-                        "Unexpected sending error"
-                    )
+                    logger.exception("Unexpected sending error")
 
                     item = {
                         "type": "progress",
@@ -858,12 +822,7 @@ def not_found(exc):
 
 @app.errorhandler(500)
 def internal_error(exc):
-
-    logger.error(
-        "Application internal server error: %s",
-        exc,
-        exc_info=True
-    )
+    logger.exception("Application internal server error")
 
     return jsonify({
         "success": False,
@@ -876,7 +835,6 @@ def internal_error(exc):
 # =====================================================
 
 if __name__ == "__main__":
-
     app.run(
         host="0.0.0.0",
         port=5000,
