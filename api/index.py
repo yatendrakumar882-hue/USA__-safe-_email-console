@@ -16,7 +16,6 @@ from datetime import timedelta
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from email.message import EmailMessage
 from email.utils import formataddr, make_msgid, formatdate
-
 from flask import (
     Flask,
     request,
@@ -33,7 +32,7 @@ from jinja2 import TemplateNotFound
 
 
 # =====================================================
-# FLASK APP
+# APPLICATION
 # =====================================================
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -52,16 +51,20 @@ logger = logging.getLogger(__name__)
 
 
 # =====================================================
-# SECURITY CONFIGURATION
+# SECURITY
 # =====================================================
 
 SESSION_SECRET = os.environ.get("SESSION_SECRET", "").strip()
 LOGIN_PASSWORD = os.environ.get("LOGIN_PASSWORD", "").strip()
 
-if len(SESSION_SECRET) < 32:
-    logger.warning(
-        "SESSION_SECRET missing or too short. "
-        "Configure a stable 32+ character value in Vercel."
+# A temporary fallback lets the application start so that
+# /health can report configuration problems. It is NOT suitable
+# for production sessions. Configure SESSION_SECRET in Vercel.
+SESSION_SECRET_CONFIGURED = len(SESSION_SECRET) >= 32
+
+if not SESSION_SECRET_CONFIGURED:
+    logger.error(
+        "SESSION_SECRET is missing or shorter than 32 characters."
     )
     SESSION_SECRET = secrets.token_hex(32)
 
@@ -77,7 +80,7 @@ app.config.update(
 
 
 # =====================================================
-# SMTP CONFIGURATION
+# SMTP SETTINGS
 # =====================================================
 
 SMTP_HOST = "smtp.gmail.com"
@@ -87,7 +90,7 @@ SMTP_TIMEOUT = 25
 MAX_RECIPIENTS = 25
 MAX_PARALLEL_SENDS = 2
 
-# Slightly slower than the original 0.1 seconds
+# Slightly slower than the original 0.1-second interval.
 SEND_DELAY_SECONDS = 0.5
 
 _pacing_lock = threading.Lock()
@@ -142,10 +145,10 @@ def event_line(data):
 # =====================================================
 
 LOGIN_FALLBACK = """
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
+<meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Login</title>
 <style>
@@ -204,7 +207,7 @@ def show_login(message=None, status=200):
         ), status
 
     except TemplateNotFound:
-        logger.exception("login.html template missing")
+        logger.exception("login.html template not found")
 
         return render_template_string(
             LOGIN_FALLBACK,
@@ -213,7 +216,7 @@ def show_login(message=None, status=200):
 
 
 # =====================================================
-# HTML TO TEXT
+# HTML TO PLAIN TEXT
 # =====================================================
 
 def html_to_text(value):
@@ -265,7 +268,9 @@ def normalize_recipient(item):
     if not valid_email(address):
         return None
 
-    recipient = {"email": address}
+    recipient = {
+        "email": address,
+    }
 
     for key in (
         "name",
@@ -328,7 +333,7 @@ def wait_for_send_slot():
 
 
 # =====================================================
-# BUILD EMAIL
+# BUILD MESSAGE
 # =====================================================
 
 def build_message(
@@ -378,7 +383,7 @@ def build_message(
 
 
 # =====================================================
-# SEND ONE EMAIL
+# SEND ONE MESSAGE
 # =====================================================
 
 def send_one(
@@ -393,7 +398,7 @@ def send_one(
 
     wait_for_send_slot()
 
-    msg = build_message(
+    message = build_message(
         gmail,
         sender_name,
         subject,
@@ -421,7 +426,7 @@ def send_one(
         smtp.login(gmail, password)
 
         refused = smtp.send_message(
-            msg,
+            message,
             from_addr=gmail,
             to_addrs=[recipient["email"]]
         )
@@ -431,7 +436,7 @@ def send_one(
 
 
 # =====================================================
-# LOGIN ROUTE
+# LOGIN
 # =====================================================
 
 @app.route("/login", methods=["GET", "POST"])
@@ -443,14 +448,15 @@ def login():
     if request.method == "GET":
         return show_login()
 
-    if not LOGIN_PASSWORD:
-
-        logger.error(
-            "LOGIN_PASSWORD environment variable is missing."
+    if not SESSION_SECRET_CONFIGURED:
+        return show_login(
+            "Server configuration error: SESSION_SECRET is missing or too short.",
+            503
         )
 
+    if not LOGIN_PASSWORD:
         return show_login(
-            "Server login configuration is incomplete.",
+            "Server configuration error: LOGIN_PASSWORD is missing.",
             503
         )
 
@@ -502,13 +508,10 @@ def home():
 
     except TemplateNotFound:
 
-        logger.exception(
-            "templates/index.html is missing"
-        )
+        logger.exception("index.html template missing")
 
         return (
-            "Login successful, but templates/index.html "
-            "was not found. Check your project files.",
+            "Login successful, but templates/index.html was not found.",
             500
         )
 
@@ -527,14 +530,12 @@ def health():
         "max_parallel_sends": MAX_PARALLEL_SENDS,
         "send_delay_seconds": SEND_DELAY_SECONDS,
         "login_password_configured": bool(LOGIN_PASSWORD),
-        "session_secret_configured": (
-            len(os.environ.get("SESSION_SECRET", "").strip()) >= 32
-        ),
+        "session_secret_configured": SESSION_SECRET_CONFIGURED,
     })
 
 
 # =====================================================
-# FAVICON / SERVICE WORKER
+# STATIC SUPPORT
 # =====================================================
 
 @app.route("/favicon.ico")
@@ -589,7 +590,9 @@ def send_batch():
         250
     )
 
-    body = str(data.get("body", ""))
+    body = str(
+        data.get("body", "")
+    )
 
     is_html = data.get("is_html") is True
 
@@ -601,7 +604,7 @@ def send_batch():
         or not gmail.endswith("@gmail.com")
     ):
         return error(
-            "Enter a valid Gmail sender address and name."
+            "Enter a valid Gmail sender address and sender name."
         )
 
     if not password or not subject or not body.strip():
@@ -617,7 +620,7 @@ def send_batch():
 
     if data.get("consent_confirmed") is not True:
         return error(
-            "Confirm recipients have permission to receive this email."
+            "Confirm that every recipient agreed to receive these emails."
         )
 
     recipients = []
@@ -649,7 +652,7 @@ def send_batch():
         )
 
     # -------------------------------------------------
-    # STREAMING RESPONSE
+    # PROGRESS STREAM
     # -------------------------------------------------
 
     def generate():
@@ -714,7 +717,7 @@ def send_batch():
                         "result": "failed",
                         "error": (
                             "Gmail authentication failed. "
-                            "Check Gmail App Password."
+                            "Check your Gmail App Password."
                         ),
                     }
 
@@ -799,8 +802,8 @@ def send_batch():
             "type": "complete",
             "success": failed == 0,
             "message": (
-                "Sending attempt finished. "
-                "SMTP acceptance does not confirm Inbox delivery."
+                "SMTP sending attempts finished. "
+                "SMTP acceptance does not prove Inbox delivery."
             ),
             "total": total,
             "sent": sent,
@@ -816,7 +819,6 @@ def send_batch():
     response.headers["Cache-Control"] = (
         "no-store, no-cache, no-transform"
     )
-
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Accel-Buffering"] = "no"
 
