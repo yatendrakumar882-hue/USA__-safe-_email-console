@@ -7,9 +7,9 @@ import json
 import html
 import hmac
 import smtplib
+import secrets
 import logging
 import threading
-import secrets
 
 from pathlib import Path
 from datetime import timedelta
@@ -53,28 +53,21 @@ logger = logging.getLogger(__name__)
 
 
 # =====================================================
-# SECURITY CONFIGURATION
+# ENVIRONMENT VARIABLES
 # =====================================================
 
 SESSION_SECRET = os.environ.get("SESSION_SECRET", "").strip()
 LOGIN_PASSWORD = os.environ.get("LOGIN_PASSWORD", "").strip()
 
-# A stable, non-empty secret is required for sessions.
-# Short secrets are accepted for compatibility, but should
-# be replaced with a strong random value in Vercel.
-SESSION_SECRET_CONFIGURED = bool(SESSION_SECRET)
+SESSION_CONFIGURED = len(SESSION_SECRET) >= 32
 
-if not SESSION_SECRET:
-    logger.error("SESSION_SECRET environment variable is missing.")
-    SESSION_SECRET = secrets.token_hex(32)
-
-elif len(SESSION_SECRET) < 32:
-    logger.warning(
-        "SESSION_SECRET is shorter than 32 characters. "
-        "Please replace it with a stronger stable secret."
-    )
-
-app.secret_key = SESSION_SECRET
+# Temporary key only allows Flask to initialize.
+# Login is disabled until a proper SESSION_SECRET is configured.
+app.secret_key = (
+    SESSION_SECRET
+    if SESSION_CONFIGURED
+    else secrets.token_hex(32)
+)
 
 app.config.update(
     SESSION_COOKIE_SECURE=True,
@@ -96,8 +89,8 @@ SMTP_TIMEOUT = 25
 MAX_RECIPIENTS = 25
 MAX_PARALLEL_SENDS = 2
 
-# Slightly slower than original 0.1 seconds
-SEND_DELAY_SECONDS = 0.5
+# Slightly slower sending pace
+SEND_DELAY_SECONDS = 1.0
 
 _pacing_lock = threading.Lock()
 _last_send_started = 0.0
@@ -158,9 +151,7 @@ LOGIN_FALLBACK = """
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Bulk Email Sender - Login</title>
 <style>
-* {
-    box-sizing: border-box;
-}
+* { box-sizing: border-box; }
 body {
     font-family: Arial, sans-serif;
     background: #f4f5f7;
@@ -182,29 +173,23 @@ input, button {
     margin-top: 12px;
     border-radius: 6px;
 }
-input {
-    border: 1px solid #ccc;
-}
+input { border: 1px solid #ccc; }
 button {
     cursor: pointer;
     border: none;
     background: #222;
     color: white;
 }
-.error {
-    color: #b00020;
-}
+.error { color: #b00020; }
 </style>
 </head>
 <body>
 <div class="box">
     <h2>Bulk Email Sender</h2>
     <p>Sign in to continue to your workspace.</p>
-
     {% if error %}
         <p class="error">{{ error }}</p>
     {% endif %}
-
     <form method="POST" action="/login">
         <input
             type="password"
@@ -229,7 +214,7 @@ def show_login(message=None, status=200):
         ), status
 
     except TemplateNotFound:
-        logger.exception("login.html was not found")
+        logger.exception("login.html template missing")
 
         return render_template_string(
             LOGIN_FALLBACK,
@@ -333,7 +318,7 @@ def personalize(value, recipient):
 
 
 # =====================================================
-# SEND PACING
+# GLOBAL SEND PACING
 # =====================================================
 
 def wait_for_send_slot():
@@ -475,9 +460,10 @@ def login():
     if request.method == "GET":
         return show_login()
 
-    if not SESSION_SECRET_CONFIGURED:
+    if not SESSION_CONFIGURED:
         return show_login(
-            "SESSION_SECRET is missing in Vercel Environment Variables.",
+            "SESSION_SECRET is missing or too short. "
+            "Configure a stable 32+ character value in Vercel.",
             503
         )
 
@@ -558,7 +544,7 @@ def health():
         "max_parallel_sends": MAX_PARALLEL_SENDS,
         "send_delay_seconds": SEND_DELAY_SECONDS,
         "login_password_configured": bool(LOGIN_PASSWORD),
-        "session_secret_configured": SESSION_SECRET_CONFIGURED,
+        "session_secret_configured": SESSION_CONFIGURED,
     })
 
 
@@ -648,7 +634,7 @@ def send_batch():
 
     if data.get("consent_confirmed") is not True:
         return error(
-            "Confirm that recipients have permission to receive these emails."
+            "Confirm that all recipients agreed to receive these emails."
         )
 
     recipients = []
@@ -873,7 +859,11 @@ def not_found(exc):
 @app.errorhandler(500)
 def internal_error(exc):
 
-    logger.exception("Application internal server error")
+    logger.error(
+        "Application internal server error: %s",
+        exc,
+        exc_info=True
+    )
 
     return jsonify({
         "success": False,
