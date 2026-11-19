@@ -32,7 +32,7 @@ from jinja2 import TemplateNotFound
 
 
 # =========================================================
-# APPLICATION
+# FLASK APPLICATION
 # =========================================================
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -44,7 +44,7 @@ app = Flask(
     static_url_path="/static",
 )
 
-# Vercel Python runtime entry point
+# Vercel WSGI handler
 handler = app
 
 logging.basicConfig(level=logging.INFO)
@@ -52,14 +52,18 @@ logger = logging.getLogger(__name__)
 
 
 # =========================================================
-# SECURITY CONFIGURATION
+# ENVIRONMENT VARIABLES
 # =========================================================
 
-SESSION_SECRET = os.environ.get("SESSION_SECRET", "").strip()
-LOGIN_PASSWORD = os.environ.get("LOGIN_PASSWORD", "").strip()
+SESSION_SECRET = os.environ.get(
+    "SESSION_SECRET", ""
+).strip()
 
-# A dedicated stable secret is required.
-# Do not use LOGIN_PASSWORD as the session signing key.
+LOGIN_PASSWORD = os.environ.get(
+    "LOGIN_PASSWORD", ""
+).strip()
+
+# Require a stable session signing secret.
 SESSION_KEY = (
     SESSION_SECRET
     if len(SESSION_SECRET) >= 32
@@ -68,7 +72,7 @@ SESSION_KEY = (
 
 if not SESSION_KEY:
     logger.error(
-        "SESSION_SECRET is missing or shorter than 32 characters."
+        "SESSION_SECRET missing or shorter than 32 characters."
     )
 
 if not LOGIN_PASSWORD:
@@ -86,7 +90,7 @@ app.config.update(
 
 
 # =========================================================
-# SMTP CONFIGURATION
+# SMTP SETTINGS
 # =========================================================
 
 SMTP_HOST = "smtp.gmail.com"
@@ -97,7 +101,6 @@ MAX_RECIPIENTS = 25
 MAX_PARALLEL_SENDS = 2
 SEND_DELAY_SECONDS = 0.1
 
-# Keep the existing sending pace.
 _pacing_lock = threading.Lock()
 _last_send_started = 0.0
 
@@ -113,9 +116,9 @@ EMAIL_RE = re.compile(
 
 
 def clean(value, limit=250):
-    """Remove header line breaks and limit input length."""
     value = str(value or "")
-    value = value.replace("\r", " ").replace("\n", " ")
+    value = value.replace("\r", " ")
+    value = value.replace("\n", " ")
     return value.strip()[:limit]
 
 
@@ -268,7 +271,7 @@ def wait_for_send_slot():
 
 
 # =========================================================
-# BUILD MESSAGE
+# BUILD EMAIL
 # =========================================================
 
 def build_message(
@@ -300,10 +303,10 @@ def build_message(
 
     if is_html:
 
-        plain_content = html_to_text(content)
+        plain = html_to_text(content)
 
         message.set_content(
-            plain_content or
+            plain or
             "Please view this message in an HTML-capable email client."
         )
 
@@ -319,7 +322,7 @@ def build_message(
 
 
 # =========================================================
-# SMTP SEND ONE
+# SEND ONE EMAIL
 # =========================================================
 
 def send_one(
@@ -333,12 +336,12 @@ def send_one(
 ):
 
     message = build_message(
-        gmail=gmail,
-        sender_name=sender_name,
-        subject=subject,
-        body=body,
-        is_html=is_html,
-        recipient=recipient,
+        gmail,
+        sender_name,
+        subject,
+        body,
+        is_html,
+        recipient,
     )
 
     wait_for_send_slot()
@@ -388,29 +391,36 @@ def login():
         )
 
     if not LOGIN_PASSWORD:
+        logger.error("LOGIN_PASSWORD is missing.")
+
         return render_template(
             "login.html",
             error="LOGIN_PASSWORD is not configured in Vercel."
         ), 503
 
     if not SESSION_KEY:
+        logger.error("SESSION_SECRET is missing or invalid.")
+
         return render_template(
             "login.html",
-            error="Set a valid SESSION_SECRET in Vercel."
+            error="SESSION_SECRET is missing or invalid in Vercel."
         ), 503
 
-    submitted = str(
-        request.form.get("password", "")
+    # Supports both common HTML form field names.
+    submitted_password = (
+        request.form.get("password")
+        or request.form.get("login_password")
+        or ""
     )
 
     if not hmac.compare_digest(
-        submitted,
+        submitted_password,
         LOGIN_PASSWORD
     ):
 
         return render_template(
             "login.html",
-            error="Incorrect password."
+            error="Incorrect password. Check LOGIN_PASSWORD in Vercel."
         ), 401
 
     session.clear()
@@ -447,10 +457,10 @@ def home():
 
     except TemplateNotFound:
 
-        logger.exception("index.html template not found")
+        logger.exception("index.html template missing")
 
         return (
-            "Missing file: templates/index.html",
+            "templates/index.html was not found.",
             500
         )
 
@@ -466,7 +476,6 @@ def health():
         "status": "ok",
         "smtp_host": SMTP_HOST,
         "smtp_port": SMTP_PORT,
-        "smtp_ssl": True,
         "max_recipients": MAX_RECIPIENTS,
         "max_parallel_sends": MAX_PARALLEL_SENDS,
         "send_delay_seconds": SEND_DELAY_SECONDS,
@@ -476,7 +485,7 @@ def health():
 
 
 # =========================================================
-# FAVICON AND SERVICE WORKER
+# FAVICON / SERVICE WORKER
 # =========================================================
 
 @app.route("/favicon.ico")
@@ -493,7 +502,7 @@ def service_worker():
 
 
 # =========================================================
-# SMTP ERROR DESCRIPTION
+# SMTP ERROR HELPER
 # =========================================================
 
 def smtp_error_text(exc):
@@ -562,7 +571,6 @@ def send_batch():
     )
 
     is_html = data.get("is_html") is True
-
     incoming = data.get("recipients", [])
 
     if not sender_name:
@@ -591,10 +599,9 @@ def send_batch():
 
     if data.get("consent_confirmed") is not True:
         return error(
-            "Confirm that all recipients agreed to receive these emails."
+            "Confirm that recipients agreed to receive these emails."
         )
 
-    # Validate and deduplicate recipients.
     recipients = []
     seen = set()
     invalid = 0
@@ -632,7 +639,6 @@ def send_batch():
     def generate():
 
         total = len(recipients)
-
         sent = 0
         failed = 0
 
@@ -674,7 +680,6 @@ def send_batch():
                 try:
 
                     future.result()
-
                     sent += 1
 
                     result = {
