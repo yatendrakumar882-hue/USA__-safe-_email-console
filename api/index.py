@@ -58,8 +58,6 @@ logger = logging.getLogger(__name__)
 SESSION_SECRET = os.environ.get("SESSION_SECRET", "").strip()
 LOGIN_PASSWORD = os.environ.get("LOGIN_PASSWORD", "").strip()
 
-# A stable, dedicated secret is required.
-# Do not derive this from the login password.
 SESSION_KEY = (
     SESSION_SECRET
     if len(SESSION_SECRET) >= 32
@@ -75,8 +73,6 @@ if SESSION_KEY is None:
 if not LOGIN_PASSWORD:
     logger.error("LOGIN_PASSWORD is not configured.")
 
-# The fallback is not used for authentication:
-# login checks SESSION_KEY before setting an authenticated session.
 app.secret_key = SESSION_KEY or "unconfigured-session-key"
 
 app.config.update(
@@ -98,8 +94,6 @@ SMTP_TIMEOUT = 20
 
 MAX_RECIPIENTS = 25
 MAX_PARALLEL_SENDS = 1
-
-# Existing sending interval retained.
 SEND_DELAY_SECONDS = 0.1
 
 _pacing_lock = threading.Lock()
@@ -398,11 +392,9 @@ def login():
             error="Session configuration is missing. Set SESSION_SECRET."
         ), 503
 
-    # Accept both field names so older and newer login templates work.
-    submitted = (
-        request.form.get("password")
-        or request.form.get("login_password")
-        or ""
+    submitted = str(
+        request.form.get("password", "")
+        or request.form.get("login_password", "")
     )
 
     if not hmac.compare_digest(
@@ -557,7 +549,7 @@ def send_batch():
     if not isinstance(incoming, list):
         return error("Recipients must be a list.")
 
-    # Require the operator to confirm recipient permission.
+    # Require confirmation that recipients agreed to receive emails.
     if data.get("consent_confirmed") is not True:
         return error(
             "Confirm that recipients agreed to receive these emails."
