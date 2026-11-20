@@ -4,15 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#101b35">
+
 <title>Secure Mail Console</title>
 
 <style>
 :root {
-    font-family: Inter, ui-sans-serif, system-ui, -apple-system,
-                 "Segoe UI", sans-serif;
+    font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
     color: #172033;
     background: #f4f6fb;
-    font-synthesis: none;
 }
 
 * {
@@ -71,12 +70,7 @@ body {
     gap: 0 16px;
 }
 
-.field-grid label {
-    min-width: 0;
-}
-
-.panel,
-.login-card {
+.panel {
     background: #fff;
     border: 1px solid #e4e8f0;
     border-radius: 18px;
@@ -185,6 +179,7 @@ textarea {
     display: flex;
     gap: 10px;
     margin-top: 18px;
+    flex-wrap: wrap;
 }
 
 .actions .btn {
@@ -200,11 +195,6 @@ textarea {
     border-radius: 10px;
     padding: 12px;
     overflow-wrap: anywhere;
-}
-
-.notice {
-    color: #815b20;
-    background: #fff8e8;
 }
 
 .error {
@@ -253,10 +243,6 @@ textarea {
     width: 0;
     background: #3457db;
     transition: width .15s;
-}
-
-h3 {
-    font-size: 15px;
 }
 
 .log {
@@ -338,8 +324,6 @@ h3 {
 
 <main class="layout">
 
-    <!-- MESSAGE BUILDER -->
-
     <section class="panel">
 
         <div class="panel-head">
@@ -347,6 +331,7 @@ h3 {
                 <div class="eyebrow">MESSAGE BUILDER</div>
                 <h2>Compose email</h2>
             </div>
+
             <span class="pill">Gmail SMTP</span>
         </div>
 
@@ -407,7 +392,7 @@ h3 {
                     rows="9"
                     required
                     maxlength="100000"
-                    placeholder="Write your message. You can use {{name}}, {{email}}, {{hi}}, {{hello}}, {{thanks}}, {{ref_code}}."
+                    placeholder="Write your message. Placeholders: {{name}}, {{email}}, {{hi}}, {{hello}}, {{thanks}}, {{ref_code}}."
                 ></textarea>
             </label>
 
@@ -417,11 +402,11 @@ h3 {
             </label>
 
             <p class="muted">
-                Send only to recipients who explicitly agreed to receive
-                your email.
+                Send only to recipients who explicitly agreed to receive your email.
             </p>
 
             <div class="actions">
+
                 <button
                     id="sendBtn"
                     class="btn primary"
@@ -438,6 +423,15 @@ h3 {
                 >
                     Stop UI Updates
                 </button>
+
+                <button
+                    id="clearBtn"
+                    class="btn secondary"
+                    type="button"
+                >
+                    Clear All
+                </button>
+
             </div>
 
             <p id="status" class="status" role="status" aria-live="polite">
@@ -449,8 +443,6 @@ h3 {
 
 
     <div class="right-stack">
-
-        <!-- RECIPIENTS -->
 
         <section class="panel">
 
@@ -468,6 +460,7 @@ h3 {
 
             <label>
                 Recipient email addresses
+
                 <textarea
                     id="recipients"
                     rows="6"
@@ -484,6 +477,7 @@ h3 {
                     required
                     form="sendForm"
                 >
+
                 <span>
                     I confirm these recipients agreed to receive this email.
                 </span>
@@ -491,8 +485,6 @@ h3 {
 
         </section>
 
-
-        <!-- PROGRESS MONITOR -->
 
         <section class="panel">
 
@@ -602,11 +594,13 @@ h3 {
         const failed = Number($("failed").textContent) || 0;
 
         const done = sent + failed;
+
         const percent = total
             ? Math.min(100, (done / total) * 100)
             : 0;
 
         $("progressBar").style.width = percent + "%";
+
         $("progressTrack").setAttribute(
             "aria-valuenow",
             String(Math.round(percent))
@@ -659,24 +653,13 @@ h3 {
             if (event.message) {
                 logLine(event.message);
             }
-
-        } else if (event.type === "error") {
-            setStatus(
-                event.message || "Sending failed.",
-                true
-            );
-
-            logLine(
-                event.message || "Sending failed.",
-                "failure"
-            );
         }
     }
 
     function parseRecipientInput() {
         const lines = $("recipients").value
             .split(/[\n,;]+/)
-            .map((value) => value.trim())
+            .map(value => value.trim())
             .filter(Boolean);
 
         const unique = [];
@@ -740,7 +723,7 @@ h3 {
     }
 
 
-    // Update recipient count while typing.
+    // Recipient counter
 
     $("recipients").addEventListener("input", () => {
         const recipients = parseRecipientInput();
@@ -750,7 +733,7 @@ h3 {
     });
 
 
-    // Submit email batch.
+    // Submit batch
 
     $("sendForm").addEventListener("submit", async (event) => {
         event.preventDefault();
@@ -812,6 +795,7 @@ h3 {
 
         $("sendBtn").disabled = true;
         $("stopBtn").disabled = false;
+        $("clearBtn").disabled = true;
 
         $("log").replaceChildren();
 
@@ -861,10 +845,11 @@ h3 {
                         message;
 
                     if (data.login_required) {
-                        message = "Your login session expired. Please log in again.";
+                        message =
+                            "Your login session expired. Please log in again.";
                     }
                 } catch (_) {
-                    // Keep the default message.
+                    // Keep default error.
                 }
 
                 throw new Error(message);
@@ -880,7 +865,7 @@ h3 {
                 );
 
                 logLine(
-                    "Request stopped. Check the recipient inboxes before retrying.",
+                    "Request stopped. Check recipient inboxes before retrying.",
                     "failure"
                 );
 
@@ -905,14 +890,15 @@ h3 {
 
             $("sendBtn").disabled = false;
             $("stopBtn").disabled = true;
+            $("clearBtn").disabled = false;
 
-            $("appPassword").value = "";
+            // Keep every field filled after sending.
+            // App Password remains in this open page.
         }
     });
 
 
-    // Stop browser updates/request.
-    // This cannot guarantee that the server stopped sending.
+    // Stop request from this browser
 
     $("stopBtn").addEventListener("click", () => {
         stopUi = true;
@@ -924,8 +910,51 @@ h3 {
         $("statePill").textContent = "Stopped";
 
         setStatus(
-            "Request cancelled in this browser. Some emails may already have been sent."
+            "Browser request cancelled. Some emails may already have been sent."
         );
+    });
+
+
+    // Manually clear all details
+
+    $("clearBtn").addEventListener("click", () => {
+        if (controller) {
+            setStatus(
+                "Stop the current request before clearing details.",
+                true
+            );
+            return;
+        }
+
+        [
+            "senderName",
+            "gmail",
+            "appPassword",
+            "subject",
+            "body",
+            "recipients"
+        ].forEach(id => {
+            $(id).value = "";
+        });
+
+        $("isHtml").checked = false;
+        $("consent").checked = false;
+
+        $("recipientCount").textContent = "0 found";
+
+        $("total").textContent = "0";
+        $("sent").textContent = "0";
+        $("failed").textContent = "0";
+        $("remaining").textContent = "0";
+
+        $("progressBar").style.width = "0%";
+        $("progressTrack").setAttribute("aria-valuenow", "0");
+
+        $("log").replaceChildren();
+
+        $("statePill").textContent = "Ready";
+
+        setStatus("All details cleared.");
     });
 
 })();
