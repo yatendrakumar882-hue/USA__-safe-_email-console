@@ -94,7 +94,7 @@ MAX_RECIPIENTS = 25
 MAX_PARALLEL_SENDS = 2
 
 # Conservative spacing between SMTP send attempts.
-SEND_DELAY_SECONDS = 0.5
+SEND_DELAY_SECONDS = 0.1
 
 _pacing_lock = threading.Lock()
 _last_send_started = 0.0
