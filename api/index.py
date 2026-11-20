@@ -91,10 +91,10 @@ SMTP_TIMEOUT = 20
 MAX_RECIPIENTS = 25
 
 # Sequential sending; avoids opening many simultaneous SMTP connections.
-MAX_PARALLEL_SENDS = 1
+MAX_PARALLEL_SENDS = 2
 
 # Conservative spacing between SMTP send attempts.
-SEND_DELAY_SECONDS = 1.5
+SEND_DELAY_SECONDS = 0.5
 
 _pacing_lock = threading.Lock()
 _last_send_started = 0.0
