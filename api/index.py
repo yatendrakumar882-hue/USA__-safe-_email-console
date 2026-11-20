@@ -9,6 +9,7 @@ import hmac
 import smtplib
 import logging
 import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from pathlib import Path
 from datetime import timedelta
@@ -90,11 +91,12 @@ SMTP_TIMEOUT = 20
 
 MAX_RECIPIENTS = 25
 
-# Sequential sending; avoids opening many simultaneous SMTP connections.
-MAX_PARALLEL_SENDS = 5
+# Send two recipient emails concurrently.
+MAX_PARALLEL_SENDS = 2
 
-# Conservative spacing between SMTP send attempts.
+# No extra artificial delay; concurrency is limited by MAX_PARALLEL_SENDS.
 SEND_DELAY_SECONDS = 0.0
+
 _pacing_lock = threading.Lock()
 _last_send_started = 0.0
 
@@ -519,6 +521,69 @@ def send_batch():
     # STREAMING PROGRESS
     # -----------------------------------------------------
 
+    def send_recipient(recipient):
+        try:
+            send_one(
+                gmail,
+                password,
+                sender_name,
+                subject,
+                body,
+                is_html,
+                recipient,
+            )
+            return {
+                "type": "progress",
+                "recipient": recipient["email"],
+                "result": "sent",
+            }
+
+        except smtplib.SMTPAuthenticationError:
+            return {
+                "type": "progress",
+                "recipient": recipient["email"],
+                "result": "failed",
+                "error": "Gmail authentication failed. Check Gmail App Password.",
+            }
+
+        except smtplib.SMTPRecipientsRefused:
+            return {
+                "type": "progress",
+                "recipient": recipient["email"],
+                "result": "failed",
+                "error": "Gmail refused this recipient.",
+            }
+
+        except smtplib.SMTPResponseException as exc:
+            detail = (
+                exc.smtp_error.decode("utf-8", "replace")
+                if isinstance(exc.smtp_error, bytes)
+                else str(exc.smtp_error)
+            )
+            return {
+                "type": "progress",
+                "recipient": recipient["email"],
+                "result": "failed",
+                "error": f"SMTP error {exc.smtp_code}: {detail[:200]}",
+            }
+
+        except (smtplib.SMTPException, TimeoutError, OSError) as exc:
+            return {
+                "type": "progress",
+                "recipient": recipient["email"],
+                "result": "failed",
+                "error": f"SMTP/network error: {str(exc)[:200]}",
+            }
+
+        except Exception as exc:
+            logger.exception("Unexpected email sending error")
+            return {
+                "type": "progress",
+                "recipient": recipient["email"],
+                "result": "failed",
+                "error": f"Unexpected error: {type(exc).__name__}",
+            }
+
     def generate():
         total = len(recipients)
         sent = 0
@@ -533,95 +598,29 @@ def send_batch():
             "invalid_skipped": invalid,
         })
 
-        for recipient in recipients:
-            try:
-                send_one(
-                    gmail,
-                    password,
-                    sender_name,
-                    subject,
-                    body,
-                    is_html,
-                    recipient,
-                )
+        # Keep only two SMTP jobs running at once.
+        with ThreadPoolExecutor(max_workers=MAX_PARALLEL_SENDS) as executor:
+            futures = {
+                executor.submit(send_recipient, recipient): recipient
+                for recipient in recipients
+            }
 
-                sent += 1
+            for future in as_completed(futures):
+                item = future.result()
 
-                item = {
-                    "type": "progress",
-                    "recipient": recipient["email"],
-                    "result": "sent",
-                }
+                if item["result"] == "sent":
+                    sent += 1
+                else:
+                    failed += 1
 
-            except smtplib.SMTPAuthenticationError:
-                failed += 1
+                item.update({
+                    "total": total,
+                    "sent": sent,
+                    "failed": failed,
+                    "remaining": total - sent - failed,
+                })
 
-                item = {
-                    "type": "progress",
-                    "recipient": recipient["email"],
-                    "result": "failed",
-                    "error": "Gmail authentication failed. Check Gmail App Password.",
-                }
-
-            except smtplib.SMTPRecipientsRefused:
-                failed += 1
-
-                item = {
-                    "type": "progress",
-                    "recipient": recipient["email"],
-                    "result": "failed",
-                    "error": "Gmail refused this recipient.",
-                }
-
-            except smtplib.SMTPResponseException as exc:
-                failed += 1
-
-                detail = (
-                    exc.smtp_error.decode("utf-8", "replace")
-                    if isinstance(exc.smtp_error, bytes)
-                    else str(exc.smtp_error)
-                )
-
-                item = {
-                    "type": "progress",
-                    "recipient": recipient["email"],
-                    "result": "failed",
-                    "error": f"SMTP error {exc.smtp_code}: {detail[:200]}",
-                }
-
-            except (
-                smtplib.SMTPException,
-                TimeoutError,
-                OSError,
-            ) as exc:
-                failed += 1
-
-                item = {
-                    "type": "progress",
-                    "recipient": recipient["email"],
-                    "result": "failed",
-                    "error": f"SMTP/network error: {str(exc)[:200]}",
-                }
-
-            except Exception as exc:
-                failed += 1
-                logger.exception("Unexpected email sending error")
-
-                item = {
-                    "type": "progress",
-                    "recipient": recipient["email"],
-                    "result": "failed",
-                    "error": f"Unexpected error: {type(exc).__name__}",
-                }
-
-            item.update({
-                "total": total,
-                "sent": sent,
-                "failed": failed,
-                "remaining": total - sent - failed,
-            })
-
-            yield event_line(item)
+                yield event_line(item)
 
         yield event_line({
             "type": "complete",
