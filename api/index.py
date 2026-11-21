@@ -2,17 +2,15 @@
 import os
 import re
 import ssl
-import time
 import json
 import html
 import hmac
 import smtplib
 import logging
-import threading
-from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from pathlib import Path
 from datetime import timedelta
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from email.message import EmailMessage
 from email.utils import formataddr, make_msgid, formatdate
 
@@ -75,7 +73,9 @@ app.config.update(
 )
 
 if not SESSION_KEY:
-    logger.error("SESSION_SECRET missing or shorter than 32 characters.")
+    logger.error(
+        "SESSION_SECRET missing or shorter than 32 characters."
+    )
 
 if not LOGIN_PASSWORD:
     logger.error("LOGIN_PASSWORD is not configured.")
@@ -91,14 +91,11 @@ SMTP_TIMEOUT = 20
 
 MAX_RECIPIENTS = 25
 
-# Send two recipient emails concurrently.
+# Actual parallel sending
 MAX_PARALLEL_SENDS = 2
 
-# No extra artificial delay; concurrency is limited by MAX_PARALLEL_SENDS.
+# No artificial delay
 SEND_DELAY_SECONDS = 0.0
-
-_pacing_lock = threading.Lock()
-_last_send_started = 0.0
 
 
 # =========================================================
@@ -231,26 +228,6 @@ def personalize(value, recipient):
 
 
 # =========================================================
-# SEND PACING
-# =========================================================
-
-def wait_for_send_slot():
-    global _last_send_started
-
-    with _pacing_lock:
-        now = time.monotonic()
-
-        remaining = SEND_DELAY_SECONDS - (
-            now - _last_send_started
-        )
-
-        if remaining > 0:
-            time.sleep(remaining)
-
-        _last_send_started = time.monotonic()
-
-
-# =========================================================
 # BUILD EMAIL
 # =========================================================
 
@@ -264,10 +241,14 @@ def build_message(
 ):
     msg = EmailMessage()
 
-    msg["Subject"] = clean(
+    personalized_subject = clean(
         personalize(subject, recipient),
         250,
     )
+
+    personalized_body = personalize(body, recipient)
+
+    msg["Subject"] = personalized_subject
 
     msg["From"] = formataddr((
         clean(sender_name, 150),
@@ -275,24 +256,23 @@ def build_message(
     ))
 
     msg["To"] = recipient["email"]
+    msg["Reply-To"] = gmail
     msg["Date"] = formatdate(localtime=True)
     msg["Message-ID"] = make_msgid()
 
-    content = personalize(body, recipient)
-
     if is_html:
-        plain = html_to_text(content)
+        plain = html_to_text(personalized_body)
 
         msg.set_content(
             plain or "Please view this message in an HTML-capable email client."
         )
 
         msg.add_alternative(
-            content,
+            personalized_body,
             subtype="html",
         )
     else:
-        msg.set_content(content)
+        msg.set_content(personalized_body)
 
     return msg
 
@@ -319,8 +299,6 @@ def send_one(
         recipient,
     )
 
-    wait_for_send_slot()
-
     password = re.sub(r"\s+", "", app_password)
     context = ssl.create_default_context()
 
@@ -345,6 +323,95 @@ def send_one(
 
 
 # =========================================================
+# SEND RESULT HANDLER
+# =========================================================
+
+def send_recipient(
+    gmail,
+    password,
+    sender_name,
+    subject,
+    body,
+    is_html,
+    recipient,
+):
+    try:
+        send_one(
+            gmail,
+            password,
+            sender_name,
+            subject,
+            body,
+            is_html,
+            recipient,
+        )
+
+        return {
+            "type": "progress",
+            "recipient": recipient["email"],
+            "result": "sent",
+        }
+
+    except smtplib.SMTPAuthenticationError:
+        return {
+            "type": "progress",
+            "recipient": recipient["email"],
+            "result": "failed",
+            "error": (
+                "Gmail authentication failed. "
+                "Check Gmail App Password."
+            ),
+        }
+
+    except smtplib.SMTPRecipientsRefused:
+        return {
+            "type": "progress",
+            "recipient": recipient["email"],
+            "result": "failed",
+            "error": "Gmail refused this recipient.",
+        }
+
+    except smtplib.SMTPResponseException as exc:
+        detail = (
+            exc.smtp_error.decode("utf-8", "replace")
+            if isinstance(exc.smtp_error, bytes)
+            else str(exc.smtp_error)
+        )
+
+        return {
+            "type": "progress",
+            "recipient": recipient["email"],
+            "result": "failed",
+            "error": (
+                f"SMTP error {exc.smtp_code}: "
+                f"{detail[:200]}"
+            ),
+        }
+
+    except (
+        smtplib.SMTPException,
+        TimeoutError,
+        OSError,
+    ) as exc:
+        return {
+            "type": "progress",
+            "recipient": recipient["email"],
+            "result": "failed",
+            "error": f"SMTP/network error: {str(exc)[:200]}",
+        }
+
+    except Exception as exc:
+        logger.exception("Unexpected email sending error")
+
+        return {
+            "type": "progress",
+            "recipient": recipient["email"],
+            "result": "failed",
+            "error": f"Unexpected error: {type(exc).__name__}",
+        }
+
+
+# =========================================================
 # LOGIN
 # =========================================================
 
@@ -365,7 +432,10 @@ def login():
     if not SESSION_KEY:
         return render_template(
             "login.html",
-            error="SESSION_SECRET is missing or invalid. Set a stable secret of at least 32 characters.",
+            error=(
+                "SESSION_SECRET is missing or invalid. "
+                "Set a stable secret of at least 32 characters."
+            ),
         ), 503
 
     submitted = str(
@@ -407,6 +477,7 @@ def home():
 
     try:
         return render_template("index.html")
+
     except TemplateNotFound:
         logger.exception("index.html template missing")
         return "templates/index.html was not found.", 500
@@ -425,7 +496,7 @@ def health():
         "max_parallel_sends": MAX_PARALLEL_SENDS,
         "send_delay_seconds": SEND_DELAY_SECONDS,
         "login_password_configured": bool(LOGIN_PASSWORD),
-        "session_secret_configured": bool(SESSION_SECRET),
+        "session_secret_configured": bool(SESSION_KEY),
     })
 
 
@@ -474,10 +545,14 @@ def send_batch():
         or not valid_email(gmail)
         or not gmail.endswith("@gmail.com")
     ):
-        return error("Enter a valid Gmail sender address and name.")
+        return error(
+            "Enter a valid Gmail sender address and name."
+        )
 
     if not password or not subject or not body.strip():
-        return error("App Password, subject and body are required.")
+        return error(
+            "App Password, subject and body are required."
+        )
 
     if len(body) > 100_000:
         return error("Email body is too large.")
@@ -485,6 +560,7 @@ def send_batch():
     if not isinstance(incoming, list):
         return error("Recipients must be a list.")
 
+    # Only send to recipients who have agreed to receive emails.
     if data.get("consent_confirmed") is not True:
         return error(
             "Confirm that recipients agreed to receive these emails."
@@ -521,69 +597,6 @@ def send_batch():
     # STREAMING PROGRESS
     # -----------------------------------------------------
 
-    def send_recipient(recipient):
-        try:
-            send_one(
-                gmail,
-                password,
-                sender_name,
-                subject,
-                body,
-                is_html,
-                recipient,
-            )
-            return {
-                "type": "progress",
-                "recipient": recipient["email"],
-                "result": "sent",
-            }
-
-        except smtplib.SMTPAuthenticationError:
-            return {
-                "type": "progress",
-                "recipient": recipient["email"],
-                "result": "failed",
-                "error": "Gmail authentication failed. Check Gmail App Password.",
-            }
-
-        except smtplib.SMTPRecipientsRefused:
-            return {
-                "type": "progress",
-                "recipient": recipient["email"],
-                "result": "failed",
-                "error": "Gmail refused this recipient.",
-            }
-
-        except smtplib.SMTPResponseException as exc:
-            detail = (
-                exc.smtp_error.decode("utf-8", "replace")
-                if isinstance(exc.smtp_error, bytes)
-                else str(exc.smtp_error)
-            )
-            return {
-                "type": "progress",
-                "recipient": recipient["email"],
-                "result": "failed",
-                "error": f"SMTP error {exc.smtp_code}: {detail[:200]}",
-            }
-
-        except (smtplib.SMTPException, TimeoutError, OSError) as exc:
-            return {
-                "type": "progress",
-                "recipient": recipient["email"],
-                "result": "failed",
-                "error": f"SMTP/network error: {str(exc)[:200]}",
-            }
-
-        except Exception as exc:
-            logger.exception("Unexpected email sending error")
-            return {
-                "type": "progress",
-                "recipient": recipient["email"],
-                "result": "failed",
-                "error": f"Unexpected error: {type(exc).__name__}",
-            }
-
     def generate():
         total = len(recipients)
         sent = 0
@@ -598,15 +611,40 @@ def send_batch():
             "invalid_skipped": invalid,
         })
 
-        # Keep only two SMTP jobs running at once.
-        with ThreadPoolExecutor(max_workers=MAX_PARALLEL_SENDS) as executor:
+        # Two actual concurrent SMTP sending workers.
+        with ThreadPoolExecutor(
+            max_workers=MAX_PARALLEL_SENDS
+        ) as executor:
+
             futures = {
-                executor.submit(send_recipient, recipient): recipient
+                executor.submit(
+                    send_recipient,
+                    gmail,
+                    password,
+                    sender_name,
+                    subject,
+                    body,
+                    is_html,
+                    recipient,
+                ): recipient
                 for recipient in recipients
             }
 
             for future in as_completed(futures):
-                item = future.result()
+                try:
+                    item = future.result()
+
+                except Exception:
+                    logger.exception("Worker failed unexpectedly")
+
+                    recipient = futures[future]
+
+                    item = {
+                        "type": "progress",
+                        "recipient": recipient["email"],
+                        "result": "failed",
+                        "error": "Unexpected worker error.",
+                    }
 
                 if item["result"] == "sent":
                     sent += 1
@@ -643,6 +681,7 @@ def send_batch():
     response.headers["Cache-Control"] = (
         "no-store, no-cache, no-transform"
     )
+
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Accel-Buffering"] = "no"
 
@@ -672,7 +711,10 @@ def internal_error(exc):
 
     return jsonify({
         "success": False,
-        "message": "Internal server error. Check Vercel Runtime Logs.",
+        "message": (
+            "Internal server error. "
+            "Check Vercel Runtime Logs."
+        ),
     }), 500
 
 
