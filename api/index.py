@@ -17,17 +17,9 @@ from email.message import EmailMessage
 from email.utils import formataddr, make_msgid, formatdate
 
 from flask import (
-    Flask,
-    request,
-    render_template,
-    redirect,
-    url_for,
-    jsonify,
-    session,
-    Response,
-    stream_with_context,
+    Flask, request, render_template, redirect,
+    url_for, jsonify, session, Response, stream_with_context
 )
-
 from jinja2 import TemplateNotFound
 
 
@@ -44,6 +36,7 @@ app = Flask(
     static_url_path="/static",
 )
 
+# Vercel WSGI entry point
 handler = app
 
 logging.basicConfig(level=logging.INFO)
@@ -77,28 +70,26 @@ app.config.update(
 
 
 # =====================================================
-# SMTP SETTINGS
+# SMTP / SPEED
 # =====================================================
 
 SMTP_HOST = "smtp.gmail.com"
 SMTP_PORT = 465
-SMTP_TIMEOUT = 25
+SMTP_TIMEOUT = 20
 
 MAX_RECIPIENTS = 25
 
-# Keep the existing sending speed.
-MAX_PARALLEL_SENDS = 6
-SEND_DELAY_SECONDS = 1.0
-
-MAX_RETRIES = 6
-RETRY_BASE_SECONDS = 2
+# Faster than the previous 9 workers / 0.8 seconds.
+# Gmail may throttle or reject high-volume sending.
+MAX_PARALLEL_SENDS = 10
+SEND_DELAY_SECONDS = 0.5
 
 _pacing_lock = threading.Lock()
 _last_send_started = 0.0
 
 
 # =====================================================
-# VALIDATION
+# VALIDATION / HELPERS
 # =====================================================
 
 EMAIL_RE = re.compile(
@@ -141,7 +132,7 @@ def event_line(data):
 
 
 # =====================================================
-# HTML TO PLAIN TEXT
+# HTML TO TEXT
 # =====================================================
 
 def html_to_text(value):
@@ -175,7 +166,7 @@ def html_to_text(value):
 
 
 # =====================================================
-# RECIPIENT NORMALIZATION
+# RECIPIENTS
 # =====================================================
 
 def normalize_recipient(item):
@@ -192,13 +183,7 @@ def normalize_recipient(item):
 
     recipient = {"email": address}
 
-    for key in (
-        "name",
-        "hi",
-        "hello",
-        "thanks",
-        "ref_code",
-    ):
+    for key in ("name", "hi", "hello", "thanks", "ref_code"):
         recipient[key] = clean(item.get(key, ""), 150)
 
     return recipient
@@ -227,7 +212,7 @@ def personalize(value, recipient):
 
 
 # =====================================================
-# GLOBAL PACING
+# SEND PACING
 # =====================================================
 
 def wait_for_send_slot():
@@ -236,9 +221,7 @@ def wait_for_send_slot():
     with _pacing_lock:
         now = time.monotonic()
 
-        remaining = SEND_DELAY_SECONDS - (
-            now - _last_send_started
-        )
+        remaining = SEND_DELAY_SECONDS - (now - _last_send_started)
 
         if remaining > 0:
             time.sleep(remaining)
@@ -271,7 +254,6 @@ def build_message(
     ))
 
     msg["To"] = recipient["email"]
-    msg["Reply-To"] = gmail
     msg["Date"] = formatdate(localtime=True)
     msg["Message-ID"] = make_msgid()
 
@@ -284,10 +266,7 @@ def build_message(
             plain or "Please view this message in an HTML-capable email client."
         )
 
-        msg.add_alternative(
-            content,
-            subtype="html"
-        )
+        msg.add_alternative(content, subtype="html")
     else:
         msg.set_content(content)
 
@@ -295,39 +274,7 @@ def build_message(
 
 
 # =====================================================
-# SMTP CONNECTION
-# =====================================================
-
-def smtp_send_once(
-    gmail,
-    password,
-    message,
-    recipient_email
-):
-    context = ssl.create_default_context()
-
-    with smtplib.SMTP_SSL(
-        SMTP_HOST,
-        SMTP_PORT,
-        context=context,
-        timeout=SMTP_TIMEOUT
-    ) as smtp:
-
-        smtp.ehlo()
-        smtp.login(gmail, password)
-
-        refused = smtp.send_message(
-            message,
-            from_addr=gmail,
-            to_addrs=[recipient_email]
-        )
-
-        if refused:
-            raise smtplib.SMTPRecipientsRefused(refused)
-
-
-# =====================================================
-# SEND WITH SAFE RETRIES
+# SEND ONE EMAIL
 # =====================================================
 
 def send_one(
@@ -348,65 +295,29 @@ def send_one(
         recipient
     )
 
+    wait_for_send_slot()
+
     password = re.sub(r"\s+", "", app_password)
+    context = ssl.create_default_context()
 
-    for attempt in range(MAX_RETRIES + 1):
-        wait_for_send_slot()
+    with smtplib.SMTP_SSL(
+        SMTP_HOST,
+        SMTP_PORT,
+        context=context,
+        timeout=SMTP_TIMEOUT
+    ) as smtp:
 
-        try:
-            smtp_send_once(
-                gmail,
-                password,
-                message,
-                recipient["email"]
-            )
+        smtp.ehlo()
+        smtp.login(gmail, password)
 
-            return {
-                "ok": True,
-                "message": "Accepted by Gmail SMTP."
-            }
+        refused = smtp.send_message(
+            message,
+            from_addr=gmail,
+            to_addrs=[recipient["email"]]
+        )
 
-        except smtplib.SMTPAuthenticationError:
-            raise
-
-        except smtplib.SMTPRecipientsRefused:
-            raise
-
-        except smtplib.SMTPResponseException as exc:
-            # Only retry explicit temporary 4xx responses.
-            if (
-                400 <= exc.smtp_code < 500
-                and attempt < MAX_RETRIES
-            ):
-                time.sleep(
-                    RETRY_BASE_SECONDS * (2 ** attempt)
-                )
-                continue
-
-            raise
-
-        except (
-            smtplib.SMTPConnectError,
-            ConnectionRefusedError
-        ):
-            # Retry connection failures before message submission.
-            if attempt < MAX_RETRIES:
-                time.sleep(
-                    RETRY_BASE_SECONDS * (2 ** attempt)
-                )
-                continue
-
-            raise
-
-        except (
-            smtplib.SMTPServerDisconnected,
-            TimeoutError,
-            OSError
-        ):
-            # Outcome may be ambiguous. Avoid duplicate retries.
-            raise
-
-    raise RuntimeError("SMTP submission failed.")
+        if refused:
+            raise smtplib.SMTPRecipientsRefused(refused)
 
 
 # =====================================================
@@ -430,7 +341,7 @@ def login():
     if not SESSION_KEY:
         return render_template(
             "login.html",
-            error="SESSION_SECRET is missing or invalid."
+            error="Set SESSION_SECRET to at least 32 characters."
         ), 503
 
     submitted = str(request.form.get("password", ""))
@@ -469,14 +380,13 @@ def home():
 
     try:
         return render_template("index.html")
-
     except TemplateNotFound:
         logger.exception("index.html template missing")
         return "templates/index.html was not found.", 500
 
 
 # =====================================================
-# HEALTH CHECK
+# HEALTH
 # =====================================================
 
 @app.route("/health")
@@ -485,11 +395,10 @@ def health():
         "status": "ok",
         "smtp": "Gmail SMTP SSL",
         "max_recipients": MAX_RECIPIENTS,
-        "parallel_sends": MAX_PARALLEL_SENDS,
-        "send_interval_seconds": SEND_DELAY_SECONDS,
-        "retry_limit": MAX_RETRIES,
-        "login_configured": bool(LOGIN_PASSWORD),
-        "session_configured": bool(SESSION_KEY),
+        "max_parallel_sends": MAX_PARALLEL_SENDS,
+        "send_delay_seconds": SEND_DELAY_SECONDS,
+        "login_password_configured": bool(LOGIN_PASSWORD),
+        "session_secret_configured": bool(SESSION_KEY),
     })
 
 
@@ -530,6 +439,7 @@ def send_batch():
     password = str(data.get("app_password", "")).strip()
     subject = clean(data.get("subject", ""), 250)
     body = str(data.get("body", ""))
+
     is_html = data.get("is_html") is True
     incoming = data.get("recipients", [])
 
@@ -582,7 +492,7 @@ def send_batch():
         )
 
     # -------------------------------------------------
-    # STREAMING PROGRESS
+    # STREAM PROGRESS
     # -------------------------------------------------
 
     def generate():
@@ -621,14 +531,13 @@ def send_batch():
                 recipient = jobs[future]
 
                 try:
-                    result = future.result()
+                    future.result()
                     sent += 1
 
                     item = {
                         "type": "progress",
                         "recipient": recipient["email"],
                         "result": "sent",
-                        "message": result["message"],
                     }
 
                 except smtplib.SMTPAuthenticationError:
@@ -648,7 +557,7 @@ def send_batch():
                         "type": "progress",
                         "recipient": recipient["email"],
                         "result": "failed",
-                        "error": "Gmail refused this recipient address.",
+                        "error": "Gmail refused this recipient.",
                     }
 
                 except smtplib.SMTPResponseException as exc:
@@ -664,15 +573,10 @@ def send_batch():
                         "type": "progress",
                         "recipient": recipient["email"],
                         "result": "failed",
-                        "error": f"SMTP {exc.smtp_code}: {detail[:200]}",
+                        "error": f"SMTP error {exc.smtp_code}: {detail[:200]}",
                     }
 
-                except (
-                    smtplib.SMTPException,
-                    TimeoutError,
-                    OSError,
-                    ConnectionError
-                ) as exc:
+                except (smtplib.SMTPException, TimeoutError, OSError) as exc:
                     failed += 1
 
                     item = {
@@ -706,8 +610,8 @@ def send_batch():
             "type": "complete",
             "success": failed == 0,
             "message": (
-                "SMTP submission attempts completed. "
-                "SMTP acceptance does not confirm Inbox or Primary delivery."
+                "SMTP sending attempts finished. "
+                "SMTP acceptance does not confirm Inbox delivery."
             ),
             "total": total,
             "sent": sent,
@@ -740,7 +644,7 @@ def request_too_large(exc):
 def not_found(exc):
     return jsonify({
         "success": False,
-        "message": "Page not found."
+        "message": "Page not found.",
     }), 404
 
 
@@ -750,7 +654,7 @@ def internal_error(exc):
 
     return jsonify({
         "success": False,
-        "message": "Internal server error. Check Vercel Runtime Logs."
+        "message": "Internal server error. Check Vercel Runtime Logs.",
     }), 500
 
 
