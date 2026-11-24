@@ -93,7 +93,7 @@ SMTP_TIMEOUT = 25
 MAX_RECIPIENTS = 25
 
 # Conservative sending configuration for personal Gmail.
-MAX_PARALLEL_SENDS = 1
+MAX_PARALLEL_SENDS = 5
 SEND_DELAY_SECONDS = 5
 
 MAX_RETRIES = 2
