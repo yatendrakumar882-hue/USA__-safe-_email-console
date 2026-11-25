@@ -2,26 +2,238 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Sign in · Bulk Email Sender</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#0b1020">
+    <title>Secure Login</title>
+
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            font-family: Arial, Helvetica, sans-serif;
+            background:
+                radial-gradient(circle at top left, #25376b 0, transparent 38%),
+                radial-gradient(circle at bottom right, #38205c 0, transparent 35%),
+                #0b1020;
+            color: #fff;
+        }
+
+        .login-card {
+            width: 100%;
+            max-width: 420px;
+            padding: 36px 30px;
+            border: 1px solid rgba(255,255,255,.12);
+            border-radius: 22px;
+            background: rgba(19, 27, 48, .92);
+            box-shadow: 0 25px 70px rgba(0,0,0,.4);
+        }
+
+        .logo {
+            width: 64px;
+            height: 64px;
+            margin: 0 auto 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 18px;
+            background: linear-gradient(135deg, #6366f1, #9333ea);
+            font-size: 29px;
+        }
+
+        h1 {
+            text-align: center;
+            font-size: 27px;
+            margin-bottom: 9px;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #aab4ca;
+            font-size: 14px;
+            margin-bottom: 30px;
+            line-height: 1.5;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 9px;
+            color: #dce3f2;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .password-wrap {
+            position: relative;
+        }
+
+        input {
+            width: 100%;
+            padding: 15px 48px 15px 15px;
+            border: 1px solid #35415c;
+            border-radius: 11px;
+            outline: none;
+            background: #10182b;
+            color: #fff;
+            font-size: 15px;
+            transition: border-color .2s, box-shadow .2s;
+        }
+
+        input:focus {
+            border-color: #818cf8;
+            box-shadow: 0 0 0 3px rgba(129,140,248,.15);
+        }
+
+        input::placeholder {
+            color: #78849d;
+        }
+
+        .toggle-password {
+            position: absolute;
+            right: 13px;
+            top: 50%;
+            transform: translateY(-50%);
+            border: 0;
+            background: transparent;
+            color: #aab4ca;
+            cursor: pointer;
+            font-size: 13px;
+        }
+
+        .login-btn {
+            width: 100%;
+            margin-top: 22px;
+            padding: 15px;
+            border: 0;
+            border-radius: 11px;
+            background: linear-gradient(135deg, #6366f1, #9333ea);
+            color: #fff;
+            font-size: 16px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: opacity .2s, transform .2s;
+        }
+
+        .login-btn:hover {
+            opacity: .92;
+            transform: translateY(-1px);
+        }
+
+        .login-btn:disabled {
+            opacity: .65;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .error {
+            margin-bottom: 18px;
+            padding: 12px 14px;
+            border: 1px solid rgba(248,113,113,.35);
+            border-radius: 10px;
+            background: rgba(127,29,29,.2);
+            color: #fca5a5;
+            font-size: 13px;
+            line-height: 1.5;
+        }
+
+        .footer {
+            margin-top: 25px;
+            text-align: center;
+            color: #8490a8;
+            font-size: 12px;
+        }
+
+        @media (max-width: 420px) {
+            .login-card {
+                padding: 30px 22px;
+            }
+
+            h1 {
+                font-size: 24px;
+            }
+        }
+    </style>
 </head>
-<body class="login-page">
-  <main class="login-card">
-    <div class="app-title">➤ Bulk Email Sender</div>
-    <p>Sign in to continue to your workspace.</p>
 
-    {% if error %}
-      <div class="error">{{ error }}</div>
-    {% endif %}
+<body>
+    <main class="login-card">
+        <div class="logo">🔐</div>
 
-    <form method="post" action="{{ url_for('login') }}">
-      <label for="password">Workspace Password</label>
-      <input id="password" name="password" type="password"
-             placeholder="Enter password" autocomplete="current-password" required>
-      <button class="primary-btn" type="submit">Sign in ›</button>
-    </form>
-  </main>
+        <h1>Welcome Back</h1>
+        <p class="subtitle">
+            Sign in to access your Secure Mail Console.
+        </p>
+
+        {% if error %}
+            <div class="error" role="alert">
+                {{ error }}
+            </div>
+        {% endif %}
+
+        <form method="POST" action="{{ url_for('login') }}">
+            <label for="password">Login Password</label>
+
+            <div class="password-wrap">
+                <input
+                    type="password"
+                    id="password"
+                    name="password"
+                    placeholder="Enter your password"
+                    autocomplete="current-password"
+                    required
+                    autofocus
+                >
+
+                <button
+                    type="button"
+                    class="toggle-password"
+                    id="togglePassword"
+                    aria-label="Show password"
+                >
+                    Show
+                </button>
+            </div>
+
+            <button type="submit" class="login-btn" id="loginBtn">
+                Sign In
+            </button>
+        </form>
+
+        <div class="footer">
+            Protected Login • Secure Mail Console
+        </div>
+    </main>
+
+    <script>
+        const passwordInput = document.getElementById("password");
+        const togglePassword = document.getElementById("togglePassword");
+        const loginForm = document.querySelector("form");
+        const loginBtn = document.getElementById("loginBtn");
+
+        togglePassword.addEventListener("click", function () {
+            const isPassword = passwordInput.type === "password";
+
+            passwordInput.type = isPassword ? "text" : "password";
+            togglePassword.textContent = isPassword ? "Hide" : "Show";
+            togglePassword.setAttribute(
+                "aria-label",
+                isPassword ? "Hide password" : "Show password"
+            );
+        });
+
+        loginForm.addEventListener("submit", function () {
+            loginBtn.disabled = true;
+            loginBtn.textContent = "Signing in...";
+        });
+    </script>
 </body>
 </html>
