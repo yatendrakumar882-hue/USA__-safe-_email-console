@@ -90,7 +90,7 @@ SMTP_TIMEOUT = 20
 MAX_RECIPIENTS = 25
 
 # Slower, controlled sending.
-MAX_PARALLEL_SENDS = 3
+MAX_PARALLEL_SENDS = 6
 SEND_DELAY_SECONDS = 2.0
 
 _pacing_lock = threading.Lock()
