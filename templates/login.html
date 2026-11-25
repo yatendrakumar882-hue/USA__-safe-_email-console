@@ -2,238 +2,724 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="theme-color" content="#0b1020">
-    <title>Secure Login</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Secure Mail Console</title>
 
-    <style>
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-        }
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
 
-        body {
-            min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 20px;
-            font-family: Arial, Helvetica, sans-serif;
-            background:
-                radial-gradient(circle at top left, #25376b 0, transparent 38%),
-                radial-gradient(circle at bottom right, #38205c 0, transparent 35%),
-                #0b1020;
-            color: #fff;
-        }
-
-        .login-card {
-            width: 100%;
-            max-width: 420px;
-            padding: 36px 30px;
-            border: 1px solid rgba(255,255,255,.12);
-            border-radius: 22px;
-            background: rgba(19, 27, 48, .92);
-            box-shadow: 0 25px 70px rgba(0,0,0,.4);
-        }
-
-        .logo {
-            width: 64px;
-            height: 64px;
-            margin: 0 auto 20px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border-radius: 18px;
-            background: linear-gradient(135deg, #6366f1, #9333ea);
-            font-size: 29px;
-        }
-
-        h1 {
-            text-align: center;
-            font-size: 27px;
-            margin-bottom: 9px;
-        }
-
-        .subtitle {
-            text-align: center;
-            color: #aab4ca;
-            font-size: 14px;
-            margin-bottom: 30px;
-            line-height: 1.5;
-        }
-
-        label {
-            display: block;
-            margin-bottom: 9px;
-            color: #dce3f2;
-            font-size: 14px;
-            font-weight: 600;
-        }
-
-        .password-wrap {
-            position: relative;
-        }
-
-        input {
-            width: 100%;
-            padding: 15px 48px 15px 15px;
-            border: 1px solid #35415c;
-            border-radius: 11px;
-            outline: none;
-            background: #10182b;
-            color: #fff;
-            font-size: 15px;
-            transition: border-color .2s, box-shadow .2s;
-        }
-
-        input:focus {
-            border-color: #818cf8;
-            box-shadow: 0 0 0 3px rgba(129,140,248,.15);
-        }
-
-        input::placeholder {
-            color: #78849d;
-        }
-
-        .toggle-password {
-            position: absolute;
-            right: 13px;
-            top: 50%;
-            transform: translateY(-50%);
-            border: 0;
-            background: transparent;
-            color: #aab4ca;
-            cursor: pointer;
-            font-size: 13px;
-        }
-
-        .login-btn {
-            width: 100%;
-            margin-top: 22px;
-            padding: 15px;
-            border: 0;
-            border-radius: 11px;
-            background: linear-gradient(135deg, #6366f1, #9333ea);
-            color: #fff;
-            font-size: 16px;
-            font-weight: 700;
-            cursor: pointer;
-            transition: opacity .2s, transform .2s;
-        }
-
-        .login-btn:hover {
-            opacity: .92;
-            transform: translateY(-1px);
-        }
-
-        .login-btn:disabled {
-            opacity: .65;
-            cursor: not-allowed;
-            transform: none;
-        }
-
-        .error {
-            margin-bottom: 18px;
-            padding: 12px 14px;
-            border: 1px solid rgba(248,113,113,.35);
-            border-radius: 10px;
-            background: rgba(127,29,29,.2);
-            color: #fca5a5;
-            font-size: 13px;
-            line-height: 1.5;
-        }
-
-        .footer {
-            margin-top: 25px;
-            text-align: center;
-            color: #8490a8;
-            font-size: 12px;
-        }
-
-        @media (max-width: 420px) {
-            .login-card {
-                padding: 30px 22px;
-            }
-
-            h1 {
-                font-size: 24px;
-            }
-        }
-    </style>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#f2f5fb;color:#14213d;font-family:Arial,Helvetica,sans-serif}
+.topbar{height:76px;background:#101c38;color:white}
+.top-inner{max-width:1220px;height:100%;margin:auto;padding:0 18px;display:flex;align-items:center;justify-content:space-between}
+.brand small{display:block;color:#9eb7ff;font-size:10px;font-weight:bold;letter-spacing:2px;margin-bottom:5px}
+.brand strong{font-size:20px}
+.logout{border:0;border-radius:10px;padding:10px 17px;background:#f1f4fb;color:#14213d;font-weight:bold;text-decoration:none;font-size:12px}
+.container{max-width:1220px;margin:22px auto;padding:0 18px}
+.dashboard{display:grid;grid-template-columns:1fr 1fr;gap:19px;align-items:start}
+.card{background:white;border:1px solid #e3e9f3;border-radius:17px;padding:22px;box-shadow:0 8px 28px rgba(20,40,80,.045)}
+.card-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:23px}
+.eyebrow{font-size:9px;font-weight:bold;letter-spacing:1.7px;color:#778bb5;margin-bottom:6px}
+.card-head h2{font-size:18px;margin:0}
+.pill{font-size:10px;font-weight:bold;color:#3455d5;background:#eef2ff;padding:7px 10px;border-radius:20px;white-space:nowrap}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.field{margin-bottom:17px;min-width:0}
+label{display:block;font-size:11px;font-weight:bold;margin-bottom:8px}
+input,textarea{width:100%;border:1px solid #d8e0ee;border-radius:9px;padding:11px 12px;font:inherit;font-size:12px;color:#182641;outline:none;background:#fff}
+input:focus,textarea:focus{border-color:#4969e6;box-shadow:0 0 0 3px #4969e619}
+textarea{resize:vertical;line-height:1.55}
+#messageBody{height:182px}
+#recipients{height:128px}
+.password-wrap{position:relative}
+.password-wrap input{padding-right:38px}
+.password-wrap button{position:absolute;right:9px;top:50%;transform:translateY(-50%);border:0;background:transparent;color:#65728a;cursor:pointer}
+.mode-row{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.mode-buttons{display:flex;gap:5px}
+.mode{border:1px solid #dbe2ee;border-radius:7px;background:white;padding:7px 9px;font-size:10px;color:#53627e;cursor:pointer}
+.mode.active{background:#3457df;color:white;border-color:#3457df}
+.help{font-size:10px;color:#7785a0;line-height:1.5;margin-top:7px}
+.consent{display:flex;align-items:flex-start;gap:9px;font-size:11px;line-height:1.5;margin:12px 0 0}
+.consent input{width:14px;height:14px;margin:0;flex:0 0 auto}
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.stat{padding:15px;background:#f6f8fc;border:1px solid #e8edf5;border-radius:12px}
+.stat span{display:block;color:#7887a4;font-size:9px;letter-spacing:1px;font-weight:bold;margin-bottom:8px}
+.stat strong{font-size:24px}
+.green{color:#15965b}.red{color:#d64b4b}.orange{color:#d18b20}
+.progress-track{height:7px;background:#e9edf5;border-radius:20px;overflow:hidden;margin-top:17px}
+.progress-fill{height:100%;width:0;background:#3457df;transition:width .2s}
+.status-line{margin-top:12px;padding:11px;border-radius:9px;background:#f4f6fb;color:#586783;font-size:11px;line-height:1.5;min-height:36px;overflow-wrap:anywhere}
+.status-line.error{background:#fff0f0;color:#bd3636}
+.status-line.success{background:#effaf4;color:#16824e}
+.buttons{display:flex;gap:8px;margin-top:13px}
+.btn{border:0;border-radius:9px;padding:12px 14px;font-weight:bold;font-size:11px;cursor:pointer}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.primary{background:#3457df;color:white;flex:1}
+.secondary{background:#f1f3f8;color:#65718a;flex:1}
+.clear{background:#edf1f8;color:#263754}
+.log-wrap{margin-top:19px}
+.log-heading{font-size:12px;font-weight:bold;margin-bottom:10px}
+.log{border:1px solid #e6ebf4;border-radius:11px;padding:10px;max-height:320px;overflow:auto;background:#fbfcfe}
+.log-empty{font-size:11px;color:#8793a8;padding:9px}
+.recipient-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 4px;border-bottom:1px solid #edf0f5;font-size:11px}
+.recipient-row:last-child{border-bottom:0}
+.recipient-email{overflow-wrap:anywhere;min-width:0;flex:1;color:#34425d}
+.recipient-status{white-space:nowrap;font-size:10px;font-weight:bold;padding:5px 8px;border-radius:20px;background:#f0f2f7;color:#66738d}
+.recipient-status.queued{background:#eef2ff;color:#3455d5}
+.recipient-status.sending{background:#fff6e6;color:#a66b09}
+.recipient-status.accepted{background:#eaf8f0;color:#13814c}
+.recipient-status.failed{background:#fff0f0;color:#c33c3c}
+.note{margin-top:13px;font-size:10px;line-height:1.55;color:#71809a;background:#f6f8fc;padding:11px;border-radius:9px}
+@media(max-width:800px){.dashboard{grid-template-columns:1fr}.container{margin:15px auto}}
+@media(max-width:480px){.grid2{grid-template-columns:1fr;gap:0}.card{padding:17px}.buttons{flex-wrap:wrap}.buttons .btn{flex:1 1 100%}.brand strong{font-size:17px}}
+</style>
 </head>
 
 <body>
-    <main class="login-card">
-        <div class="logo">🔐</div>
 
-        <h1>Welcome Back</h1>
-        <p class="subtitle">
-            Sign in to access your Secure Mail Console.
-        </p>
-
-        {% if error %}
-            <div class="error" role="alert">
-                {{ error }}
-            </div>
-        {% endif %}
-
-        <form method="POST" action="{{ url_for('login') }}">
-            <label for="password">Login Password</label>
-
-            <div class="password-wrap">
-                <input
-                    type="password"
-                    id="password"
-                    name="password"
-                    placeholder="Enter your password"
-                    autocomplete="current-password"
-                    required
-                    autofocus
-                >
-
-                <button
-                    type="button"
-                    class="toggle-password"
-                    id="togglePassword"
-                    aria-label="Show password"
-                >
-                    Show
-                </button>
-            </div>
-
-            <button type="submit" class="login-btn" id="loginBtn">
-                Sign In
-            </button>
-        </form>
-
-        <div class="footer">
-            Protected Login • Secure Mail Console
+<header class="topbar">
+    <div class="top-inner">
+        <div class="brand">
+            <small>MAIL OPERATIONS</small>
+            <strong>Secure Mail Console</strong>
         </div>
-    </main>
+        <a class="logout" href="{{ url_for('logout') }}">Log out</a>
+    </div>
+</header>
 
-    <script>
-        const passwordInput = document.getElementById("password");
-        const togglePassword = document.getElementById("togglePassword");
-        const loginForm = document.querySelector("form");
-        const loginBtn = document.getElementById("loginBtn");
+<main class="container">
+<div class="dashboard">
 
-        togglePassword.addEventListener("click", function () {
-            const isPassword = passwordInput.type === "password";
+    <section class="card">
+        <div class="card-head">
+            <div>
+                <div class="eyebrow">MESSAGE BUILDER</div>
+                <h2>Compose email</h2>
+            </div>
+            <span class="pill">Gmail SMTP</span>
+        </div>
 
-            passwordInput.type = isPassword ? "text" : "password";
-            togglePassword.textContent = isPassword ? "Hide" : "Show";
-            togglePassword.setAttribute(
-                "aria-label",
-                isPassword ? "Hide password" : "Show password"
+        <div class="grid2">
+            <div class="field">
+                <label for="senderName">Sender Name</label>
+                <input id="senderName" placeholder="Your name or business">
+            </div>
+
+            <div class="field">
+                <label for="gmail">Your Gmail</label>
+                <input id="gmail" type="email" placeholder="you@gmail.com" autocomplete="username">
+            </div>
+
+            <div class="field">
+                <label for="appPassword">App Password</label>
+                <div class="password-wrap">
+                    <input id="appPassword" type="password" placeholder="Gmail App Password" autocomplete="off">
+                    <button id="togglePassword" type="button" aria-label="Show password">
+                        <i class="fa-regular fa-eye"></i>
+                    </button>
+                </div>
+            </div>
+
+            <div class="field">
+                <label for="subject">Email Subject</label>
+                <input id="subject" placeholder="Email subject">
+            </div>
+        </div>
+
+        <div class="field">
+            <div class="mode-row">
+                <label for="messageBody">Message body</label>
+                <div class="mode-buttons">
+                    <button type="button" id="plainButton" class="mode active">Plain Text</button>
+                    <button type="button" id="htmlButton" class="mode">HTML</button>
+                </div>
+            </div>
+
+            <textarea id="messageBody" placeholder="Write your message here..."></textarea>
+
+            <div class="help">
+                Personalization placeholders:
+                &#123;&#123;hi&#125;&#125;,
+                &#123;&#123;hello&#125;&#125;,
+                &#123;&#123;thanks&#125;&#125;,
+                &#123;&#123;name&#125;&#125;,
+                &#123;&#123;email&#125;&#125;,
+                &#123;&#123;ref_code&#125;&#125;
+            </div>
+        </div>
+
+        <label class="consent">
+            <input type="checkbox" id="consent">
+            <span>I confirm these recipients agreed to receive this email.</span>
+        </label>
+
+        <div class="help" style="margin-top:12px">
+            Send only to recipients who explicitly agreed to receive your email.
+        </div>
+
+        <div class="buttons">
+            <button class="btn primary" id="sendButton" type="button">
+                <i class="fa-solid fa-paper-plane"></i> Send All
+            </button>
+
+            <button class="btn secondary" id="stopButton" type="button" disabled>
+                Stop UI Updates
+            </button>
+
+            <button class="btn clear" id="clearButton" type="button">
+                Clear All
+            </button>
+        </div>
+
+        <div class="status-line" id="status" role="status" aria-live="polite">
+            Ready to send.
+        </div>
+    </section>
+
+
+    <section>
+
+        <div class="card">
+            <div class="card-head">
+                <div>
+                    <h2><i class="fa-solid fa-users"></i> Recipients</h2>
+                    <div class="help">Paste email addresses separated by commas or new lines</div>
+                </div>
+                <span class="pill" id="recipientCount">0 found</span>
+            </div>
+
+            <textarea id="recipients" placeholder="person@example.com&#10;another@example.com"></textarea>
+
+            <div class="help">
+                Maximum 25 unique, valid addresses per batch.
+            </div>
+
+            <div class="consent" style="margin-top:12px">
+                <i class="fa-solid fa-shield-halved"></i>
+                <span>Only send to recipients who have given permission.</span>
+            </div>
+        </div>
+
+
+        <div class="card" style="margin-top:19px">
+            <div class="card-head">
+                <div>
+                    <div class="eyebrow">LIVE STATUS</div>
+                    <h2>Progress monitor</h2>
+                </div>
+                <span class="pill" id="statePill">Ready</span>
+            </div>
+
+            <div class="stats">
+                <div class="stat">
+                    <span>TOTAL</span>
+                    <strong id="totalCount">0</strong>
+                </div>
+
+                <div class="stat">
+                    <span>SMTP ACCEPTED</span>
+                    <strong class="green" id="sentCount">0</strong>
+                </div>
+
+                <div class="stat">
+                    <span>FAILED</span>
+                    <strong class="red" id="failedCount">0</strong>
+                </div>
+
+                <div class="stat">
+                    <span>REMAINING</span>
+                    <strong class="orange" id="remainingCount">0</strong>
+                </div>
+            </div>
+
+            <div class="progress-track">
+                <div class="progress-fill" id="progressBar"></div>
+            </div>
+
+            <div class="log-wrap">
+                <div class="log-heading">Individual email status</div>
+
+                <div class="log" id="activityLog">
+                    <div class="log-empty">
+                        Individual recipient results will appear here.
+                    </div>
+                </div>
+            </div>
+
+            <div class="note">
+                SMTP Accepted means Gmail accepted the message for processing.
+                It does not confirm Inbox placement. If the connection ends
+                unexpectedly, check the results before retrying to avoid
+                sending duplicate emails.
+            </div>
+        </div>
+
+    </section>
+</div>
+</main>
+
+
+<script>
+"use strict";
+
+const $ = id => document.getElementById(id);
+
+let isHTML = false;
+let sending = false;
+let controller = null;
+let recipientRows = new Map();
+
+let counts = {
+    total: 0,
+    sent: 0,
+    failed: 0,
+    remaining: 0
+};
+
+let completed = false;
+
+
+function showStatus(message, type = "") {
+    $("status").textContent = message;
+    $("status").className = "status-line " + type;
+}
+
+function updateState(label) {
+    $("statePill").textContent = label;
+}
+
+function showError(message) {
+    showStatus(message, "error");
+}
+
+function setSending(active) {
+    sending = active;
+    $("sendButton").disabled = active;
+    $("stopButton").disabled = !active;
+    updateState(active ? "Sending" : "Ready");
+}
+
+
+function validEmail(email) {
+    return /^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$/.test(email);
+}
+
+function getRecipients() {
+    const parts = $("recipients").value.split(/[\s,;]+/);
+    const result = [];
+    const seen = new Set();
+
+    for (const item of parts) {
+        const email = item.trim().toLowerCase();
+
+        if (!email) continue;
+        if (!validEmail(email)) continue;
+        if (seen.has(email)) continue;
+
+        seen.add(email);
+        result.push(email);
+    }
+
+    return result;
+}
+
+function updateRecipientCount() {
+    const recipients = getRecipients();
+
+    $("recipientCount").textContent =
+        recipients.length + " found";
+
+    if (!sending) {
+        $("totalCount").textContent = recipients.length;
+        $("remainingCount").textContent = recipients.length;
+    }
+}
+
+
+function updateCounts(data) {
+    counts.total = Number(data.total ?? counts.total);
+    counts.sent = Number(data.sent ?? counts.sent);
+    counts.failed = Number(data.failed ?? counts.failed);
+
+    counts.remaining = Number(
+        data.remaining ??
+        Math.max(0, counts.total - counts.sent - counts.failed)
+    );
+
+    $("totalCount").textContent = counts.total;
+    $("sentCount").textContent = counts.sent;
+    $("failedCount").textContent = counts.failed;
+    $("remainingCount").textContent = counts.remaining;
+
+    const processed = counts.sent + counts.failed;
+
+    const percentage = counts.total
+        ? Math.round((processed / counts.total) * 100)
+        : 0;
+
+    $("progressBar").style.width = percentage + "%";
+}
+
+
+function createRecipientRow(email, initialStatus = "Queued") {
+    let item = recipientRows.get(email);
+
+    if (item) return item;
+
+    const row = document.createElement("div");
+    row.className = "recipient-row";
+
+    const address = document.createElement("span");
+    address.className = "recipient-email";
+    address.textContent = email;
+
+    const badge = document.createElement("span");
+    badge.className = "recipient-status queued";
+    badge.textContent = initialStatus;
+
+    row.appendChild(address);
+    row.appendChild(badge);
+
+    const log = $("activityLog");
+
+    const empty = log.querySelector(".log-empty");
+    if (empty) empty.remove();
+
+    log.appendChild(row);
+
+    item = {row, badge};
+    recipientRows.set(email, item);
+
+    return item;
+}
+
+
+function setRecipientStatus(email, result, errorMessage = "") {
+    const item =
+        recipientRows.get(email) ||
+        createRecipientRow(email);
+
+    if (result === "queued") {
+        item.badge.textContent = "Queued";
+        item.badge.className = "recipient-status queued";
+    }
+
+    else if (result === "sending") {
+        item.badge.textContent = "Sending";
+        item.badge.className = "recipient-status sending";
+    }
+
+    else if (result === "sent") {
+        item.badge.textContent = "SMTP Accepted";
+        item.badge.className = "recipient-status accepted";
+        item.badge.title =
+            "Accepted by Gmail SMTP; Inbox placement is not confirmed.";
+    }
+
+    else if (result === "failed") {
+        item.badge.textContent = "Failed";
+        item.badge.className = "recipient-status failed";
+        item.badge.title = errorMessage || "Sending failed.";
+    }
+}
+
+
+function clearProgress() {
+    recipientRows.clear();
+    $("activityLog").replaceChildren();
+
+    const empty = document.createElement("div");
+    empty.className = "log-empty";
+    empty.textContent = "Individual recipient results will appear here.";
+
+    $("activityLog").appendChild(empty);
+
+    counts = {
+        total: 0,
+        sent: 0,
+        failed: 0,
+        remaining: 0
+    };
+
+    updateCounts(counts);
+    $("progressBar").style.width = "0%";
+}
+
+
+function setMode(htmlMode) {
+    isHTML = htmlMode;
+
+    $("plainButton").classList.toggle("active", !htmlMode);
+    $("htmlButton").classList.toggle("active", htmlMode);
+}
+
+
+function handleEvent(event) {
+    if (!event || typeof event !== "object") return;
+
+    if (event.type === "start") {
+        updateCounts(event);
+        updateState("Sending");
+        showStatus("Sending started. Waiting for individual results...");
+        return;
+    }
+
+    if (event.type === "recipient") {
+        setRecipientStatus(event.email, "queued");
+        return;
+    }
+
+    if (event.type === "progress") {
+        setRecipientStatus(
+            event.email,
+            event.result,
+            event.error || ""
+        );
+
+        updateCounts(event);
+
+        if (event.result === "sent") {
+            showStatus(
+                "Gmail SMTP accepted: " + event.email,
+                "success"
             );
+        } else {
+            showStatus(
+                "Failed: " + event.email +
+                (event.error ? " — " + event.error : ""),
+                "error"
+            );
+        }
+
+        return;
+    }
+
+    if (event.type === "complete") {
+        completed = true;
+        updateCounts(event);
+        updateState("Complete");
+
+        showStatus(
+            "Batch finished. SMTP accepted: " +
+            event.sent +
+            ", Failed: " +
+            event.failed +
+            ". Inbox placement is not confirmed.",
+            event.failed > 0 ? "error" : "success"
+        );
+    }
+}
+
+
+async function readStream(response) {
+    if (!response.body) {
+        throw new Error("Streaming response is not available.");
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+
+    let buffer = "";
+
+    while (true) {
+        const result = await reader.read();
+
+        if (result.done) break;
+
+        buffer += decoder.decode(result.value, {stream: true});
+
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+            if (!line.trim()) continue;
+
+            try {
+                handleEvent(JSON.parse(line));
+            } catch (error) {
+                console.error("Invalid server event:", error);
+            }
+        }
+    }
+
+    buffer += decoder.decode();
+
+    if (buffer.trim()) {
+        try {
+            handleEvent(JSON.parse(buffer));
+        } catch (error) {
+            console.error("Invalid final server event:", error);
+        }
+    }
+}
+
+
+async function sendBatch() {
+    if (sending) return;
+
+    const senderName = $("senderName").value.trim();
+    const gmail = $("gmail").value.trim().toLowerCase();
+    const appPassword = $("appPassword").value.trim();
+    const subject = $("subject").value.trim();
+    const body = $("messageBody").value;
+
+    const recipients = getRecipients();
+
+    if (!senderName) return showError("Enter Sender Name.");
+
+    if (!validEmail(gmail) || !gmail.endsWith("@gmail.com")) {
+        return showError("Enter a valid Gmail address.");
+    }
+
+    if (!appPassword) return showError("Enter Gmail App Password.");
+    if (!subject) return showError("Enter Email Subject.");
+    if (!body.trim()) return showError("Enter Message Body.");
+
+    if (!$("consent").checked) {
+        return showError("Confirm that recipients agreed to receive this email.");
+    }
+
+    if (recipients.length === 0) {
+        return showError("Enter at least one valid recipient email.");
+    }
+
+    if (recipients.length > 25) {
+        return showError("Maximum 25 recipients per batch.");
+    }
+
+    clearProgress();
+    completed = false;
+    setSending(true);
+
+    updateCounts({
+        total: recipients.length,
+        sent: 0,
+        failed: 0,
+        remaining: recipients.length
+    });
+
+    recipients.forEach(email => createRecipientRow(email, "Queued"));
+
+    controller = new AbortController();
+
+    try {
+        const response = await fetch("/send-batch", {
+            method: "POST",
+            credentials: "same-origin",
+            headers: {
+                "Content-Type": "application/json",
+                "Accept": "application/x-ndjson"
+            },
+            signal: controller.signal,
+            body: JSON.stringify({
+                sender_name: senderName,
+                gmail: gmail,
+                app_password: appPassword,
+                subject: subject,
+                body: body,
+                is_html: isHTML,
+                recipients: recipients,
+                consent_confirmed: true
+            })
         });
 
-        loginForm.addEventListener("submit", function () {
-            loginBtn.disabled = true;
-            loginBtn.textContent = "Signing in...";
-        });
-    </script>
+        if (!response.ok) {
+            let message = "Sending request failed.";
+
+            try {
+                const data = await response.json();
+                if (data.message) message = data.message;
+            } catch (error) {}
+
+            throw new Error(message);
+        }
+
+        await readStream(response);
+
+        if (!completed) {
+            updateState("Unconfirmed");
+            showStatus(
+                "Connection ended before final results arrived. Check individual statuses before retrying.",
+                "error"
+            );
+        }
+
+    } catch (error) {
+        if (error.name === "AbortError") {
+            updateState("Stopped");
+            showStatus(
+                "Stopped receiving updates. Some emails may already have been sent. Check results before retrying.",
+                "error"
+            );
+        } else {
+            updateState("Error");
+            showStatus(
+                error.message || "Sending failed.",
+                "error"
+            );
+        }
+
+    } finally {
+        setSending(false);
+        controller = null;
+    }
+}
+
+
+$("togglePassword").addEventListener("click", () => {
+    const input = $("appPassword");
+    const icon = $("togglePassword").querySelector("i");
+
+    const shouldShow = input.type === "password";
+
+    input.type = shouldShow ? "text" : "password";
+
+    icon.className = shouldShow
+        ? "fa-regular fa-eye-slash"
+        : "fa-regular fa-eye";
+});
+
+
+$("plainButton").addEventListener("click", () => setMode(false));
+$("htmlButton").addEventListener("click", () => setMode(true));
+
+$("recipients").addEventListener("input", updateRecipientCount);
+$("sendButton").addEventListener("click", sendBatch);
+
+
+// Stops browser updates only. It does not guarantee server-side cancellation.
+$("stopButton").addEventListener("click", () => {
+    if (controller) controller.abort();
+});
+
+
+$("clearButton").addEventListener("click", () => {
+    if (sending) {
+        return showError(
+            "Wait until the current request ends before clearing."
+        );
+    }
+
+    $("senderName").value = "";
+    $("gmail").value = "";
+    $("appPassword").value = "";
+    $("subject").value = "";
+    $("messageBody").value = "";
+    $("recipients").value = "";
+    $("consent").checked = false;
+
+    setMode(false);
+    clearProgress();
+    updateRecipientCount();
+
+    showStatus("Ready to send.");
+    updateState("Ready");
+});
+
+
+updateRecipientCount();
+setMode(false);
+</script>
+
 </body>
 </html>
