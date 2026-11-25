@@ -40,7 +40,7 @@ SMTP_TIMEOUT = 25
 MAX_RECIPIENTS = 25
 
 # Slightly faster sending configuration
-MAX_PARALLEL_SENDS = 7
+MAX_PARALLEL_SENDS = 8
 SEND_DELAY_SECONDS = 1.0
 
 SESSION_SECRET = os.environ.get("SESSION_SECRET", "")
