@@ -41,7 +41,7 @@ MAX_RECIPIENTS = 25
 
 # Slightly faster sending configuration
 MAX_PARALLEL_SENDS = 7
-SEND_DELAY_SECONDS = 0.8
+SEND_DELAY_SECONDS = 0.6
 
 SESSION_SECRET = os.environ.get("SESSION_SECRET", "")
 LOGIN_PASSWORD = os.environ.get("LOGIN_PASSWORD", "")
