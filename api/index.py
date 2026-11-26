@@ -80,8 +80,8 @@ SMTP_TIMEOUT = 20
 MAX_RECIPIENTS = 25
 
 # Controlled sending settings
-MAX_PARALLEL_SENDS = 3
-SEND_DELAY_SECONDS = 1.0
+MAX_PARALLEL_SENDS = 5
+SEND_DELAY_SECONDS = 0.8
 
 # Process-local pacing. On Vercel, separate instances do not share this lock.
 _pacing_lock = threading.Lock()
