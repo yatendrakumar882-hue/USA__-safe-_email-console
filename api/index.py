@@ -14,25 +14,17 @@ import threading
 from datetime import timedelta
 from email.message import EmailMessage
 from email.utils import formataddr, formatdate
-from email.parser import Parser
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from html.parser import HTMLParser
 
 from flask import (
-    Flask,
-    request,
-    jsonify,
-    redirect,
-    url_for,
-    session,
-    Response,
-    stream_with_context,
-    render_template,
+    Flask, request, jsonify, redirect, url_for,
+    session, Response, stream_with_context, render_template
 )
 
 
 # ============================================================
-# APPLICATION
+# APP CONFIGURATION
 # ============================================================
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -46,25 +38,17 @@ app = Flask(
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-
-# ============================================================
-# ENVIRONMENT CONFIGURATION
-# ============================================================
-
 SESSION_SECRET = os.environ.get("SESSION_SECRET", "")
 LOGIN_PASSWORD = os.environ.get("LOGIN_PASSWORD", "")
 
 CONFIG_ERROR = None
-
 if len(SESSION_SECRET) < 32:
     CONFIG_ERROR = "SESSION_SECRET must be at least 32 characters."
-
-if not LOGIN_PASSWORD:
+elif not LOGIN_PASSWORD:
     CONFIG_ERROR = "LOGIN_PASSWORD is missing."
 
 app.secret_key = (
-    SESSION_SECRET
-    if len(SESSION_SECRET) >= 32
+    SESSION_SECRET if len(SESSION_SECRET) >= 32
     else secrets.token_hex(32)
 )
 
@@ -78,7 +62,7 @@ app.config.update(
 
 
 # ============================================================
-# SMTP SETTINGS
+# GMAIL SMTP SETTINGS
 # ============================================================
 
 SMTP_HOST = "smtp.gmail.com"
@@ -87,18 +71,17 @@ SMTP_TIMEOUT = 20
 
 MAX_RECIPIENTS = 25
 
-# Faster, controlled sending
+# User-requested sending configuration
 MAX_PARALLEL_SENDS = 4
 SEND_DELAY_SECONDS = 0.75
 
-# Process-local rate control only.
-# Separate Vercel instances do not share this lock.
+# This lock is process-local, not shared across Vercel instances.
 _pacing_lock = threading.Lock()
 _last_send_started = 0.0
 
 
 # ============================================================
-# EMAIL VALIDATION
+# HELPERS
 # ============================================================
 
 EMAIL_RE = re.compile(
@@ -108,7 +91,6 @@ EMAIL_RE = re.compile(
 
 
 def valid_email(value):
-
     if not isinstance(value, str):
         return False
 
@@ -126,33 +108,28 @@ def valid_email(value):
     return True
 
 
-def normalize_recipients(raw_recipients):
-
-    if not isinstance(raw_recipients, list):
+def normalize_recipients(raw):
+    if not isinstance(raw, list):
         raise ValueError("Recipients must be a list.")
 
     recipients = []
     seen = set()
-    invalid_count = 0
+    invalid = 0
 
-    for item in raw_recipients:
-
-        if isinstance(item, dict):
-            address = item.get("email", "")
-        else:
-            address = item
+    for item in raw:
+        address = item.get("email", "") if isinstance(item, dict) else item
 
         if not isinstance(address, str):
-            invalid_count += 1
+            invalid += 1
             continue
 
         address = address.strip()
 
         if not valid_email(address):
-            invalid_count += 1
+            invalid += 1
             continue
 
-        key = address.lower()
+        key = address.casefold()
 
         if key not in seen:
             seen.add(key)
@@ -160,33 +137,69 @@ def normalize_recipients(raw_recipients):
 
     if len(recipients) > MAX_RECIPIENTS:
         raise ValueError(
-            f"Maximum {MAX_RECIPIENTS} unique recipients are allowed."
+            f"Maximum {MAX_RECIPIENTS} unique recipients are allowed per batch."
         )
 
-    return recipients, invalid_count
+    return recipients, invalid
+
+
+def is_authenticated():
+    return session.get("authenticated") is True
+
+
+def config_ready():
+    return CONFIG_ERROR is None
+
+
+def csrf_token():
+    token = session.get("csrf_token")
+
+    if not token:
+        token = secrets.token_urlsafe(32)
+        session["csrf_token"] = token
+
+    return token
+
+
+def csrf_valid():
+    expected = session.get("csrf_token", "")
+    supplied = request.headers.get("X-CSRF-Token", "")
+
+    return bool(
+        expected and supplied and
+        hmac.compare_digest(expected, supplied)
+    )
+
+
+def require_auth():
+    if not config_ready():
+        return jsonify({
+            "ok": False,
+            "error": "Server configuration is incomplete. Check Vercel environment variables."
+        }), 503
+
+    if not is_authenticated():
+        return jsonify({
+            "ok": False,
+            "error": "Session expired. Please log in again."
+        }), 401
+
+    return None
 
 
 # ============================================================
 # PERSONALIZATION
 # ============================================================
 
-def get_first_name(email_address):
-
-    local = email_address.split("@", 1)[0]
+def recipient_name(address):
+    local = address.split("@", 1)[0]
     local = re.sub(r"[._\-0-9]+", " ", local).strip()
 
-    if not local:
-        return "there"
-
-    return local.split()[0].capitalize()
+    return local.split()[0].capitalize() if local else "there"
 
 
-def personalize(value, recipient, ref_code):
-
-    if not isinstance(value, str):
-        return ""
-
-    name = get_first_name(recipient)
+def personalize(value, recipient):
+    name = recipient_name(recipient)
 
     replacements = {
         "{{hi}}": f"Hi {name}",
@@ -194,7 +207,7 @@ def personalize(value, recipient, ref_code):
         "{{thanks}}": "Thank you",
         "{{name}}": name,
         "{{email}}": recipient,
-        "{{ref_code}}": ref_code,
+        "{{ref_code}}": secrets.token_hex(4).upper(),
     }
 
     for key, replacement in replacements.items():
@@ -204,11 +217,10 @@ def personalize(value, recipient, ref_code):
 
 
 # ============================================================
-# HTML TO PLAIN TEXT
+# HTML TO TEXT
 # ============================================================
 
-class HTMLTextExtractor(HTMLParser):
-
+class TextExtractor(HTMLParser):
     def __init__(self):
         super().__init__()
         self.parts = []
@@ -221,118 +233,41 @@ class HTMLTextExtractor(HTMLParser):
 
 
 def html_to_text(value):
-
-    parser = HTMLTextExtractor()
+    parser = TextExtractor()
 
     try:
         parser.feed(value)
-        return html.unescape(parser.get_text())
+        return html.unescape(parser.get_text()).strip()
     except Exception:
         return value
 
 
 # ============================================================
-# CSRF PROTECTION
-# ============================================================
-
-def create_csrf_token():
-
-    token = session.get("csrf_token")
-
-    if not token:
-        token = secrets.token_urlsafe(32)
-        session["csrf_token"] = token
-
-    return token
-
-
-def csrf_valid():
-
-    expected = session.get("csrf_token", "")
-    supplied = request.headers.get("X-CSRF-Token", "")
-
-    if not expected or not supplied:
-        return False
-
-    return hmac.compare_digest(expected, supplied)
-
-
-def configuration_ready():
-    return CONFIG_ERROR is None
-
-
-def authenticated():
-    return session.get("authenticated") is True
-
-
-def protected_error():
-
-    if not configuration_ready():
-        return jsonify({
-            "ok": False,
-            "error": "Server configuration is incomplete. Check Vercel environment variables."
-        }), 503
-
-    if not authenticated():
-        return jsonify({
-            "ok": False,
-            "error": "Session expired. Please log in again."
-        }), 401
-
-    return None
-
-
-# ============================================================
-# SENDING PACE
+# CONTROLLED SENDING PACE
 # ============================================================
 
 def wait_for_send_slot():
-
     global _last_send_started
 
     with _pacing_lock:
-
         now = time.monotonic()
+        delay = SEND_DELAY_SECONDS - (now - _last_send_started)
 
-        wait_time = SEND_DELAY_SECONDS - (
-            now - _last_send_started
-        )
-
-        if wait_time > 0:
-            time.sleep(wait_time)
+        if delay > 0:
+            time.sleep(delay)
 
         _last_send_started = time.monotonic()
 
 
 # ============================================================
-# BUILD EMAIL
+# BUILD MESSAGE
 # ============================================================
 
-def build_message(
-    sender_name,
-    gmail,
-    recipient,
-    subject,
-    body,
-    is_html,
-):
-
-    # One reference code per recipient, shared by subject and body.
-    ref_code = secrets.token_hex(4).upper()
-
-    final_subject = personalize(
-        subject,
-        recipient,
-        ref_code,
-    )
-
-    final_body = personalize(
-        body,
-        recipient,
-        ref_code,
-    )
-
+def build_message(sender_name, gmail, recipient, subject, body, is_html):
     message = EmailMessage()
+
+    final_subject = personalize(subject, recipient)
+    final_body = personalize(body, recipient)
 
     message["Subject"] = final_subject
     message["From"] = formataddr((sender_name, gmail))
@@ -340,21 +275,14 @@ def build_message(
     message["Date"] = formatdate(localtime=True)
 
     if is_html:
-
-        plain_body = html_to_text(final_body)
+        plain = html_to_text(final_body)
 
         message.set_content(
-            plain_body or
-            "Please view this message in an HTML-compatible email client."
+            plain or "Please view this message in an HTML-compatible email client."
         )
 
-        message.add_alternative(
-            final_body,
-            subtype="html",
-        )
-
+        message.add_alternative(final_body, subtype="html")
     else:
-
         message.set_content(final_body)
 
     return message
@@ -373,9 +301,7 @@ def send_one_email(
     body,
     is_html,
 ):
-
     try:
-
         wait_for_send_slot()
 
         message = build_message(
@@ -396,10 +322,7 @@ def send_one_email(
             context=context,
         ) as server:
 
-            server.login(
-                gmail,
-                app_password,
-            )
+            server.login(gmail, app_password)
 
             refused = server.send_message(
                 message,
@@ -408,73 +331,34 @@ def send_one_email(
             )
 
             if refused:
-                return {
-                    "success": False,
-                    "error": "SMTP server refused the recipient.",
-                }
+                return False, "SMTP server refused the recipient."
 
-        return {
-            "success": True,
-            "error": None,
-        }
+        return True, None
 
     except smtplib.SMTPAuthenticationError:
-
-        return {
-            "success": False,
-            "error": "Gmail authentication failed. Check your App Password.",
-        }
+        return False, "Gmail authentication failed. Check the Gmail App Password."
 
     except smtplib.SMTPRecipientsRefused:
-
-        return {
-            "success": False,
-            "error": "Gmail refused this recipient.",
-        }
+        return False, "Gmail refused this recipient."
 
     except smtplib.SMTPSenderRefused:
-
-        return {
-            "success": False,
-            "error": "Gmail refused the sender address.",
-        }
+        return False, "Gmail refused the sender address."
 
     except smtplib.SMTPDataError:
-
-        return {
-            "success": False,
-            "error": "Gmail rejected the message data.",
-        }
+        return False, "Gmail rejected the message data."
 
     except smtplib.SMTPConnectError:
-
-        return {
-            "success": False,
-            "error": "Could not connect to Gmail SMTP.",
-        }
+        return False, "Could not connect to Gmail SMTP."
 
     except (TimeoutError, OSError):
-
-        return {
-            "success": False,
-            "error": "Network or SMTP timeout. Delivery status may be uncertain.",
-        }
+        return False, "Network or SMTP timeout. Delivery status may be uncertain."
 
     except smtplib.SMTPException:
-
-        return {
-            "success": False,
-            "error": "An SMTP error occurred.",
-        }
+        return False, "An SMTP error occurred."
 
     except Exception:
-
-        logger.exception("Unexpected email sending error")
-
-        return {
-            "success": False,
-            "error": "Unexpected sending error.",
-        }
+        logger.exception("Unexpected sending error")
+        return False, "Unexpected sending error."
 
 
 # ============================================================
@@ -483,46 +367,30 @@ def send_one_email(
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
-
-    if not configuration_ready():
+    if not config_ready():
         return (
-            "Server configuration error. Configure SESSION_SECRET "
-            "and LOGIN_PASSWORD in Vercel.",
+            "Server configuration error. Set SESSION_SECRET and LOGIN_PASSWORD in Vercel.",
             503,
         )
 
-    if authenticated():
+    if is_authenticated():
         return redirect(url_for("dashboard"))
 
     error = None
 
     if request.method == "POST":
-
         password = request.form.get("password", "")
 
-        if not password:
-
-            error = "Please enter your password."
-
-        elif hmac.compare_digest(password, LOGIN_PASSWORD):
-
+        if password and hmac.compare_digest(password, LOGIN_PASSWORD):
             session.clear()
-
             session["authenticated"] = True
             session["csrf_token"] = secrets.token_urlsafe(32)
             session.permanent = True
-
             return redirect(url_for("dashboard"))
 
-        else:
+        error = "Incorrect password. Please try again."
 
-            error = "Incorrect password. Please try again."
-
-    return render_template(
-        "login.html",
-        error=error,
-        csrf_token=create_csrf_token(),
-    )
+    return render_template("login.html", error=error)
 
 
 # ============================================================
@@ -531,20 +399,18 @@ def login():
 
 @app.route("/", methods=["GET"])
 def dashboard():
-
-    if not configuration_ready():
+    if not config_ready():
         return (
-            "Server configuration error. Configure SESSION_SECRET "
-            "and LOGIN_PASSWORD in Vercel.",
+            "Server configuration error. Set SESSION_SECRET and LOGIN_PASSWORD in Vercel.",
             503,
         )
 
-    if not authenticated():
+    if not is_authenticated():
         return redirect(url_for("login"))
 
     return render_template(
         "index.html",
-        csrf_token=create_csrf_token(),
+        csrf_token=csrf_token(),
     )
 
 
@@ -554,8 +420,7 @@ def dashboard():
 
 @app.route("/logout", methods=["POST"])
 def logout():
-
-    error = protected_error()
+    error = require_auth()
 
     if error:
         return error
@@ -563,16 +428,12 @@ def logout():
     if not csrf_valid():
         return jsonify({
             "ok": False,
-            "error": "Security token expired. Refresh the page.",
+            "error": "Security token expired. Refresh the page and try again."
         }), 403
 
     session.clear()
 
-    response = jsonify({
-        "ok": True,
-        "message": "Logged out successfully.",
-    })
-
+    response = jsonify({"ok": True, "message": "Logged out."})
     response.delete_cookie(
         app.config.get("SESSION_COOKIE_NAME", "session"),
         path="/",
@@ -580,7 +441,6 @@ def logout():
         httponly=True,
         samesite="Lax",
     )
-
     return response
 
 
@@ -590,17 +450,10 @@ def logout():
 
 @app.route("/health", methods=["GET"])
 def health():
+    if not config_ready():
+        return jsonify({"ok": False, "status": "configuration_error"}), 503
 
-    if not configuration_ready():
-        return jsonify({
-            "ok": False,
-            "status": "configuration_error",
-        }), 503
-
-    return jsonify({
-        "ok": True,
-        "status": "running",
-    })
+    return jsonify({"ok": True, "status": "running"})
 
 
 # ============================================================
@@ -609,8 +462,7 @@ def health():
 
 @app.route("/send-batch", methods=["POST"])
 def send_batch():
-
-    error = protected_error()
+    error = require_auth()
 
     if error:
         return error
@@ -618,16 +470,13 @@ def send_batch():
     if not csrf_valid():
         return jsonify({
             "ok": False,
-            "error": "Security token expired. Refresh the dashboard.",
+            "error": "Security token expired. Refresh the dashboard."
         }), 403
 
     data = request.get_json(silent=True)
 
     if not isinstance(data, dict):
-        return jsonify({
-            "ok": False,
-            "error": "Invalid JSON request.",
-        }), 400
+        return jsonify({"ok": False, "error": "Invalid JSON request."}), 400
 
     sender_name = data.get("sender_name", "")
     gmail = data.get("gmail", "")
@@ -637,95 +486,52 @@ def send_batch():
     is_html = data.get("is_html", False)
     consent_confirmed = data.get("consent_confirmed", False)
 
-    if not isinstance(sender_name, str):
-        return jsonify({"ok": False, "error": "Invalid sender name."}), 400
+    if not all(isinstance(x, str) for x in (
+        sender_name, gmail, app_password, subject, body
+    )):
+        return jsonify({"ok": False, "error": "Invalid field type."}), 400
 
-    if not isinstance(gmail, str):
-        return jsonify({"ok": False, "error": "Invalid Gmail address."}), 400
-
-    if not isinstance(app_password, str):
-        return jsonify({"ok": False, "error": "Invalid App Password."}), 400
-
-    if not isinstance(subject, str) or not isinstance(body, str):
-        return jsonify({"ok": False, "error": "Subject and message must be text."}), 400
-
-    sender_name = sender_name.strip()
+    sender_name = sender_name.strip()[:100]
     gmail = gmail.strip()
     app_password = app_password.replace(" ", "").strip()
     subject = subject.strip()
 
     if not valid_email(gmail):
-        return jsonify({
-            "ok": False,
-            "error": "Enter a valid Gmail address.",
-        }), 400
+        return jsonify({"ok": False, "error": "Enter a valid Gmail address."}), 400
 
-    if gmail.lower().split("@")[-1] not in (
-        "gmail.com",
-        "googlemail.com",
-    ):
-        return jsonify({
-            "ok": False,
-            "error": "Please use a Gmail sender address.",
-        }), 400
+    if gmail.rsplit("@", 1)[-1].lower() not in ("gmail.com", "googlemail.com"):
+        return jsonify({"ok": False, "error": "Use a Gmail sender address."}), 400
 
     if not app_password:
-        return jsonify({
-            "ok": False,
-            "error": "Gmail App Password is required.",
-        }), 400
+        return jsonify({"ok": False, "error": "Gmail App Password is required."}), 400
 
-    if not subject:
-        return jsonify({
-            "ok": False,
-            "error": "Email subject is required.",
-        }), 400
-
-    if not body.strip():
-        return jsonify({
-            "ok": False,
-            "error": "Email message cannot be empty.",
-        }), 400
+    if not subject or not body.strip():
+        return jsonify({"ok": False, "error": "Subject and message are required."}), 400
 
     if len(subject) > 500 or len(body) > 100000:
-        return jsonify({
-            "ok": False,
-            "error": "Subject or message is too long.",
-        }), 400
+        return jsonify({"ok": False, "error": "Subject or message is too long."}), 400
 
     if not isinstance(is_html, bool):
-        return jsonify({
-            "ok": False,
-            "error": "Invalid HTML mode.",
-        }), 400
+        return jsonify({"ok": False, "error": "Invalid HTML mode."}), 400
 
     if consent_confirmed is not True:
         return jsonify({
             "ok": False,
-            "error": "Recipient consent confirmation is required.",
+            "error": "Confirm that recipients have agreed to receive these emails."
         }), 400
 
     try:
-
         recipients, invalid_skipped = normalize_recipients(
             data.get("recipients", [])
         )
-
     except ValueError as exc:
-
-        return jsonify({
-            "ok": False,
-            "error": str(exc),
-        }), 400
+        return jsonify({"ok": False, "error": str(exc)}), 400
 
     if not recipients:
-        return jsonify({
-            "ok": False,
-            "error": "No valid recipient addresses were provided.",
-        }), 400
+        return jsonify({"ok": False, "error": "No valid recipients provided."}), 400
 
     if not sender_name:
-        sender_name = gmail.split("@")[0][:100]
+        sender_name = gmail.split("@", 1)[0]
 
     logger.info(
         "Starting batch: %d valid recipients; %d invalid skipped.",
@@ -734,12 +540,11 @@ def send_batch():
     )
 
     # ========================================================
-    # STREAMING
+    # STREAMING RESPONSE
     # ========================================================
 
     @stream_with_context
     def generate():
-
         total = len(recipients)
         sent = 0
         failed = 0
@@ -747,23 +552,19 @@ def send_batch():
         yield json.dumps({
             "type": "start",
             "total": total,
-            "sent": sent,
-            "failed": failed,
+            "sent": 0,
+            "failed": 0,
             "remaining": total,
             "invalid_skipped": invalid_skipped,
         }) + "\n"
 
         try:
-
             with ThreadPoolExecutor(
                 max_workers=MAX_PARALLEL_SENDS
             ) as executor:
 
-                future_map = {}
-
-                for recipient in recipients:
-
-                    future = executor.submit(
+                future_map = {
+                    executor.submit(
                         send_one_email,
                         sender_name,
                         gmail,
@@ -772,42 +573,31 @@ def send_batch():
                         subject,
                         body,
                         is_html,
-                    )
-
-                    future_map[future] = recipient
+                    ): recipient
+                    for recipient in recipients
+                }
 
                 for future in as_completed(future_map):
-
                     recipient = future_map[future]
 
                     try:
-                        result = future.result()
-
+                        success, error_message = future.result()
                     except Exception:
+                        logger.exception("Worker error")
+                        success, error_message = False, "Worker failed."
 
-                        logger.exception("Worker failed")
-
-                        result = {
-                            "success": False,
-                            "error": "Email worker failed.",
-                        }
-
-                    if result["success"]:
-
+                    if success:
                         sent += 1
-                        result_status = "sent"
+                        status = "sent"
                         error_message = None
-
                     else:
-
                         failed += 1
-                        result_status = "failed"
-                        error_message = result.get("error")
+                        status = "failed"
 
                     yield json.dumps({
                         "type": "progress",
                         "recipient": recipient,
-                        "result": result_status,
+                        "result": status,
                         "error": error_message,
                         "total": total,
                         "sent": sent,
@@ -818,11 +608,7 @@ def send_batch():
             yield json.dumps({
                 "type": "complete",
                 "success": failed == 0,
-                "message": (
-                    "Batch completed."
-                    if failed == 0
-                    else "Batch completed with some failures."
-                ),
+                "message": "Batch completed." if failed == 0 else "Batch completed with failures.",
                 "total": total,
                 "sent": sent,
                 "failed": failed,
@@ -830,13 +616,12 @@ def send_batch():
             }) + "\n"
 
         except Exception:
-
             logger.exception("Batch processing failed")
 
             yield json.dumps({
                 "type": "complete",
                 "success": False,
-                "message": "Batch processing stopped because of a server error.",
+                "message": "Batch stopped due to a server error.",
                 "total": total,
                 "sent": sent,
                 "failed": failed,
@@ -860,26 +645,19 @@ def send_batch():
 # ============================================================
 
 @app.after_request
-def add_security_headers(response):
-
+def security_headers(response):
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
-
-    response.headers["Referrer-Policy"] = (
-        "strict-origin-when-cross-origin"
-    )
-
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     response.headers["Cache-Control"] = "no-store"
-
     response.headers["Permissions-Policy"] = (
         "camera=(), microphone=(), geolocation=()"
     )
-
     return response
 
 
 # ============================================================
-# VERCEL HANDLER
+# VERCEL
 # ============================================================
 
 handler = app
