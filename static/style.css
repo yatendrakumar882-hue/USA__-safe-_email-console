@@ -28,8 +28,7 @@ body {
     font-size: 13px;
 }
 
-
-/* TOP NAVIGATION */
+/* HEADER */
 
 .topbar {
     width: 100%;
@@ -39,10 +38,9 @@ body {
 }
 
 .topbar-inner {
-    max-width: 1420px;
+    width: min(1180px, calc(100% - 40px));
     height: 100%;
     margin: 0 auto;
-    padding: 0 0;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -65,7 +63,7 @@ body {
     color: #fff;
     font-size: 20px;
     font-weight: 750;
-    letter-spacing: -0.5px;
+    letter-spacing: -.5px;
 }
 
 .logout-btn {
@@ -88,11 +86,10 @@ body {
     cursor: wait;
 }
 
-
-/* MAIN LAYOUT */
+/* DESKTOP COLUMNS — KEEP TWO COLUMNS */
 
 .dashboard {
-    width: min(1420px, calc(100% - 48px));
+    width: min(1180px, calc(100% - 40px));
     margin: 21px auto 40px;
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
@@ -111,7 +108,6 @@ body {
     gap: 20px;
 }
 
-
 /* CARDS */
 
 .card {
@@ -121,17 +117,13 @@ body {
     box-shadow: 0 7px 24px rgba(24, 43, 82, .035);
 }
 
-.compose-card {
-    padding: 22px 21px;
-}
-
+.compose-card,
 .recipients-card,
 .progress-card {
-    padding: 22px 21px;
+    padding: 21px;
 }
 
-
-/* SECTION HEADINGS */
+/* HEADINGS */
 
 .section-heading,
 .recipient-heading,
@@ -193,8 +185,7 @@ body {
     color: #c43838;
 }
 
-
-/* FORM FIELDS */
+/* FORM GRID */
 
 .form-grid {
     display: grid;
@@ -228,7 +219,6 @@ body {
     color: #17233d;
     font-family: inherit;
     font-size: 12px;
-    transition: border-color .15s, box-shadow .15s;
 }
 
 .field input::placeholder,
@@ -242,6 +232,8 @@ textarea:focus {
     border-color: #829bea;
     box-shadow: 0 0 0 3px rgba(54, 88, 232, .08);
 }
+
+/* APP PASSWORD */
 
 .password-wrap {
     position: relative;
@@ -262,7 +254,6 @@ textarea:focus {
     font-size: 17px;
     cursor: pointer;
 }
-
 
 /* MESSAGE FORMAT */
 
@@ -325,7 +316,6 @@ textarea:focus {
     line-height: 1.5;
 }
 
-
 /* CONSENT */
 
 .consent-row {
@@ -352,7 +342,6 @@ textarea:focus {
     font-size: 10px;
     line-height: 1.5;
 }
-
 
 /* ACTION BUTTONS */
 
@@ -407,8 +396,7 @@ textarea:focus {
     background: #e3e9f4;
 }
 
-
-/* MESSAGE STATUS */
+/* STATUS MESSAGE */
 
 .status-message {
     min-height: 37px;
@@ -431,8 +419,7 @@ textarea:focus {
     color: #936000;
 }
 
-
-/* RECIPIENTS CARD */
+/* RECIPIENTS */
 
 .recipient-heading {
     margin-bottom: 24px;
@@ -484,8 +471,7 @@ textarea:focus {
     font-size: 10px;
 }
 
-
-/* PROGRESS CARD */
+/* PROGRESS MONITOR */
 
 .progress-heading {
     margin-bottom: 22px;
@@ -537,7 +523,6 @@ textarea:focus {
     color: var(--orange) !important;
 }
 
-
 /* PROGRESS BAR */
 
 .progress-track {
@@ -557,8 +542,7 @@ textarea:focus {
     transition: width .2s ease;
 }
 
-
-/* INDIVIDUAL RESULTS */
+/* INDIVIDUAL EMAIL STATUS */
 
 .individual-heading {
     margin-top: 19px;
@@ -620,7 +604,6 @@ textarea:focus {
     color: var(--red);
 }
 
-
 /* DELIVERY NOTE */
 
 .delivery-note {
@@ -633,42 +616,15 @@ textarea:focus {
     line-height: 1.55;
 }
 
-
-/* RESPONSIVE */
-
-@media (max-width: 1050px) {
-    .topbar-inner {
-        padding: 0 24px;
-    }
-
-    .dashboard {
-        width: calc(100% - 36px);
-        gap: 14px;
-    }
-
-    .compose-card,
-    .recipients-card,
-    .progress-card {
-        padding: 18px;
-    }
-}
+/* SMALL SCREEN ONLY */
 
 @media (max-width: 760px) {
-    .topbar {
-        height: 60px;
-    }
-
     .topbar-inner {
-        padding: 0 15px;
-    }
-
-    .brand-title {
-        font-size: 17px;
+        width: calc(100% - 30px);
     }
 
     .dashboard {
         width: calc(100% - 24px);
-        margin-top: 14px;
         grid-template-columns: 1fr;
         gap: 14px;
     }
@@ -696,12 +652,6 @@ textarea:focus {
     .recipients-card,
     .progress-card {
         padding: 15px;
-    }
-
-    .section-heading h1,
-    .progress-heading h2,
-    .recipient-heading h2 {
-        font-size: 16px;
     }
 
     .action-row {
