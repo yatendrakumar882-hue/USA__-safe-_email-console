@@ -112,7 +112,7 @@ SMTP_TIMEOUT = 25
 
 MAX_RECIPIENTS = 25
 MAX_WORKERS = 2
-MIN_SEND_INTERVAL = 0.8
+MIN_SEND_INTERVAL = 0.6
 
 
 # ==================================================
