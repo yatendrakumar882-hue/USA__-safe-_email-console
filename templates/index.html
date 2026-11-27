@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -35,51 +36,85 @@
             <form id="mailForm">
 
                 <div class="form-grid">
+
                     <div class="field">
                         <label for="sender_name">Sender Name</label>
-                        <input id="sender_name" type="text"
-                               placeholder="Your name or business"
-                               maxlength="80" required>
+                        <input
+                            id="sender_name"
+                            type="text"
+                            placeholder="Your name or business"
+                            maxlength="80"
+                            required
+                        >
                     </div>
 
                     <div class="field">
                         <label for="gmail">Your Gmail</label>
-                        <input id="gmail" type="email"
-                               placeholder="you@gmail.com" required>
+                        <input
+                            id="gmail"
+                            type="email"
+                            placeholder="you@gmail.com"
+                            required
+                        >
                     </div>
 
                     <div class="field">
                         <label for="app_password">App Password</label>
                         <div class="password-wrap">
-                            <input id="app_password" type="password"
-                                   placeholder="Gmail App Password"
-                                   autocomplete="off" required>
-                            <button type="button" id="togglePassword"
-                                    class="eye-btn" aria-label="Show password">◉</button>
+                            <input
+                                id="app_password"
+                                type="password"
+                                placeholder="Gmail App Password"
+                                autocomplete="off"
+                                required
+                            >
+                            <button
+                                type="button"
+                                id="togglePassword"
+                                class="eye-btn"
+                                aria-label="Show password"
+                            >◉</button>
                         </div>
                     </div>
 
                     <div class="field">
                         <label for="subject">Email Subject</label>
-                        <input id="subject" type="text"
-                               placeholder="Email subject"
-                               maxlength="200" required>
+                        <input
+                            id="subject"
+                            type="text"
+                            placeholder="Email subject"
+                            maxlength="200"
+                            required
+                        >
                     </div>
+
                 </div>
 
                 <div class="message-heading">
                     <label for="body">Message body</label>
+
                     <div class="format-switch">
-                        <button type="button" id="plainBtn"
-                                class="format-btn active">Plain Text</button>
-                        <button type="button" id="htmlBtn"
-                                class="format-btn">HTML</button>
+                        <button
+                            type="button"
+                            id="plainBtn"
+                            class="format-btn active"
+                        >Plain Text</button>
+
+                        <button
+                            type="button"
+                            id="htmlBtn"
+                            class="format-btn"
+                        >HTML</button>
                     </div>
                 </div>
 
-                <textarea id="body" class="message-body"
-                          placeholder="Write your message here..."
-                          maxlength="30000" required></textarea>
+                <textarea
+                    id="body"
+                    class="message-body"
+                    placeholder="Write your message here..."
+                    maxlength="30000"
+                    required
+                ></textarea>
 
                 <div class="placeholder-help">
                     Placeholders:
@@ -93,7 +128,9 @@
 
                 <label class="consent-row" for="consent">
                     <input type="checkbox" id="consent">
-                    <span>I confirm these recipients agreed to receive this email.</span>
+                    <span>
+                        I confirm these recipients agreed to receive this email.
+                    </span>
                 </label>
 
                 <p class="permission-note">
@@ -101,23 +138,42 @@
                 </p>
 
                 <div class="action-row">
-                    <button type="submit" class="send-btn" id="sendBtn">
+
+                    <button
+                        type="submit"
+                        class="send-btn"
+                        id="sendBtn"
+                    >
                         <span>➤</span> Send All
                     </button>
 
-                    <button type="button" class="stop-btn"
-                            id="stopBtn" disabled>
+                    <button
+                        type="button"
+                        class="stop-btn"
+                        id="stopBtn"
+                        disabled
+                    >
                         Stop UI Updates
                     </button>
 
-                    <button type="button" class="clear-btn" id="clearBtn">
+                    <button
+                        type="button"
+                        class="clear-btn"
+                        id="clearBtn"
+                    >
                         Clear All
                     </button>
+
                 </div>
 
-                <div class="status-message" id="statusMessage" role="status">
+                <div
+                    class="status-message"
+                    id="statusMessage"
+                    role="status"
+                >
                     Ready to send.
                 </div>
+
             </form>
         </article>
     </section>
@@ -126,35 +182,54 @@
     <!-- RIGHT COLUMN -->
     <section class="right-column">
 
+        <!-- RECIPIENTS -->
         <article class="card recipients-card">
+
             <div class="recipient-heading">
                 <div>
-                    <h2><span class="people-icon">♟</span> Recipients</h2>
-                    <p>Paste email addresses separated by commas or new lines</p>
+                    <h2>
+                        <span class="people-icon">♟</span>
+                        Recipients
+                    </h2>
+
+                    <p>
+                        Paste email addresses separated by commas or new lines
+                    </p>
                 </div>
+
                 <span class="count-pill" id="foundCount">0 found</span>
             </div>
 
-            <textarea id="recipients" class="recipients-input"
-                      placeholder="person@example.com&#10;another@example.com"
-                      spellcheck="false"></textarea>
+            <textarea
+                id="recipients"
+                class="recipients-input"
+                placeholder="person@example.com&#10;another@example.com"
+                spellcheck="false"
+            ></textarea>
 
             <div class="helper-line">
                 Maximum 25 unique, valid addresses per batch.
             </div>
+
         </article>
 
 
+        <!-- PROGRESS MONITOR -->
         <article class="card progress-card">
+
             <div class="progress-heading">
                 <div>
                     <div class="eyebrow">LIVE STATUS</div>
                     <h2>Progress monitor</h2>
                 </div>
-                <span class="status-pill" id="liveStatus">Ready</span>
+
+                <span class="status-pill" id="liveStatus">
+                    Ready
+                </span>
             </div>
 
             <div class="stats-grid">
+
                 <div class="stat-box">
                     <span class="stat-label">TOTAL</span>
                     <strong id="totalCount">0</strong>
@@ -174,13 +249,19 @@
                     <span class="stat-label">REMAINING</span>
                     <strong class="remaining-number" id="remainingCount">0</strong>
                 </div>
+
             </div>
 
             <div class="progress-track">
-                <div class="progress-fill" id="progressBar"></div>
+                <div
+                    class="progress-fill"
+                    id="progressBar"
+                ></div>
             </div>
 
-            <div class="individual-heading">Individual email status</div>
+            <div class="individual-heading">
+                Individual email status
+            </div>
 
             <div class="results-box" id="resultsBox">
                 <p class="empty-results">
@@ -194,6 +275,7 @@
                 recipients are shown separately. Do not retry an uncertain
                 batch until you check which messages were already accepted.
             </div>
+
         </article>
 
     </section>
@@ -203,6 +285,7 @@
 <script>
 "use strict";
 
+/* Flask CSRF token */
 const CSRF_TOKEN = {{ csrf_token | tojson }};
 
 const $ = id => document.getElementById(id);
@@ -211,59 +294,100 @@ let isHtml = false;
 let isBusy = false;
 let activeController = null;
 
+
+/* RECIPIENT PARSING */
+
 function parseRecipients() {
     return [...new Set(
         $("recipients").value
             .split(/[\s,;]+/)
-            .map(v => v.trim().toLowerCase())
+            .map(value => value.trim().toLowerCase())
             .filter(Boolean)
     )];
 }
+
+
+/* EMAIL VALIDATION */
 
 function validEmail(value) {
     return /^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$/.test(value)
         && value.length <= 254;
 }
 
+
+/* RECIPIENT COUNT */
+
 function updateFoundCount() {
     const valid = parseRecipients().filter(validEmail);
     $("foundCount").textContent = valid.length + " found";
 }
 
+
+/* STATUS MESSAGE */
+
 function setStatus(message, type = "") {
     $("statusMessage").textContent = message;
     $("statusMessage").className = "status-message";
-    if (type) $("statusMessage").classList.add(type);
+
+    if (type) {
+        $("statusMessage").classList.add(type);
+    }
 }
+
+
+/* LIVE STATUS */
 
 function setLiveStatus(message, type = "") {
     $("liveStatus").textContent = message;
     $("liveStatus").className = "status-pill";
-    if (type) $("liveStatus").classList.add(type);
+
+    if (type) {
+        $("liveStatus").classList.add(type);
+    }
 }
 
+
+/* COUNTERS */
+
 function updateCounters(total, accepted, failed) {
-    const remaining = Math.max(0, total - accepted - failed);
+    const remaining = Math.max(
+        0,
+        total - accepted - failed
+    );
+
+    const completed = accepted + failed;
+
     const percent = total
-        ? Math.round(((accepted + failed) / total) * 100)
+        ? Math.round((completed / total) * 100)
         : 0;
 
     $("totalCount").textContent = total;
     $("acceptedCount").textContent = accepted;
     $("failedCount").textContent = failed;
     $("remainingCount").textContent = remaining;
+
     $("progressBar").style.width = percent + "%";
 }
+
+
+/* RESET RESULTS */
 
 function resetResults() {
     $("resultsBox").innerHTML =
         '<p class="empty-results">Individual recipient results will appear here.</p>';
 }
 
+
+/* ADD INDIVIDUAL RESULT */
+
 function addResult(email, status, errorText = "") {
     const box = $("resultsBox");
+
     const empty = box.querySelector(".empty-results");
-    if (empty) empty.remove();
+
+    if (empty) {
+        empty.remove();
+    }
 
     const row = document.createElement("div");
     row.className = "result-row";
@@ -274,68 +398,130 @@ function addResult(email, status, errorText = "") {
     address.title = errorText || email;
 
     const badge = document.createElement("span");
-    badge.className = "result-badge " +
-        (status === "sent" ? "result-success" : "result-failed");
-    badge.textContent = status === "sent" ? "ACCEPTED" : "FAILED";
+
+    badge.className =
+        "result-badge " +
+        (status === "sent"
+            ? "result-success"
+            : "result-failed");
+
+    badge.textContent =
+        status === "sent"
+            ? "ACCEPTED"
+            : "FAILED";
 
     row.append(address, badge);
+
     box.prepend(row);
 }
 
+
+/* BUSY STATE */
+
 function setBusy(value) {
     isBusy = value;
+
     $("sendBtn").disabled = value;
     $("stopBtn").disabled = !value;
     $("recipients").readOnly = value;
 }
 
-$("recipients").addEventListener("input", updateFoundCount);
+
+/* RECIPIENT INPUT */
+
+$("recipients").addEventListener(
+    "input",
+    updateFoundCount
+);
+
+
+/* PLAIN TEXT MODE */
 
 $("plainBtn").addEventListener("click", () => {
     isHtml = false;
+
     $("plainBtn").classList.add("active");
     $("htmlBtn").classList.remove("active");
 });
 
+
+/* HTML MODE */
+
 $("htmlBtn").addEventListener("click", () => {
     isHtml = true;
+
     $("htmlBtn").classList.add("active");
     $("plainBtn").classList.remove("active");
 });
 
+
+/* PASSWORD VISIBILITY */
+
 $("togglePassword").addEventListener("click", () => {
     const input = $("app_password");
-    input.type = input.type === "password" ? "text" : "password";
+
+    input.type =
+        input.type === "password"
+            ? "text"
+            : "password";
+
     $("togglePassword").textContent =
-        input.type === "password" ? "◉" : "◎";
+        input.type === "password"
+            ? "◉"
+            : "◎";
 });
 
+
+/* CLEAR ALL */
+
 $("clearBtn").addEventListener("click", () => {
+
     if (isBusy) {
-        setStatus("Stop UI Updates before clearing the form.", "warning");
+        setStatus(
+            "Stop UI Updates before clearing the form.",
+            "warning"
+        );
         return;
     }
 
     $("mailForm").reset();
+
     $("recipients").value = "";
+
     $("app_password").type = "password";
+
     $("togglePassword").textContent = "◉";
 
     isHtml = false;
+
     $("plainBtn").classList.add("active");
     $("htmlBtn").classList.remove("active");
 
     updateFoundCount();
+
     updateCounters(0, 0, 0);
+
     resetResults();
+
     setLiveStatus("Ready");
+
     setStatus("Ready to send.");
 });
 
+
+/* STOP UI UPDATES */
+
 $("stopBtn").addEventListener("click", () => {
+
     if (activeController && isBusy) {
+
         activeController.abort();
-        setLiveStatus("Updates stopped", "warning");
+
+        setLiveStatus(
+            "Updates stopped",
+            "warning"
+        );
+
         setStatus(
             "Browser updates stopped. Server processing may continue. Check Gmail Sent before retrying.",
             "warning"
@@ -343,11 +529,17 @@ $("stopBtn").addEventListener("click", () => {
     }
 });
 
+
+/* DOUBLE CLICK LOGOUT */
+
 $("logoutBtn").addEventListener("click", async () => {
+
     const button = $("logoutBtn");
 
     if (button.dataset.armed !== "yes") {
+
         button.dataset.armed = "yes";
+
         button.textContent = "Click again to log out";
 
         setTimeout(() => {
@@ -361,51 +553,87 @@ $("logoutBtn").addEventListener("click", async () => {
     button.disabled = true;
 
     try {
+
         const response = await fetch("/logout", {
             method: "POST",
-            headers: { "X-CSRF-Token": CSRF_TOKEN }
+            headers: {
+                "X-CSRF-Token": CSRF_TOKEN
+            }
         });
 
-        if (!response.ok) throw new Error("Logout failed.");
+        if (!response.ok) {
+            throw new Error("Logout failed.");
+        }
 
         location.href = "/login";
+
     } catch (error) {
+
         button.disabled = false;
         button.dataset.armed = "";
         button.textContent = "Log out";
+
         setStatus(error.message, "error");
     }
 });
 
+
+/* SEND ALL */
+
 $("mailForm").addEventListener("submit", async event => {
+
     event.preventDefault();
-    if (isBusy) return;
+
+    if (isBusy) {
+        return;
+    }
 
     const recipients = parseRecipients();
 
     if (!recipients.length) {
-        setStatus("Please add recipient email addresses.", "error");
+        setStatus(
+            "Please add recipient email addresses.",
+            "error"
+        );
         return;
     }
 
     if (recipients.length > 25) {
-        setStatus("Maximum 25 unique recipients per batch.", "error");
+        setStatus(
+            "Maximum 25 unique recipients per batch.",
+            "error"
+        );
         return;
     }
 
-    const invalid = recipients.filter(email => !validEmail(email));
+    const invalid = recipients.filter(
+        email => !validEmail(email)
+    );
+
     if (invalid.length) {
-        setStatus("Invalid email address: " + invalid[0], "error");
+        setStatus(
+            "Invalid email address: " + invalid[0],
+            "error"
+        );
         return;
     }
 
     if (!$("consent").checked) {
-        setStatus("Please confirm recipient permission first.", "error");
+        setStatus(
+            "Please confirm recipient permission first.",
+            "error"
+        );
         return;
     }
 
-    if (!$("subject").value.trim() || !$("body").value.trim()) {
-        setStatus("Subject and message body are required.", "error");
+    if (
+        !$("subject").value.trim() ||
+        !$("body").value.trim()
+    ) {
+        setStatus(
+            "Subject and message body are required.",
+            "error"
+        );
         return;
     }
 
@@ -421,11 +649,25 @@ $("mailForm").addEventListener("submit", async event => {
     };
 
     activeController = new AbortController();
+
     setBusy(true);
-    updateCounters(recipients.length, 0, 0);
+
+    updateCounters(
+        recipients.length,
+        0,
+        0
+    );
+
     resetResults();
-    setLiveStatus("Sending", "running");
-    setStatus("Sending batch. Keep this page open.");
+
+    setLiveStatus(
+        "Sending",
+        "running"
+    );
+
+    setStatus(
+        "Sending batch. Keep this page open."
+    );
 
     let accepted = 0;
     let failed = 0;
@@ -433,75 +675,140 @@ $("mailForm").addEventListener("submit", async event => {
     let gotComplete = false;
 
     try {
+
         const response = await fetch("/send-batch", {
             method: "POST",
+
             headers: {
                 "Content-Type": "application/json",
                 "X-CSRF-Token": CSRF_TOKEN
             },
+
             body: JSON.stringify(payload),
+
             signal: activeController.signal
         });
 
         if (!response.ok) {
-            const data = await response.json().catch(() => ({}));
-            throw new Error(data.error || "Server error: " + response.status);
+
+            const data = await response.json().catch(
+                () => ({})
+            );
+
+            throw new Error(
+                data.error || "Server error: " + response.status
+            );
         }
 
         if (!response.body) {
-            throw new Error("Response streaming is not available.");
+            throw new Error(
+                "Response streaming is not available."
+            );
         }
 
         const reader = response.body.getReader();
+
         const decoder = new TextDecoder();
+
         let buffer = "";
 
         while (true) {
-            const result = await reader.read();
-            if (result.done) break;
 
-            buffer += decoder.decode(result.value, { stream: true });
+            const result = await reader.read();
+
+            if (result.done) {
+                break;
+            }
+
+            buffer += decoder.decode(
+                result.value,
+                { stream: true }
+            );
+
             const lines = buffer.split("\n");
+
             buffer = lines.pop();
 
             for (const line of lines) {
-                if (!line.trim()) continue;
+
+                if (!line.trim()) {
+                    continue;
+                }
 
                 const item = JSON.parse(line);
 
                 if (item.event === "start") {
+
                     total = item.total;
-                    updateCounters(total, 0, 0);
+
+                    updateCounters(
+                        total,
+                        0,
+                        0
+                    );
                 }
 
                 if (item.event === "progress") {
+
                     accepted = item.sent;
                     failed = item.failed;
-                    updateCounters(total, accepted, failed);
-                    addResult(item.email, item.status, item.error);
+
+                    updateCounters(
+                        total,
+                        accepted,
+                        failed
+                    );
+
+                    addResult(
+                        item.email,
+                        item.status,
+                        item.error
+                    );
                 }
 
                 if (item.event === "complete") {
+
                     gotComplete = true;
+
                     accepted = item.sent;
                     failed = item.failed;
 
-                    updateCounters(total, accepted, failed);
-                    setLiveStatus("Complete", "complete");
+                    updateCounters(
+                        total,
+                        accepted,
+                        failed
+                    );
+
+                    setLiveStatus(
+                        "Complete",
+                        "complete"
+                    );
+
                     setStatus(
                         "Batch finished. SMTP accepted: " +
-                        accepted + ", failed: " + failed + "."
+                        accepted +
+                        ", failed: " +
+                        failed +
+                        "."
                     );
                 }
 
                 if (item.event === "error") {
-                    throw new Error(item.error || "Sending failed.");
+
+                    throw new Error(
+                        item.error || "Sending failed."
+                    );
                 }
             }
         }
 
         if (!gotComplete) {
-            setLiveStatus("Check status", "warning");
+
+            setLiveStatus(
+                "Check status",
+                "warning"
+            );
+
             setStatus(
                 "Connection ended before completion. Check Gmail Sent before retrying.",
                 "warning"
@@ -509,26 +816,56 @@ $("mailForm").addEventListener("submit", async event => {
         }
 
     } catch (error) {
+
         if (error.name === "AbortError") {
-            setLiveStatus("Updates stopped", "warning");
+
+            setLiveStatus(
+                "Updates stopped",
+                "warning"
+            );
+
             setStatus(
                 "Browser updates stopped. Server processing may continue. Check Gmail Sent before retrying.",
                 "warning"
             );
+
         } else {
-            setLiveStatus("Error", "error");
-            setStatus(error.message, "error");
+
+            setLiveStatus(
+                "Error",
+                "error"
+            );
+
+            setStatus(
+                error.message,
+                "error"
+            );
         }
+
     } finally {
+
         setBusy(false);
+
         activeController = null;
-        $("app_password").value = "";
+
+        /*
+         * IMPORTANT:
+         * App Password is intentionally NOT cleared.
+         * All entered form details remain available.
+         * Use Clear All to clear the form manually.
+         */
     }
 });
 
+
+/* INITIAL STATE */
+
 updateFoundCount();
+
 updateCounters(0, 0, 0);
+
 resetResults();
+
 </script>
 
 </body>
