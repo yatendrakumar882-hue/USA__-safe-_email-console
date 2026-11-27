@@ -111,8 +111,8 @@ SMTP_PORT = 465
 SMTP_TIMEOUT = 25
 
 MAX_RECIPIENTS = 25
-MAX_WORKERS = 3
-MIN_SEND_INTERVAL = 1.0
+MAX_WORKERS = 2
+MIN_SEND_INTERVAL = 0.8
 
 
 # ==================================================
