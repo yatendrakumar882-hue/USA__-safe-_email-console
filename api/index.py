@@ -13,6 +13,7 @@ import smtplib
 from datetime import timedelta
 from email.message import EmailMessage
 from email.utils import formataddr, formatdate, make_msgid
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from flask import (
     Flask,
@@ -30,7 +31,7 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 
 
 # =========================================================
-# ABSOLUTE PROJECT PATHS
+# PROJECT PATHS
 # =========================================================
 
 BASE_DIR = os.path.dirname(
@@ -42,7 +43,7 @@ STATIC_DIR = os.path.join(BASE_DIR, "static")
 
 
 # =========================================================
-# FLASK APPLICATION
+# FLASK APP
 # =========================================================
 
 app = Flask(
@@ -77,7 +78,7 @@ logger = logging.getLogger(__name__)
 
 
 # =========================================================
-# SMTP CONFIGURATION
+# SENDING SETTINGS
 # =========================================================
 
 SMTP_HOST = "smtp.gmail.com"
@@ -85,14 +86,19 @@ SMTP_PORT = 465
 SMTP_TIMEOUT = 20
 
 MAX_RECIPIENTS = 25
-SEND_DELAY_SECONDS = 0
+
+# Four emails are processed in each batch.
+BATCH_SIZE = 4
+
+# Pause after each completed batch.
+BATCH_DELAY_SECONDS = 2.0
 
 MAX_SUBJECT_LENGTH = 200
 MAX_MESSAGE_LENGTH = 30000
 
 
 # =========================================================
-# CONFIGURATION
+# ENVIRONMENT
 # =========================================================
 
 def get_login_password():
@@ -112,7 +118,7 @@ def missing_environment_variables():
 
 
 # =========================================================
-# SESSION AND SECURITY
+# SESSION / SECURITY
 # =========================================================
 
 def is_logged_in():
@@ -154,7 +160,7 @@ def login_required():
 
 
 # =========================================================
-# INPUT VALIDATION
+# VALIDATION
 # =========================================================
 
 EMAIL_RE = re.compile(
@@ -265,7 +271,7 @@ def html_to_text(value):
 
 
 # =========================================================
-# EMAIL MESSAGE
+# BUILD EMAIL
 # =========================================================
 
 def build_message(
@@ -276,15 +282,8 @@ def build_message(
     body,
     is_html
 ):
-    final_subject = personalize(
-        subject,
-        recipient
-    )
-
-    final_body = personalize(
-        body,
-        recipient
-    )
+    final_subject = personalize(subject, recipient)
+    final_body = personalize(body, recipient)
 
     message = EmailMessage()
 
@@ -300,7 +299,9 @@ def build_message(
         plain_body = html_to_text(final_body)
 
         if not plain_body.strip():
-            plain_body = "Please view this email in an HTML-capable email client."
+            plain_body = (
+                "Please view this email in an HTML-capable email client."
+            )
 
         message.set_content(plain_body)
 
@@ -315,7 +316,7 @@ def build_message(
 
 
 # =========================================================
-# GMAIL SMTP
+# SEND ONE EMAIL
 # =========================================================
 
 def send_one_email(
@@ -359,6 +360,66 @@ def send_one_email(
 
 
 # =========================================================
+# PROCESS ONE RECIPIENT SAFELY
+# =========================================================
+
+def process_recipient(batch, recipient):
+    try:
+        send_one_email(
+            sender_name=batch["sender_name"],
+            sender_email=batch["sender_email"],
+            app_password=batch["app_password"],
+            recipient=recipient,
+            subject=batch["subject"],
+            body=batch["body"],
+            is_html=batch["is_html"]
+        )
+
+        return {
+            "email": recipient,
+            "status": "sent",
+            "error": None
+        }
+
+    except smtplib.SMTPAuthenticationError:
+        return {
+            "email": recipient,
+            "status": "failed",
+            "error": "Gmail authentication failed. Check the App Password."
+        }
+
+    except smtplib.SMTPRecipientsRefused:
+        return {
+            "email": recipient,
+            "status": "failed",
+            "error": "Gmail rejected this recipient."
+        }
+
+    except smtplib.SMTPResponseException as exc:
+        return {
+            "email": recipient,
+            "status": "failed",
+            "error": "SMTP rejected the message. Code: " + str(exc.smtp_code)
+        }
+
+    except (smtplib.SMTPException, OSError, ssl.SSLError):
+        logger.exception("SMTP error for recipient.")
+        return {
+            "email": recipient,
+            "status": "failed",
+            "error": "SMTP connection or submission failed."
+        }
+
+    except Exception:
+        logger.exception("Unexpected recipient error.")
+        return {
+            "email": recipient,
+            "status": "failed",
+            "error": "Unexpected sending error. Check Vercel logs."
+        }
+
+
+# =========================================================
 # HOME
 # =========================================================
 
@@ -376,7 +437,6 @@ def home():
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
-
     missing = missing_environment_variables()
 
     config_error = None
@@ -433,7 +493,6 @@ def login():
 
 @app.route("/dashboard")
 def dashboard():
-
     response = login_required()
 
     if response:
@@ -494,6 +553,7 @@ def health():
             os.path.join(TEMPLATE_DIR, "index.html")
         ),
         "static_directory_exists": os.path.isdir(STATIC_DIR),
+        "batch_size": BATCH_SIZE
     })
 
 
@@ -513,7 +573,7 @@ def send_batch():
     if not verify_csrf():
         return jsonify({
             "ok": False,
-            "error": "Security token expired. Refresh the page."
+            "error": "Security token expired. Refresh the dashboard."
         }), 403
 
     data = request.get_json(silent=True)
@@ -548,7 +608,6 @@ def send_batch():
     )
 
     body = data.get("body", "")
-
     is_html = data.get("is_html") is True
 
     if not sender_name:
@@ -609,7 +668,9 @@ def send_batch():
             "error": recipient_error
         }), 400
 
-    # Snapshot: later browser edits do not change this batch.
+    # Freeze this request's details.
+    # Browser form edits cannot change this running batch.
+
     batch = {
         "sender_name": sender_name,
         "sender_email": sender_email,
@@ -620,106 +681,102 @@ def send_batch():
         "recipients": tuple(recipients),
     }
 
+    # -----------------------------------------------------
+    # STREAMING: 4 RECIPIENTS PER BATCH
+    # -----------------------------------------------------
+
     @stream_with_context
     def generate():
 
         total = len(batch["recipients"])
+
         sent = 0
         failed = 0
+        batch_number = 0
 
         try:
 
+            total_batches = (
+                total + BATCH_SIZE - 1
+            ) // BATCH_SIZE
+
             yield json.dumps({
                 "event": "start",
-                "total": total
+                "total": total,
+                "batch_size": BATCH_SIZE,
+                "total_batches": total_batches
             }) + "\n"
 
-            for index, recipient in enumerate(batch["recipients"]):
+            recipients = batch["recipients"]
 
-                status = "failed"
-                error_message = None
+            for start in range(0, total, BATCH_SIZE):
 
-                try:
+                batch_number += 1
 
-                    send_one_email(
-                        batch["sender_name"],
-                        batch["sender_email"],
-                        batch["app_password"],
-                        recipient,
-                        batch["subject"],
-                        batch["body"],
-                        batch["is_html"]
-                    )
+                current_group = recipients[
+                    start:start + BATCH_SIZE
+                ]
 
-                    sent += 1
-                    status = "sent"
+                # Start up to four independent SMTP tasks.
+                # Wait for this group before starting the next group.
 
-                except smtplib.SMTPAuthenticationError:
+                with ThreadPoolExecutor(
+                    max_workers=BATCH_SIZE
+                ) as executor:
 
-                    failed += 1
-                    error_message = (
-                        "Gmail authentication failed. "
-                        "Check Gmail address and App Password."
-                    )
+                    futures = {
+                        executor.submit(
+                            process_recipient,
+                            batch,
+                            recipient
+                        ): recipient
+                        for recipient in current_group
+                    }
 
-                except smtplib.SMTPRecipientsRefused:
+                    for future in as_completed(futures):
 
-                    failed += 1
-                    error_message = (
-                        "Gmail rejected this recipient."
-                    )
+                        try:
+                            result = future.result()
 
-                except smtplib.SMTPResponseException as exc:
+                        except Exception:
+                            logger.exception(
+                                "Unexpected worker failure."
+                            )
 
-                    failed += 1
-                    error_message = (
-                        "SMTP rejected the message. Code: "
-                        + str(exc.smtp_code)
-                    )
+                            result = {
+                                "email": futures[future],
+                                "status": "failed",
+                                "error": "Worker failed unexpectedly."
+                            }
 
-                except (smtplib.SMTPException, OSError, ssl.SSLError):
+                        if result["status"] == "sent":
+                            sent += 1
+                        else:
+                            failed += 1
 
-                    failed += 1
+                        yield json.dumps({
+                            "event": "progress",
+                            "email": result["email"],
+                            "status": result["status"],
+                            "error": result["error"],
+                            "sent": sent,
+                            "failed": failed,
+                            "total": total,
+                            "batch_number": batch_number,
+                            "total_batches": total_batches
+                        }) + "\n"
 
-                    logger.exception(
-                        "SMTP sending error."
-                    )
-
-                    error_message = (
-                        "SMTP connection or submission failed."
-                    )
-
-                except Exception:
-
-                    failed += 1
-
-                    logger.exception(
-                        "Unexpected sending error."
-                    )
-
-                    error_message = (
-                        "Unexpected error. Check Vercel logs."
-                    )
-
-                yield json.dumps({
-                    "event": "progress",
-                    "email": recipient,
-                    "status": status,
-                    "error": error_message,
-                    "sent": sent,
-                    "failed": failed,
-                    "total": total
-                }) + "\n"
-
-                if index < total - 1:
-                    time.sleep(SEND_DELAY_SECONDS)
+                # Pause between groups, not between workers.
+                if start + BATCH_SIZE < total:
+                    time.sleep(BATCH_DELAY_SECONDS)
 
             yield json.dumps({
                 "event": "complete",
                 "sent": sent,
                 "failed": failed,
                 "total": total,
-                "message": "Batch processing finished."
+                "total_batches": total_batches,
+                "message": "All batches processed."
             }) + "\n"
 
         finally:
