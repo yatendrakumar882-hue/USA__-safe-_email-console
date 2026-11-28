@@ -88,7 +88,7 @@ SMTP_TIMEOUT = 20
 MAX_RECIPIENTS = 25
 
 # Four emails are processed in each batch.
-BATCH_SIZE = 4
+BATCH_SIZE = 6
 
 # Pause after each completed batch.
 BATCH_DELAY_SECONDS = 2.0
