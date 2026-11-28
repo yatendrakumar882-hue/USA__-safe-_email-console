@@ -43,7 +43,7 @@ STATIC_DIR = os.path.join(BASE_DIR, "static")
 
 
 # =========================================================
-# FLASK APP
+# FLASK APPLICATION
 # =========================================================
 
 app = Flask(
@@ -60,10 +60,11 @@ app.wsgi_app = ProxyFix(
     x_host=1
 )
 
-app.secret_key = (
-    os.environ.get("SESSION_SECRET")
-    or secrets.token_hex(32)
-)
+SESSION_SECRET = os.environ.get("SESSION_SECRET")
+
+# A stable SESSION_SECRET is required in Vercel.
+# Configure it in Project Settings -> Environment Variables.
+app.secret_key = SESSION_SECRET or secrets.token_urlsafe(48)
 
 app.config.update(
     SESSION_COOKIE_SECURE=True,
@@ -78,7 +79,7 @@ logger = logging.getLogger(__name__)
 
 
 # =========================================================
-# SENDING SETTINGS
+# SMTP AND BATCH SETTINGS
 # =========================================================
 
 SMTP_HOST = "smtp.gmail.com"
@@ -87,38 +88,38 @@ SMTP_TIMEOUT = 20
 
 MAX_RECIPIENTS = 25
 
-# Four emails are processed in each batch.
+# Four emails per batch.
 BATCH_SIZE = 6
 
-# Pause after each completed batch.
-BATCH_DELAY_SECONDS = 2.0
+# Pause between batches.
+BATCH_DELAY_SECONDS = 1.8
 
 MAX_SUBJECT_LENGTH = 200
 MAX_MESSAGE_LENGTH = 30000
 
 
 # =========================================================
-# ENVIRONMENT
+# ENVIRONMENT CONFIGURATION
 # =========================================================
-
-def get_login_password():
-    return os.environ.get("LOGIN_PASSWORD", "")
-
 
 def missing_environment_variables():
     missing = []
 
-    if not os.environ.get("SESSION_SECRET"):
+    if not SESSION_SECRET:
         missing.append("SESSION_SECRET")
 
-    if not get_login_password():
+    if not os.environ.get("LOGIN_PASSWORD"):
         missing.append("LOGIN_PASSWORD")
 
     return missing
 
 
+def get_login_password():
+    return os.environ.get("LOGIN_PASSWORD", "")
+
+
 # =========================================================
-# SESSION / SECURITY
+# SESSION AND CSRF
 # =========================================================
 
 def is_logged_in():
@@ -251,7 +252,7 @@ def personalize(value, recipient):
 
 
 # =========================================================
-# HTML TO TEXT
+# HTML TO PLAIN TEXT
 # =========================================================
 
 def html_to_text(value):
@@ -282,8 +283,15 @@ def build_message(
     body,
     is_html
 ):
-    final_subject = personalize(subject, recipient)
-    final_body = personalize(body, recipient)
+    final_subject = personalize(
+        subject,
+        recipient
+    )
+
+    final_body = personalize(
+        body,
+        recipient
+    )
 
     message = EmailMessage()
 
@@ -309,6 +317,7 @@ def build_message(
             final_body,
             subtype="html"
         )
+
     else:
         message.set_content(final_body)
 
@@ -360,10 +369,11 @@ def send_one_email(
 
 
 # =========================================================
-# PROCESS ONE RECIPIENT SAFELY
+# PROCESS ONE RECIPIENT
 # =========================================================
 
 def process_recipient(batch, recipient):
+
     try:
         send_one_email(
             sender_name=batch["sender_name"],
@@ -382,13 +392,15 @@ def process_recipient(batch, recipient):
         }
 
     except smtplib.SMTPAuthenticationError:
+
         return {
             "email": recipient,
             "status": "failed",
-            "error": "Gmail authentication failed. Check the App Password."
+            "error": "Gmail authentication failed. Check your App Password."
         }
 
     except smtplib.SMTPRecipientsRefused:
+
         return {
             "email": recipient,
             "status": "failed",
@@ -396,6 +408,7 @@ def process_recipient(batch, recipient):
         }
 
     except smtplib.SMTPResponseException as exc:
+
         return {
             "email": recipient,
             "status": "failed",
@@ -403,7 +416,9 @@ def process_recipient(batch, recipient):
         }
 
     except (smtplib.SMTPException, OSError, ssl.SSLError):
-        logger.exception("SMTP error for recipient.")
+
+        logger.exception("SMTP error while sending.")
+
         return {
             "email": recipient,
             "status": "failed",
@@ -411,11 +426,13 @@ def process_recipient(batch, recipient):
         }
 
     except Exception:
-        logger.exception("Unexpected recipient error.")
+
+        logger.exception("Unexpected sending error.")
+
         return {
             "email": recipient,
             "status": "failed",
-            "error": "Unexpected sending error. Check Vercel logs."
+            "error": "Unexpected error. Check Vercel logs."
         }
 
 
@@ -425,6 +442,7 @@ def process_recipient(batch, recipient):
 
 @app.route("/")
 def home():
+
     if is_logged_in():
         return redirect(url_for("dashboard"))
 
@@ -437,6 +455,7 @@ def home():
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
+
     missing = missing_environment_variables()
 
     config_error = None
@@ -493,6 +512,7 @@ def login():
 
 @app.route("/dashboard")
 def dashboard():
+
     response = login_required()
 
     if response:
@@ -542,6 +562,7 @@ def logout():
 
 @app.route("/health")
 def health():
+
     return jsonify({
         "ok": True,
         "service": "Secure Mail Console",
@@ -558,7 +579,7 @@ def health():
 
 
 # =========================================================
-# SEND BATCH API
+# SEND BATCH
 # =========================================================
 
 @app.route("/send-batch", methods=["POST"])
@@ -608,6 +629,7 @@ def send_batch():
     )
 
     body = data.get("body", "")
+
     is_html = data.get("is_html") is True
 
     if not sender_name:
@@ -668,8 +690,8 @@ def send_batch():
             "error": recipient_error
         }), 400
 
-    # Freeze this request's details.
-    # Browser form edits cannot change this running batch.
+    # Freeze all details for this particular batch.
+    # Later browser form edits do not change this batch.
 
     batch = {
         "sender_name": sender_name,
@@ -682,7 +704,7 @@ def send_batch():
     }
 
     # -----------------------------------------------------
-    # STREAMING: 4 RECIPIENTS PER BATCH
+    # STREAMING BATCH SENDER
     # -----------------------------------------------------
 
     @stream_with_context
@@ -694,11 +716,11 @@ def send_batch():
         failed = 0
         batch_number = 0
 
-        try:
+        total_batches = (
+            total + BATCH_SIZE - 1
+        ) // BATCH_SIZE
 
-            total_batches = (
-                total + BATCH_SIZE - 1
-            ) // BATCH_SIZE
+        try:
 
             yield json.dumps({
                 "event": "start",
@@ -709,16 +731,17 @@ def send_batch():
 
             recipients = batch["recipients"]
 
-            for start in range(0, total, BATCH_SIZE):
+            for start in range(
+                0,
+                total,
+                BATCH_SIZE
+            ):
 
                 batch_number += 1
 
                 current_group = recipients[
                     start:start + BATCH_SIZE
                 ]
-
-                # Start up to four independent SMTP tasks.
-                # Wait for this group before starting the next group.
 
                 with ThreadPoolExecutor(
                     max_workers=BATCH_SIZE
@@ -739,8 +762,9 @@ def send_batch():
                             result = future.result()
 
                         except Exception:
+
                             logger.exception(
-                                "Unexpected worker failure."
+                                "Unexpected worker error."
                             )
 
                             result = {
@@ -766,7 +790,6 @@ def send_batch():
                             "total_batches": total_batches
                         }) + "\n"
 
-                # Pause between groups, not between workers.
                 if start + BATCH_SIZE < total:
                     time.sleep(BATCH_DELAY_SECONDS)
 
@@ -776,7 +799,7 @@ def send_batch():
                 "failed": failed,
                 "total": total,
                 "total_batches": total_batches,
-                "message": "All batches processed."
+                "message": "Batch processing finished."
             }) + "\n"
 
         finally:
@@ -798,6 +821,7 @@ def send_batch():
 
 @app.errorhandler(413)
 def request_too_large(error):
+
     return jsonify({
         "ok": False,
         "error": "Request is too large."
@@ -811,6 +835,7 @@ def not_found(error):
 
 @app.errorhandler(500)
 def internal_error(error):
+
     logger.exception("Flask application error")
 
     return (
